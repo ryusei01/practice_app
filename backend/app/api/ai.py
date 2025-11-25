@@ -118,6 +118,8 @@ async def get_improvement_suggestions(
         suggestions = predictor.get_improvement_suggestions(user_id=user_id)
         return {"suggestions": suggestions}
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 

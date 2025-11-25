@@ -35,13 +35,14 @@ async def health():
 
 
 # APIルーターを追加
-from .api import ai_router, answers_router, auth_router, question_sets_router, questions_router
+from .api import ai_router, answers_router, auth_router, question_sets_router, questions_router, payments_router
 
 app.include_router(auth_router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 app.include_router(question_sets_router, prefix=f"{settings.API_V1_STR}/question-sets", tags=["question-sets"])
 app.include_router(questions_router, prefix=f"{settings.API_V1_STR}/questions", tags=["questions"])
 app.include_router(ai_router, prefix=f"{settings.API_V1_STR}/ai", tags=["ai"])
 app.include_router(answers_router, prefix=f"{settings.API_V1_STR}/answers", tags=["answers"])
+app.include_router(payments_router, prefix=f"{settings.API_V1_STR}/payments", tags=["payments"])
 
 # TODO: 他のルーターを追加
 # from .api import users, questions, marketplace

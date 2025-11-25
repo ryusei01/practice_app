@@ -4,7 +4,7 @@ AI予想スコア算出システム
 """
 from typing import Dict, Optional, List
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, Integer
 from datetime import datetime, timedelta
 import numpy as np
 from ..models import Answer, UserCategoryStats, Question
@@ -93,7 +93,7 @@ class ScorePredictor:
         """ユーザーの統計情報を取得"""
         query = self.db.query(
             func.count(Answer.id).label("total"),
-            func.sum(func.cast(Answer.is_correct, func.Integer())).label("correct"),
+            func.sum(func.cast(Answer.is_correct, Integer)).label("correct"),
             func.avg(Answer.answer_time_sec).label("avg_time")
         ).filter(Answer.user_id == user_id)
 
@@ -262,10 +262,12 @@ class ScorePredictor:
         # カテゴリ別統計を取得
         category_stats = self.db.query(UserCategoryStats).filter(
             UserCategoryStats.user_id == user_id
+        ).filter(
+            UserCategoryStats.weakness_score.is_not(None)
         ).order_by(UserCategoryStats.weakness_score.desc()).all()
 
         for stat in category_stats[:3]:  # 上位3つの苦手分野
-            if stat.weakness_score > 0.3:  # 苦手判定
+            if stat.weakness_score is not None and stat.weakness_score > 0.3:  # 苦手判定
                 suggestions.append({
                     "type": "weak_category",
                     "category": stat.category,
@@ -275,7 +277,7 @@ class ScorePredictor:
 
         # 回答速度のチェック
         overall_stats = self._get_user_stats(user_id)
-        if overall_stats["avg_time"] > 20:
+        if overall_stats["total_attempts"] > 0 and overall_stats["avg_time"] > 20:
             suggestions.append({
                 "type": "speed",
                 "message": "回答に時間がかかっています。基礎知識の定着を意識しましょう。",

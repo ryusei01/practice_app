@@ -23,7 +23,7 @@ router = APIRouter()
 class UserRegisterRequest(BaseModel):
     email: EmailStr
     password: str
-    username: str
+    full_name: str
 
 
 class UserLoginRequest(BaseModel):
@@ -31,20 +31,32 @@ class UserLoginRequest(BaseModel):
     password: str
 
 
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-
-
 class UserResponse(BaseModel):
     id: str
     email: str
-    username: str
+    full_name: str
     is_active: bool
     is_seller: bool
 
     class Config:
         from_attributes = True
+
+    @classmethod
+    def from_orm(cls, obj):
+        # usernameをfull_nameにマッピング
+        return cls(
+            id=obj.id,
+            email=obj.email,
+            full_name=obj.username,
+            is_active=obj.is_active,
+            is_seller=obj.is_seller
+        )
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserResponse
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -75,7 +87,7 @@ async def register(request: UserRegisterRequest, db: Session = Depends(get_db)):
     new_user = User(
         id=str(uuid.uuid4()),
         email=request.email,
-        username=request.username,
+        username=request.full_name,
         hashed_password=hashed_password,
         is_active=True,
         is_seller=False
@@ -92,7 +104,10 @@ async def register(request: UserRegisterRequest, db: Session = Depends(get_db)):
         expires_delta=access_token_expires
     )
 
-    return TokenResponse(access_token=access_token)
+    return TokenResponse(
+        access_token=access_token,
+        user=UserResponse.from_orm(new_user)
+    )
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -135,7 +150,10 @@ async def login(request: UserLoginRequest, db: Session = Depends(get_db)):
         expires_delta=access_token_expires
     )
 
-    return TokenResponse(access_token=access_token)
+    return TokenResponse(
+        access_token=access_token,
+        user=UserResponse.from_orm(user)
+    )
 
 
 @router.get("/me", response_model=UserResponse)
@@ -149,7 +167,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_active_
     Returns:
         ユーザー情報
     """
-    return current_user
+    return UserResponse.from_orm(current_user)
 
 
 @router.put("/me", response_model=UserResponse)
@@ -173,4 +191,4 @@ async def update_current_user(
     db.commit()
     db.refresh(current_user)
 
-    return current_user
+    return UserResponse.from_orm(current_user)
