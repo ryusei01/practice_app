@@ -9,7 +9,7 @@ import uuid
 
 from ..core.database import get_db
 from ..core.auth import get_current_active_user
-from ..models import User, QuestionSet
+from ..models import User, QuestionSet, Purchase, Question
 
 router = APIRouter()
 
@@ -158,6 +158,92 @@ async def list_question_sets(
     return result
 
 
+@router.get("/my/question-sets", response_model=List[QuestionSetResponse])
+async def get_my_question_sets(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    自分が作成した問題集一覧を取得
+
+    Args:
+        current_user: 現在のユーザー
+        db: データベースセッション
+
+    Returns:
+        自分が作成した問題集のリスト
+    """
+    question_sets = db.query(QuestionSet).filter(
+        QuestionSet.creator_id == current_user.id
+    ).all()
+
+    # NULL値を安全に処理
+    result = []
+    for qs in question_sets:
+        result.append({
+            "id": qs.id,
+            "title": qs.title,
+            "description": qs.description,
+            "category": qs.category,
+            "tags": qs.tags,
+            "price": qs.price,
+            "is_published": qs.is_published,
+            "creator_id": qs.creator_id,
+            "total_questions": qs.total_questions if qs.total_questions is not None else 0,
+            "average_difficulty": qs.average_difficulty if qs.average_difficulty is not None else 0.5,
+            "total_purchases": qs.total_purchases if qs.total_purchases is not None else 0,
+            "average_rating": qs.average_rating if qs.average_rating is not None else 0.0
+        })
+
+    return result
+
+
+@router.get("/purchased", response_model=List[QuestionSetResponse])
+async def get_purchased_question_sets(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    購入済みの問題集一覧を取得
+
+    Returns:
+        購入した問題集のリスト
+    """
+    # 購入済みの問題集IDを取得
+    purchases = db.query(Purchase).filter(
+        Purchase.buyer_id == current_user.id
+    ).all()
+
+    purchased_ids = [p.question_set_id for p in purchases]
+
+    if not purchased_ids:
+        return []
+
+    # 問題集を取得
+    question_sets = db.query(QuestionSet).filter(
+        QuestionSet.id.in_(purchased_ids)
+    ).all()
+
+    result = []
+    for qs in question_sets:
+        result.append({
+            "id": qs.id,
+            "title": qs.title,
+            "description": qs.description,
+            "category": qs.category,
+            "tags": qs.tags,
+            "price": qs.price,
+            "is_published": qs.is_published,
+            "creator_id": qs.creator_id,
+            "total_questions": qs.total_questions if qs.total_questions is not None else 0,
+            "average_difficulty": qs.average_difficulty if qs.average_difficulty is not None else 0.5,
+            "total_purchases": qs.total_purchases if qs.total_purchases is not None else 0,
+            "average_rating": qs.average_rating if qs.average_rating is not None else 0.0
+        })
+
+    return result
+
+
 @router.get("/{question_set_id}", response_model=QuestionSetResponse)
 async def get_question_set(
     question_set_id: str,
@@ -282,41 +368,87 @@ async def delete_question_set(
     return None
 
 
-@router.get("/my/question-sets", response_model=List[QuestionSetResponse])
-async def get_my_question_sets(
+class QuestionResponse(BaseModel):
+    id: str
+    question_set_id: str
+    question_text: str
+    question_type: str
+    options: Optional[List[str]]
+    correct_answer: str
+    explanation: Optional[str]
+    difficulty: float
+
+    class Config:
+        from_attributes = True
+
+
+class QuestionSetWithQuestionsResponse(BaseModel):
+    id: str
+    title: str
+    description: Optional[str]
+    category: str
+    tags: Optional[List[str]]
+    price: int
+    is_published: bool
+    creator_id: str
+    questions: List[QuestionResponse]
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/{question_set_id}/download", response_model=QuestionSetWithQuestionsResponse)
+async def download_question_set(
+    question_set_id: str,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
-    自分が作成した問題集一覧を取得
+    購入済みの問題集を問題と一緒にダウンロード
 
     Args:
+        question_set_id: 問題集ID
         current_user: 現在のユーザー
         db: データベースセッション
 
     Returns:
-        自分が作成した問題集のリスト
+        問題集と全問題
     """
-    question_sets = db.query(QuestionSet).filter(
-        QuestionSet.creator_id == current_user.id
+    # 問題集を取得
+    question_set = db.query(QuestionSet).filter(QuestionSet.id == question_set_id).first()
+
+    if not question_set:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="問題集が見つかりません"
+        )
+
+    # 購入済みかチェック（または自分が作成したものか）
+    if question_set.creator_id != current_user.id:
+        purchase = db.query(Purchase).filter(
+            Purchase.buyer_id == current_user.id,
+            Purchase.question_set_id == question_set_id
+        ).first()
+
+        if not purchase:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="この問題集を閲覧する権限がありません"
+            )
+
+    # 問題を取得
+    questions = db.query(Question).filter(
+        Question.question_set_id == question_set_id
     ).all()
 
-    # NULL値を安全に処理
-    result = []
-    for qs in question_sets:
-        result.append({
-            "id": qs.id,
-            "title": qs.title,
-            "description": qs.description,
-            "category": qs.category,
-            "tags": qs.tags,
-            "price": qs.price,
-            "is_published": qs.is_published,
-            "creator_id": qs.creator_id,
-            "total_questions": qs.total_questions if qs.total_questions is not None else 0,
-            "average_difficulty": qs.average_difficulty if qs.average_difficulty is not None else 0.5,
-            "total_purchases": qs.total_purchases if qs.total_purchases is not None else 0,
-            "average_rating": qs.average_rating if qs.average_rating is not None else 0.0
-        })
-
-    return result
+    return QuestionSetWithQuestionsResponse(
+        id=question_set.id,
+        title=question_set.title,
+        description=question_set.description,
+        category=question_set.category,
+        tags=question_set.tags,
+        price=question_set.price,
+        is_published=question_set.is_published,
+        creator_id=question_set.creator_id,
+        questions=[QuestionResponse.model_validate(q) for q in questions]
+    )

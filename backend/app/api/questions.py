@@ -1,11 +1,13 @@
 """
 問題CRUD APIエンドポイント
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
 import uuid
+import csv
+import io
 
 from ..core.database import get_db
 from ..core.auth import get_current_active_user
@@ -303,3 +305,122 @@ async def delete_question(
     db.commit()
 
     return None
+
+
+@router.post("/bulk-upload/{question_set_id}")
+async def bulk_upload_questions(
+    question_set_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    CSVファイルから問題を一括登録
+
+    CSVフォーマット:
+    question_text,question_type,options,correct_answer,explanation,difficulty,category
+
+    例:
+    "What is 2+2?",multiple_choice,"2,3,4,5",4,"Basic addition",0.2,math
+    "The sky is blue",true_false,,true,"Common knowledge",0.1,general
+
+    Args:
+        question_set_id: 問題集ID
+        file: CSVファイル
+        current_user: 現在のユーザー
+        db: データベースセッション
+
+    Returns:
+        登録された問題数と詳細
+    """
+    # 問題集の存在と権限を確認
+    question_set = db.query(QuestionSet).filter(
+        QuestionSet.id == question_set_id
+    ).first()
+
+    if not question_set:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="問題集が見つかりません"
+        )
+
+    if question_set.creator_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="この問題集に問題を追加する権限がありません"
+        )
+
+    # CSVファイルを読み込み
+    try:
+        contents = await file.read()
+        decoded = contents.decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(decoded))
+
+        created_questions = []
+        errors = []
+
+        for idx, row in enumerate(csv_reader, start=1):
+            try:
+                # 必須フィールドの確認
+                if not row.get('question_text') or not row.get('correct_answer'):
+                    errors.append(f"Row {idx}: Missing required fields (question_text or correct_answer)")
+                    continue
+
+                # question_typeのデフォルト値
+                question_type = row.get('question_type', 'text_input').strip()
+
+                # optionsの処理（カンマ区切りの文字列をリストに変換）
+                options_str = row.get('options', '').strip()
+                options = [opt.strip() for opt in options_str.split(',')] if options_str else None
+
+                # difficultyの処理
+                try:
+                    difficulty = float(row.get('difficulty', '0.5'))
+                    if not (0 <= difficulty <= 1):
+                        difficulty = 0.5
+                except (ValueError, TypeError):
+                    difficulty = 0.5
+
+                # 問題を作成
+                new_question = Question(
+                    id=str(uuid.uuid4()),
+                    question_set_id=question_set_id,
+                    question_text=row['question_text'].strip(),
+                    question_type=question_type,
+                    options=options,
+                    correct_answer=row['correct_answer'].strip(),
+                    explanation=row.get('explanation', '').strip() or None,
+                    difficulty=difficulty,
+                    category=row.get('category', '').strip() or None,
+                    order=len(created_questions)
+                )
+
+                db.add(new_question)
+                created_questions.append(new_question)
+
+            except Exception as e:
+                errors.append(f"Row {idx}: {str(e)}")
+                continue
+
+        # 一括コミット
+        if created_questions:
+            db.commit()
+
+        return {
+            "message": f"Successfully imported {len(created_questions)} questions",
+            "total_created": len(created_questions),
+            "total_errors": len(errors),
+            "errors": errors if errors else None
+        }
+
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file encoding. Please use UTF-8 encoded CSV file"
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process CSV file: {str(e)}"
+        )

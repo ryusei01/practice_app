@@ -4,7 +4,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
-from datetime import timedelta
+from datetime import timedelta, datetime
+from typing import Optional
 import uuid
 
 from ..core.database import get_db
@@ -37,6 +38,8 @@ class UserResponse(BaseModel):
     full_name: str
     is_active: bool
     is_seller: bool
+    is_premium: bool
+    premium_expires_at: Optional[datetime]
 
     class Config:
         from_attributes = True
@@ -49,7 +52,9 @@ class UserResponse(BaseModel):
             email=obj.email,
             full_name=obj.username,
             is_active=obj.is_active,
-            is_seller=obj.is_seller
+            is_seller=obj.is_seller,
+            is_premium=obj.is_premium,
+            premium_expires_at=obj.premium_expires_at
         )
 
 

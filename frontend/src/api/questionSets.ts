@@ -33,6 +33,29 @@ export interface QuestionSetUpdate {
   is_published?: boolean;
 }
 
+export interface Question {
+  id: string;
+  question_set_id: string;
+  question_text: string;
+  question_type: string;
+  options: string[] | null;
+  correct_answer: string;
+  explanation: string | null;
+  difficulty: number;
+}
+
+export interface QuestionSetWithQuestions {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string;
+  tags: string[] | null;
+  price: number;
+  is_published: boolean;
+  creator_id: string;
+  questions: Question[];
+}
+
 export const questionSetsApi = {
   getAll: async (params?: { category?: string; is_published?: boolean; skip?: number; limit?: number }): Promise<QuestionSet[]> => {
     const response = await apiClient.get('/question-sets/', { params });
@@ -61,5 +84,15 @@ export const questionSetsApi = {
 
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/question-sets/${id}`);
+  },
+
+  getPurchased: async (): Promise<QuestionSet[]> => {
+    const response = await apiClient.get('/question-sets/purchased');
+    return response.data;
+  },
+
+  download: async (id: string): Promise<QuestionSetWithQuestions> => {
+    const response = await apiClient.get(`/question-sets/${id}/download`);
+    return response.data;
   },
 };

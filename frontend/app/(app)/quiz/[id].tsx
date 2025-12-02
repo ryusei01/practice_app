@@ -10,6 +10,7 @@ import {
   TextInput,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../../src/contexts/AuthContext';
 import { questionsApi, Question } from '../../../src/api/questions';
 import { answersApi } from '../../../src/api/answers';
@@ -32,6 +33,13 @@ export default function QuizScreen() {
   const [isCorrect, setIsCorrect] = useState(false);
   const [score, setScore] = useState(0);
   const [totalAnswered, setTotalAnswered] = useState(0);
+  // 全ての回答を保持する配列
+  const [answers, setAnswers] = useState<Array<{
+    question_id: string;
+    user_answer: string;
+    is_correct: boolean;
+    answer_time_sec: number;
+  }>>([]);
 
   useEffect(() => {
     if (id && user) {
@@ -84,32 +92,23 @@ export default function QuizScreen() {
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      const currentQuestion = questions[currentQuestionIndex];
-      const answerTimeSec = Math.floor((Date.now() - startTime) / 1000);
-      const correct = checkAnswer(userAnswer);
+    const currentQuestion = questions[currentQuestionIndex];
+    const answerTimeSec = Math.floor((Date.now() - startTime) / 1000);
+    const correct = checkAnswer(userAnswer);
 
-      await answersApi.submitAnswer({
-        user_id: user.id,
-        question_id: currentQuestion.id,
-        user_answer: userAnswer,
-        is_correct: correct,
-        answer_time_sec: answerTimeSec,
-        session_id: sessionId,
-      });
+    // 回答を配列に保存（API送信はしない）
+    setAnswers([...answers, {
+      question_id: currentQuestion.id,
+      user_answer: userAnswer,
+      is_correct: correct,
+      answer_time_sec: answerTimeSec,
+    }]);
 
-      setIsCorrect(correct);
-      setShowResult(true);
-      setTotalAnswered(totalAnswered + 1);
-      if (correct) {
-        setScore(score + 1);
-      }
-    } catch (error: any) {
-      console.error('Failed to submit answer:', error);
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to submit answer');
-    } finally {
-      setIsSubmitting(false);
+    setIsCorrect(correct);
+    setShowResult(true);
+    setTotalAnswered(totalAnswered + 1);
+    if (correct) {
+      setScore(score + 1);
     }
   };
 
@@ -120,12 +119,65 @@ export default function QuizScreen() {
       setShowResult(false);
       setStartTime(Date.now());
     } else {
-      // Quiz completed
+      // 全問終了 → 回答を一括送信
+      submitAllAnswers();
+    }
+  };
+
+  const submitAllAnswers = async () => {
+    if (!user) return;
+
+    setIsSubmitting(true);
+    try {
+      if (user.is_premium) {
+        // 課金ユーザー: クラウドに保存
+        for (const answer of answers) {
+          await answersApi.submitAnswer({
+            user_id: user.id,
+            question_id: answer.question_id,
+            user_answer: answer.user_answer,
+            is_correct: answer.is_correct,
+            answer_time_sec: answer.answer_time_sec,
+            session_id: sessionId,
+          });
+        }
+
+        Alert.alert(
+          'Quiz Completed!',
+          `Your Score: ${score}/${totalAnswered}\nAccuracy: ${((score / totalAnswered) * 100).toFixed(1)}%\n\n✨ Synced to cloud!`,
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+      } else {
+        // 無料ユーザー: ローカルに保存
+        const localAnswers = await AsyncStorage.getItem(`answers_${user.id}`) || '[]';
+        const parsedAnswers = JSON.parse(localAnswers);
+
+        const newAnswers = answers.map(answer => ({
+          ...answer,
+          session_id: sessionId,
+          answered_at: new Date().toISOString(),
+        }));
+
+        await AsyncStorage.setItem(
+          `answers_${user.id}`,
+          JSON.stringify([...parsedAnswers, ...newAnswers])
+        );
+
+        Alert.alert(
+          'Quiz Completed!',
+          `Your Score: ${score}/${totalAnswered}\nAccuracy: ${((score / totalAnswered) * 100).toFixed(1)}%\n\n💾 Saved locally`,
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+      }
+    } catch (error: any) {
+      console.error('Failed to save answers:', error);
       Alert.alert(
-        'Quiz Completed!',
-        `Your Score: ${score}/${totalAnswered}\nAccuracy: ${((score / totalAnswered) * 100).toFixed(1)}%`,
+        'Error',
+        'Failed to save answers. Please try again.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

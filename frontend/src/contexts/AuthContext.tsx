@@ -7,6 +7,8 @@ interface User {
   email: string;
   full_name: string;
   is_active: boolean;
+  is_premium: boolean;
+  premium_expires_at: string | null;
 }
 
 interface AuthContextType {

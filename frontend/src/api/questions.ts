@@ -63,4 +63,29 @@ export const questionsApi = {
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/questions/${id}`);
   },
+
+  bulkUploadCSV: async (questionSetId: string, file: { uri: string; name: string; type: string }): Promise<{ message: string; total_created: number; total_errors: number; errors: string[] | null }> => {
+    const formData = new FormData();
+
+    // Web環境ではblob URIから実際のBlobを取得
+    if (file.uri.startsWith('blob:')) {
+      const response = await fetch(file.uri);
+      const blob = await response.blob();
+      formData.append('file', blob, file.name);
+    } else {
+      // ネイティブ環境用（将来の拡張のため）
+      formData.append('file', {
+        uri: file.uri,
+        name: file.name,
+        type: file.type,
+      } as any);
+    }
+
+    const response = await apiClient.post(`/questions/bulk-upload/${questionSetId}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
 };

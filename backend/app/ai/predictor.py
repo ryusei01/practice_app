@@ -105,7 +105,7 @@ class ScorePredictor:
 
         result = query.first()
 
-        if result.total == 0:
+        if result.total == 0 or result.correct is None:
             return {
                 "total_attempts": 0,
                 "correct_rate": 0.0,

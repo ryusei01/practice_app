@@ -9,8 +9,10 @@ from pydantic import BaseModel
 import uuid
 
 from ..core.database import get_db
-from ..models import Answer
+from ..core.auth import get_current_active_user
+from ..models import Answer, User, QuestionSet, Question
 from ..ai import StatsUpdater
+from typing import List
 
 router = APIRouter()
 
@@ -132,11 +134,11 @@ async def get_user_stats(
     """
     ユーザーの全体統計を取得
     """
-    from sqlalchemy import func
+    from sqlalchemy import func, Integer
 
     result = db.query(
         func.count(Answer.id).label("total"),
-        func.sum(func.cast(Answer.is_correct, func.Integer())).label("correct"),
+        func.sum(func.cast(Answer.is_correct, Integer)).label("correct"),
         func.avg(Answer.answer_time_sec).label("avg_time")
     ).filter(Answer.user_id == user_id).first()
 
@@ -173,3 +175,140 @@ async def recalculate_stats(
         return {"message": "Stats recalculated successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class LocalAnswerData(BaseModel):
+    question_id: str
+    user_answer: str
+    is_correct: bool
+    answer_time_sec: float
+    session_id: Optional[str] = None
+    answered_at: str
+
+
+class LocalQuestionData(BaseModel):
+    question_text: str
+    question_type: str
+    options: Optional[List[str]] = None
+    correct_answer: str
+    explanation: Optional[str] = None
+    difficulty: float
+
+
+class LocalQuestionSetData(BaseModel):
+    title: str
+    description: Optional[str] = None
+    category: str
+    tags: Optional[List[str]] = None
+    price: int = 0
+    is_published: bool = False
+    questions: List[LocalQuestionData] = []
+
+
+class MigrateLocalDataRequest(BaseModel):
+    answers: List[LocalAnswerData] = []
+    question_sets: List[LocalQuestionSetData] = []
+
+
+@router.post("/migrate-local-data")
+async def migrate_local_data(
+    request: MigrateLocalDataRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    ローカルデータをクラウドに移行
+
+    無料ユーザーが課金してプレミアムになった時に呼び出される
+    """
+    if not current_user.is_premium:
+        raise HTTPException(
+            status_code=403,
+            detail="Premium subscription required to migrate data to cloud"
+        )
+
+    migrated_counts = {
+        "answers": 0,
+        "question_sets": 0,
+        "questions": 0,
+    }
+
+    try:
+        # 回答データを移行
+        for answer_data in request.answers:
+            # 既存の回答があるかチェック（重複防止）
+            existing = db.query(Answer).filter(
+                Answer.user_id == current_user.id,
+                Answer.question_id == answer_data.question_id,
+                Answer.answered_at == datetime.fromisoformat(answer_data.answered_at)
+            ).first()
+
+            if not existing:
+                new_answer = Answer(
+                    id=str(uuid.uuid4()),
+                    user_id=current_user.id,
+                    question_id=answer_data.question_id,
+                    user_answer=answer_data.user_answer,
+                    is_correct=answer_data.is_correct,
+                    answer_time_sec=answer_data.answer_time_sec,
+                    session_id=answer_data.session_id,
+                    answered_at=datetime.fromisoformat(answer_data.answered_at),
+                    try_count=1
+                )
+                db.add(new_answer)
+                migrated_counts["answers"] += 1
+
+        # 問題集と問題を移行
+        for qs_data in request.question_sets:
+            # 既存の問題集があるかチェック（タイトルとカテゴリで重複判定）
+            existing_qs = db.query(QuestionSet).filter(
+                QuestionSet.creator_id == current_user.id,
+                QuestionSet.title == qs_data.title,
+                QuestionSet.category == qs_data.category
+            ).first()
+
+            if not existing_qs:
+                new_qs = QuestionSet(
+                    id=str(uuid.uuid4()),
+                    title=qs_data.title,
+                    description=qs_data.description,
+                    category=qs_data.category,
+                    tags=qs_data.tags,
+                    price=qs_data.price,
+                    is_published=qs_data.is_published,
+                    creator_id=current_user.id
+                )
+                db.add(new_qs)
+                db.flush()  # IDを取得するため
+                migrated_counts["question_sets"] += 1
+
+                # 問題を移行
+                for q_data in qs_data.questions:
+                    new_question = Question(
+                        id=str(uuid.uuid4()),
+                        question_set_id=new_qs.id,
+                        question_text=q_data.question_text,
+                        question_type=q_data.question_type,
+                        options=q_data.options,
+                        correct_answer=q_data.correct_answer,
+                        explanation=q_data.explanation,
+                        difficulty=q_data.difficulty
+                    )
+                    db.add(new_question)
+                    migrated_counts["questions"] += 1
+
+        db.commit()
+
+        # 統計を再計算
+        if migrated_counts["answers"] > 0:
+            stats_updater = StatsUpdater(db)
+            stats_updater.recalculate_all_stats(current_user.id)
+
+        return {
+            "message": "Data migrated successfully",
+            "migrated_counts": migrated_counts
+        }
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Migration failed: {str(e)}")

@@ -13,7 +13,10 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     is_seller = Column(Boolean, default=False)
+    is_premium = Column(Boolean, default=False)  # 課金ユーザーフラグ
+    premium_expires_at = Column(DateTime, nullable=True)  # サブスク期限
     stripe_account_id = Column(String, nullable=True)  # Stripe Connect Account ID
+    stripe_customer_id = Column(String, nullable=True)  # Stripe Customer ID (課金用)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

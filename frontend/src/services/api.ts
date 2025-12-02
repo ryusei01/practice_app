@@ -1,12 +1,15 @@
-import axios from 'axios';
-import Constants from 'expo-constants';
+import axios from "axios";
+import Constants from "expo-constants";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { router } from "expo-router";
 
-const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:8000/api/v1';
+const API_URL =
+  Constants.expoConfig?.extra?.apiUrl || "http://localhost:8003/api/v1";
 
 const api = axios.create({
   baseURL: API_URL,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
   timeout: 10000,
 });
@@ -14,11 +17,10 @@ const api = axios.create({
 // リクエストインターセプター（認証トークンを自動付与）
 api.interceptors.request.use(
   async (config) => {
-    // TODO: AsyncStorageからトークンを取得して設定
-    // const token = await AsyncStorage.getItem('authToken');
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
+    const token = await AsyncStorage.getItem('access_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     return config;
   },
   (error) => {
@@ -29,10 +31,12 @@ api.interceptors.request.use(
 // レスポンスインターセプター（エラーハンドリング）
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (error.response?.status === 401) {
-      // 認証エラー → ログイン画面へ
-      console.log('Unauthorized, redirect to login');
+      // 認証エラー → トークンをクリアしてログイン画面へ
+      console.log("Unauthorized, redirect to login");
+      await AsyncStorage.removeItem("access_token");
+      router.replace("/login");
     }
     return Promise.reject(error);
   }

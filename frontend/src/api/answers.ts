@@ -32,6 +32,48 @@ export interface UserStats {
   last_activity: string | null;
 }
 
+export interface LocalAnswerData {
+  question_id: string;
+  user_answer: string;
+  is_correct: boolean;
+  answer_time_sec: number;
+  session_id?: string;
+  answered_at: string;
+}
+
+export interface LocalQuestionData {
+  question_text: string;
+  question_type: string;
+  options?: string[];
+  correct_answer: string;
+  explanation?: string;
+  difficulty: number;
+}
+
+export interface LocalQuestionSetData {
+  title: string;
+  description?: string;
+  category: string;
+  tags?: string[];
+  price: number;
+  is_published: boolean;
+  questions: LocalQuestionData[];
+}
+
+export interface MigrateLocalDataRequest {
+  answers: LocalAnswerData[];
+  question_sets: LocalQuestionSetData[];
+}
+
+export interface MigrationResult {
+  message: string;
+  migrated_counts: {
+    answers: number;
+    question_sets: number;
+    questions: number;
+  };
+}
+
 export const answersApi = {
   submitAnswer: async (data: SubmitAnswerRequest): Promise<Answer> => {
     const response = await apiClient.post('/answers/submit', data);
@@ -47,6 +89,11 @@ export const answersApi = {
 
   getUserStats: async (userId: string): Promise<UserStats> => {
     const response = await apiClient.get(`/answers/stats/${userId}`);
+    return response.data;
+  },
+
+  migrateLocalData: async (data: MigrateLocalDataRequest): Promise<MigrationResult> => {
+    const response = await apiClient.post('/answers/migrate-local-data', data);
     return response.data;
   },
 };
