@@ -1,233 +1,124 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Alert,
   ActivityIndicator,
-  Switch,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import * as DocumentPicker from 'expo-document-picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { questionSetsApi } from '../../../src/api/questionSets';
-import { questionsApi } from '../../../src/api/questions';
-import { useAuth } from '../../../src/contexts/AuthContext';
+} from "react-native";
+import { useRouter } from "expo-router";
+import { questionSetsApi } from "../../../src/api/questionSets";
+import { useAuth } from "../../../src/contexts/AuthContext";
+import { useLanguage } from "../../../src/contexts/LanguageContext";
 
 export default function CreateQuestionSetScreen() {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('');
-  const [tags, setTags] = useState('');
-  const [price, setPrice] = useState('0');
-  const [isPublished, setIsPublished] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { user } = useAuth();
-
-  const handleUploadCSV = async (questionSetId: string) => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'text/csv',
-        copyToCacheDirectory: true,
-      });
-
-      if (result.canceled) {
-        router.back();
-        return;
-      }
-
-      const file = result.assets[0];
-
-      Alert.alert(
-        'Upload CSV',
-        `Selected: ${file.name}\n\nUpload this file?`,
-        [
-          {
-            text: 'Cancel',
-            onPress: () => router.back(),
-            style: 'cancel',
-          },
-          {
-            text: 'Upload',
-            onPress: async () => {
-              try {
-                setIsLoading(true);
-                const response = await questionsApi.bulkUploadCSV(questionSetId, {
-                  uri: file.uri,
-                  name: file.name,
-                  type: file.mimeType || 'text/csv',
-                });
-
-                if (response.total_errors > 0) {
-                  Alert.alert(
-                    'Upload Complete with Errors',
-                    `Created: ${response.total_created} questions\nErrors: ${response.total_errors}\n\nFirst few errors:\n${response.errors?.slice(0, 3).join('\n')}`,
-                    [{ text: 'OK', onPress: () => router.push(`/(app)/question-sets/${questionSetId}`) }]
-                  );
-                } else {
-                  Alert.alert(
-                    'Success',
-                    `Successfully imported ${response.total_created} questions!`,
-                    [{ text: 'OK', onPress: () => router.push(`/(app)/question-sets/${questionSetId}`) }]
-                  );
-                }
-              } catch (error: any) {
-                console.error('Failed to upload CSV:', error);
-                Alert.alert(
-                  'Error',
-                  error.response?.data?.detail || 'Failed to upload CSV',
-                  [{ text: 'OK', onPress: () => router.back() }]
-                );
-              } finally {
-                setIsLoading(false);
-              }
-            },
-          },
-        ]
-      );
-    } catch (error) {
-      console.error('Failed to pick document:', error);
-      Alert.alert('Error', 'Failed to select file', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
-    }
-  };
+  const { t } = useLanguage();
 
   const handleCreate = async () => {
-    console.log('handleCreate called');
-    console.log('User:', user);
-    console.log('Title:', title);
-    console.log('Category:', category);
-
-    if (!title || !category) {
-      Alert.alert('Error', 'Please fill in title and category');
-      return;
-    }
+    console.log("handleCreate called");
+    console.log("User:", user);
 
     if (!user) {
-      Alert.alert('Error', 'User not authenticated');
+      Alert.alert(
+        t("Error", "エラー"),
+        t("User not authenticated", "ユーザー認証されていません")
+      );
       return;
-    }
-
-    // 非公開の場合、値段は0に固定
-    if (!isPublished && parseInt(price) > 0) {
-      Alert.alert('Warning', 'Private question sets cannot have a price. Price will be set to 0.');
     }
 
     setIsLoading(true);
-    console.log('Loading state set to true');
+    console.log("Loading state set to true");
     try {
-      const tagsArray = tags
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter((tag) => tag.length > 0);
-
+      // 最小限の情報で問題集を作成（仮のタイトルとカテゴリ）
       const questionSetData = {
-        title,
-        description: description || undefined,
-        category,
-        tags: tagsArray.length > 0 ? tagsArray : undefined,
-        price: isPublished ? (parseInt(price) || 0) : 0,
-        is_published: isPublished,
+        title: t("New Question Set", "新しい問題集"),
+        category: t("Uncategorized", "未分類"),
+        description: undefined,
+        tags: undefined,
+        price: 0,
+        is_published: false,
       };
 
-      console.log('Question set data:', questionSetData);
+      console.log("Question set data:", questionSetData);
 
       // クラウドに保存（プレミアムユーザー or デフォルト動作）
-      console.log('Calling questionSetsApi.create...');
+      console.log("Calling questionSetsApi.create...");
       const result = await questionSetsApi.create(questionSetData);
-      console.log('API call result:', result);
-      console.log('Result type:', typeof result);
-      console.log('Result keys:', Object.keys(result));
+      console.log("API call result:", result);
+      console.log("Result type:", typeof result);
+      console.log("Result keys:", Object.keys(result));
 
       const createdQuestionSetId = result.id;
-      console.log('Created question set ID:', createdQuestionSetId);
+      console.log("Created question set ID:", createdQuestionSetId);
 
       if (!createdQuestionSetId) {
-        console.error('No ID returned from API!');
-        Alert.alert('Error', 'Failed to get question set ID from server');
+        console.error("No ID returned from API!");
+        Alert.alert(
+          t("Error", "エラー"),
+          t(
+            "Failed to get question set ID from server",
+            "サーバーから問題集IDを取得できませんでした"
+          )
+        );
         return;
       }
 
-      // 問題集作成成功、詳細画面に遷移
-      router.push(`/(app)/question-sets/${createdQuestionSetId}`);
+      // 問題集作成成功、詳細画面に遷移（編集モードのパラメータ付き）
+      router.push(`/(app)/question-sets/${createdQuestionSetId}?mode=setup`);
     } catch (error: any) {
-      console.error('Error creating question set:', error);
-      console.error('Error response:', error.response);
-      console.error('Error message:', error.message);
+      console.error("Error creating question set:", error);
+      console.error("Error response:", error.response);
+      console.error("Error message:", error.message);
       Alert.alert(
-        'Error',
-        error.response?.data?.detail || 'Failed to create question set'
+        t("Error", "エラー"),
+        error.response?.data?.detail ||
+          t("Failed to create question set", "問題集の作成に失敗しました")
       );
     } finally {
-      console.log('Setting loading to false');
+      console.log("Setting loading to false");
       setIsLoading(false);
     }
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
       <View style={styles.formContainer}>
-        <Text style={styles.label}>Title *</Text>
-        <TextInput
-          style={styles.input}
-          value={title}
-          onChangeText={setTitle}
-          placeholder="Enter question set title"
-          editable={!isLoading}
-        />
+        <View style={styles.headerContainer}>
+          <Text style={styles.headerTitle}>
+            {t("Create New Question Set", "新しい問題集を作成")}
+          </Text>
+          <Text style={styles.subtitle}>
+            {t(
+              "Create a question set and then add questions via CSV",
+              "問題集を作成後、CSVで問題を追加できます"
+            )}
+          </Text>
+        </View>
 
-        <Text style={styles.label}>Category *</Text>
-        <TextInput
-          style={styles.input}
-          value={category}
-          onChangeText={setCategory}
-          placeholder="e.g., Math, English, Programming"
-          editable={!isLoading}
-        />
-
-        <Text style={styles.label}>Description</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          value={description}
-          onChangeText={setDescription}
-          placeholder="Describe your question set"
-          multiline
-          numberOfLines={4}
-          textAlignVertical="top"
-          editable={!isLoading}
-        />
-
-        <Text style={styles.label}>Tags (comma separated)</Text>
-        <TextInput
-          style={styles.input}
-          value={tags}
-          onChangeText={setTags}
-          placeholder="e.g., beginner, TOEIC, Python"
-          editable={!isLoading}
-        />
-
-        <Text style={styles.label}>Price (¥) {!isPublished && '(Private sets are free)'}</Text>
-        <TextInput
-          style={[styles.input, !isPublished && styles.inputDisabled]}
-          value={price}
-          onChangeText={setPrice}
-          placeholder="0"
-          keyboardType="numeric"
-          editable={!isLoading && isPublished}
-        />
-
-        <View style={styles.switchContainer}>
-          <Text style={styles.label}>Publish immediately</Text>
-          <Switch
-            value={isPublished}
-            onValueChange={setIsPublished}
-            disabled={isLoading}
-          />
+        <View style={styles.infoContainer}>
+          <Text style={styles.infoTitle}>
+            {t("Setup Steps:", "セットアップ手順:")}
+          </Text>
+          <Text style={styles.infoStep}>
+            1️⃣ {t("Create question set", "問題集を作成")}
+          </Text>
+          <Text style={styles.infoStep}>
+            2️⃣{" "}
+            {t(
+              "Make questions or Upload questions via CSV",
+              "自分で問題を追加するか、CSVで問題をアップロード"
+            )}
+          </Text>
+          <Text style={styles.infoStep}>
+            3️⃣ {t("Edit title and category", "タイトルとカテゴリを編集")}
+          </Text>
+          <Text style={styles.infoStep}>
+            4️⃣ {t("Add description, tags, and price", "説明、タグ、価格を追加")}
+          </Text>
         </View>
 
         <TouchableOpacity
@@ -239,7 +130,9 @@ export default function CreateQuestionSetScreen() {
           {isLoading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>Create</Text>
+            <Text style={styles.buttonText}>
+              {t("Create Question Set", "問題集を作成")}
+            </Text>
           )}
         </TouchableOpacity>
 
@@ -249,72 +142,82 @@ export default function CreateQuestionSetScreen() {
           disabled={isLoading}
         >
           <Text style={[styles.buttonText, styles.cancelButtonText]}>
-            Cancel
+            {t("Cancel", "キャンセル")}
           </Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: "#f5f5f5",
+    justifyContent: "center",
   },
   formContainer: {
     padding: 20,
   },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-    marginTop: 16,
+  headerContainer: {
+    marginBottom: 32,
+    alignItems: "center",
   },
-  input: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  subtitle: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  infoContainer: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 24,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: "#e0e0e0",
   },
-  textArea: {
-    minHeight: 100,
+  infoTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 16,
   },
-  inputDisabled: {
-    backgroundColor: '#f5f5f5',
-    color: '#999',
-  },
-  switchContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 16,
+  infoStep: {
+    fontSize: 15,
+    color: "#666",
+    marginBottom: 12,
+    lineHeight: 22,
   },
   button: {
-    backgroundColor: '#007AFF',
+    backgroundColor: "#007AFF",
     borderRadius: 8,
     padding: 16,
-    alignItems: 'center',
-    marginTop: 24,
+    alignItems: "center",
+    marginTop: 12,
   },
   buttonDisabled: {
-    backgroundColor: '#B0B0B0',
+    backgroundColor: "#B0B0B0",
   },
   buttonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   cancelButton: {
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
     borderWidth: 2,
-    borderColor: '#007AFF',
+    borderColor: "#007AFF",
     marginTop: 12,
   },
   cancelButtonText: {
-    color: '#007AFF',
+    color: "#007AFF",
   },
 });

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from 'expo-router';
 import { authApi, AuthResponse } from '../api/auth';
 
 interface User {
@@ -40,14 +41,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const checkAuth = async () => {
     try {
-      const token = await AsyncStorage.getItem('access_token');
-      if (token) {
-        const userData = await authApi.getCurrentUser();
-        setUser(userData);
-      }
+      const userData = await authApi.getCurrentUser();
+      setUser(userData);
     } catch (error) {
       console.error('Auth check failed:', error);
       await AsyncStorage.removeItem('access_token');
+      await AsyncStorage.removeItem('refresh_token');
+      setUser(null);
+      try {
+        router.replace('/(auth)/login');
+      } catch (navError) {
+        console.error('Navigation to login failed:', navError);
+      }
     } finally {
       setIsLoading(false);
     }

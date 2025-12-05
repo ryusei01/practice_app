@@ -1,6 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from .core.config import settings
+
+# レート制限の設定
+limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -8,14 +14,39 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS設定（開発時は全許可、本番環境では制限）
+# レート制限のエラーハンドラーを追加
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS設定
+if settings.DEBUG:
+    # 開発環境: 全許可
+    origins = ["*"]
+else:
+    # 本番環境: 特定のドメインのみ許可
+    origins = [
+        "https://your-production-domain.com",  # 本番ドメインに変更すること
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 本番では特定のオリジンのみ許可
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# セキュリティヘッダーの追加
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    if not settings.DEBUG:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 
 @app.get("/")

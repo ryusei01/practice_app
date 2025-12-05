@@ -1,4 +1,4 @@
-import AddQuestionScreen from "../../../../src/components/add-question";
+import AddQuestionScreen from "../../../src/components/add-question";
 
 export default function Page() {
   return <AddQuestionScreen></AddQuestionScreen>;

@@ -1,24 +1,51 @@
 """
 認証関連のAPIエンドポイント
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from datetime import timedelta, datetime
 from typing import Optional
 import uuid
+import re
 
 from ..core.database import get_db
 from ..core.auth import (
     verify_password,
     get_password_hash,
     create_access_token,
+    create_refresh_token,
+    decode_access_token,
     get_current_active_user
 )
 from ..core.config import settings
 from ..models import User
+from ..main import limiter
 
 router = APIRouter()
+
+
+def validate_password_strength(password: str) -> tuple[bool, str]:
+    """
+    パスワードの強度をチェック
+
+    要件:
+    - 最小8文字
+    - 大文字、小文字、数字を含む
+    """
+    if len(password) < 8:
+        return False, "パスワードは8文字以上である必要があります"
+
+    if not re.search(r'[A-Z]', password):
+        return False, "パスワードには大文字を含める必要があります"
+
+    if not re.search(r'[a-z]', password):
+        return False, "パスワードには小文字を含める必要があります"
+
+    if not re.search(r'[0-9]', password):
+        return False, "パスワードには数字を含める必要があります"
+
+    return True, ""
 
 
 class UserRegisterRequest(BaseModel):
@@ -60,6 +87,7 @@ class UserResponse(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     user: UserResponse
 
@@ -79,6 +107,14 @@ async def register(request: UserRegisterRequest, db: Session = Depends(get_db)):
     Raises:
         HTTPException: メールアドレスが既に登録されている場合
     """
+    # パスワード強度チェック
+    is_valid, error_message = validate_password_strength(request.password)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_message
+        )
+
     # メールアドレスの重複チェック
     existing_user = db.query(User).filter(User.email == request.email).first()
     if existing_user:
@@ -102,25 +138,38 @@ async def register(request: UserRegisterRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
-    # アクセストークンを生成
+    # アクセストークンとリフレッシュトークンを生成
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": new_user.id},
         expires_delta=access_token_expires
     )
+    refresh_token = create_refresh_token(data={"sub": new_user.id})
+
+    # リフレッシュトークンをハッシュ化してDBに保存
+    new_user.refresh_token = get_password_hash(refresh_token)
+    db.commit()
 
     return TokenResponse(
         access_token=access_token,
+        refresh_token=refresh_token,
         user=UserResponse.from_orm(new_user)
     )
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(request: UserLoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+async def login(
+    http_request: Request,
+    request: UserLoginRequest,
+    db: Session = Depends(get_db)
+):
     """
     ユーザーログイン
+    レート制限: 1分間に5回まで
 
     Args:
+        http_request: HTTPリクエスト（レート制限用）
         request: ログインリクエスト
         db: データベースセッション
 
@@ -133,8 +182,37 @@ async def login(request: UserLoginRequest, db: Session = Depends(get_db)):
     # ユーザーを検索
     user = db.query(User).filter(User.email == request.email).first()
 
+    # ユーザーが存在しない場合
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="メールアドレスまたはパスワードが正しくありません",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # アカウントロックチェック
+    if user.locked_until and user.locked_until > datetime.utcnow():
+        remaining_minutes = int((user.locked_until - datetime.utcnow()).total_seconds() / 60)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"アカウントがロックされています。{remaining_minutes}分後に再試行してください"
+        )
+
     # パスワードを検証
-    if not user or not verify_password(request.password, user.hashed_password):
+    if not verify_password(request.password, user.hashed_password):
+        # ログイン失敗回数を増やす
+        user.failed_login_attempts += 1
+
+        # 5回失敗したらアカウントをロック（15分間）
+        if user.failed_login_attempts >= 5:
+            user.locked_until = datetime.utcnow() + timedelta(minutes=15)
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="ログイン試行回数が上限を超えました。アカウントを15分間ロックします"
+            )
+
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="メールアドレスまたはパスワードが正しくありません",
@@ -148,15 +226,96 @@ async def login(request: UserLoginRequest, db: Session = Depends(get_db)):
             detail="このアカウントは無効化されています"
         )
 
-    # アクセストークンを生成
+    # ログイン成功: 失敗回数とロックをリセット
+    user.failed_login_attempts = 0
+    user.locked_until = None
+
+    # アクセストークンとリフレッシュトークンを生成
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.id},
         expires_delta=access_token_expires
     )
+    refresh_token = create_refresh_token(data={"sub": user.id})
+
+    # リフレッシュトークンをハッシュ化してDBに保存
+    user.refresh_token = get_password_hash(refresh_token)
+    db.commit()
 
     return TokenResponse(
         access_token=access_token,
+        refresh_token=refresh_token,
+        user=UserResponse.from_orm(user)
+    )
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_access_token(
+    refresh_token: str,
+    db: Session = Depends(get_db)
+):
+    """
+    リフレッシュトークンを使って新しいアクセストークンを取得
+
+    Args:
+        refresh_token: リフレッシュトークン
+        db: データベースセッション
+
+    Returns:
+        新しいアクセストークンとリフレッシュトークン
+
+    Raises:
+        HTTPException: リフレッシュトークンが無効な場合
+    """
+    # リフレッシュトークンをデコード
+    payload = decode_access_token(refresh_token)
+    if payload is None or payload.get("type") != "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="無効なリフレッシュトークンです",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user_id = payload.get("sub")
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="無効なリフレッシュトークンです",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # ユーザーを検索
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="無効なリフレッシュトークンです",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # DBに保存されているリフレッシュトークンと照合
+    if not user.refresh_token or not verify_password(refresh_token, user.refresh_token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="無効なリフレッシュトークンです",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # 新しいアクセストークンとリフレッシュトークンを生成
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.id},
+        expires_delta=access_token_expires
+    )
+    new_refresh_token = create_refresh_token(data={"sub": user.id})
+
+    # 新しいリフレッシュトークンをハッシュ化してDBに保存
+    user.refresh_token = get_password_hash(new_refresh_token)
+    db.commit()
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=new_refresh_token,
         user=UserResponse.from_orm(user)
     )
 

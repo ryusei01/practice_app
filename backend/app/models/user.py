@@ -17,6 +17,12 @@ class User(Base):
     premium_expires_at = Column(DateTime, nullable=True)  # サブスク期限
     stripe_account_id = Column(String, nullable=True)  # Stripe Connect Account ID
     stripe_customer_id = Column(String, nullable=True)  # Stripe Customer ID (課金用)
+
+    # セキュリティ関連
+    failed_login_attempts = Column(Integer, default=0)  # ログイン失敗回数
+    locked_until = Column(DateTime, nullable=True)  # アカウントロック解除時刻
+    refresh_token = Column(String, nullable=True)  # リフレッシュトークン（ハッシュ化）
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

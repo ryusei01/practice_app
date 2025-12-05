@@ -12,6 +12,7 @@ from ..core.database import get_db
 from ..core.auth import get_current_active_user
 from ..models import Answer, User, QuestionSet, Question
 from ..ai import StatsUpdater
+from ..services.ai_evaluator import evaluate_text_answer
 from typing import List
 
 router = APIRouter()
@@ -26,6 +27,11 @@ class SubmitAnswerRequest(BaseModel):
     session_id: Optional[str] = None
 
 
+class EvaluateTextAnswerRequest(BaseModel):
+    question_id: str
+    user_answer: str
+
+
 class AnswerResponse(BaseModel):
     id: str
     user_id: str
@@ -37,6 +43,49 @@ class AnswerResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+@router.post("/evaluate-text")
+async def evaluate_text_answer_endpoint(
+    request: EvaluateTextAnswerRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    text_input問題の回答をAIで評価
+
+    完全一致でなくても意味が正しければ正解とする
+    """
+    try:
+        # 問題を取得
+        question = db.query(Question).filter(
+            Question.id == request.question_id
+        ).first()
+
+        if not question:
+            raise HTTPException(status_code=404, detail="Question not found")
+
+        if question.question_type != "text_input":
+            raise HTTPException(
+                status_code=400,
+                detail="This endpoint is only for text_input questions"
+            )
+
+        # AI評価を実行
+        evaluation = await evaluate_text_answer(
+            question_text=question.question_text,
+            correct_answer=question.correct_answer,
+            user_answer=request.user_answer,
+            explanation=question.explanation
+        )
+
+        return evaluation
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/submit", response_model=AnswerResponse)

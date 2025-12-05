@@ -23,7 +23,7 @@ class QuestionCreate(BaseModel):
     options: Optional[List[str]] = None
     correct_answer: str
     explanation: Optional[str] = None
-    difficulty: float = 0.5
+    difficulty: Optional[float] = None
     category: Optional[str] = None
     order: int = 0
 
@@ -47,7 +47,7 @@ class QuestionResponse(BaseModel):
     options: Optional[List[str]]
     correct_answer: str
     explanation: Optional[str]
-    difficulty: float
+    difficulty: Optional[float]
     category: Optional[str]
     order: int
     total_attempts: int = 0
@@ -160,7 +160,7 @@ async def list_questions(
             "options": q.options,
             "correct_answer": q.correct_answer,
             "explanation": q.explanation,
-            "difficulty": q.difficulty if q.difficulty is not None else 0.5,
+            "difficulty": q.difficulty,
             "category": q.category,
             "order": q.order if q.order is not None else 0,
             "total_attempts": q.total_attempts if q.total_attempts is not None else 0,
@@ -374,12 +374,16 @@ async def bulk_upload_questions(
                 options = [opt.strip() for opt in options_str.split(',')] if options_str else None
 
                 # difficultyの処理
-                try:
-                    difficulty = float(row.get('difficulty', '0.5'))
-                    if not (0 <= difficulty <= 1):
-                        difficulty = 0.5
-                except (ValueError, TypeError):
-                    difficulty = 0.5
+                difficulty_str = row.get('difficulty', '').strip()
+                if difficulty_str:
+                    try:
+                        difficulty = float(difficulty_str)
+                        if not (0 <= difficulty <= 1):
+                            difficulty = None
+                    except (ValueError, TypeError):
+                        difficulty = None
+                else:
+                    difficulty = None
 
                 # 問題を作成
                 new_question = Question(

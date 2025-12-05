@@ -10,17 +10,22 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/contexts/AuthContext';
+import { useLanguage } from '../../src/contexts/LanguageContext';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
+  const { t, language, setLanguage } = useLanguage();
   const router = useRouter();
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert(
+        t('Error', 'エラー'),
+        t('Please fill in all fields', 'すべてのフィールドを入力してください')
+      );
       return;
     }
 
@@ -30,8 +35,8 @@ export default function LoginScreen() {
       router.replace('/');
     } catch (error: any) {
       Alert.alert(
-        'Login Failed',
-        error.response?.data?.detail || 'Invalid email or password'
+        t('Login Failed', 'ログイン失敗'),
+        error.response?.data?.detail || t('Invalid email or password', 'メールアドレスまたはパスワードが無効です')
       );
     } finally {
       setIsLoading(false);
@@ -45,12 +50,13 @@ export default function LoginScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.formContainer}>
-        <Text style={styles.title}>Welcome Back</Text>
-        <Text style={styles.subtitle}>Sign in to continue</Text>
+        <Text style={styles.title}>{t('Welcome Back', 'おかえりなさい')}</Text>
+        <Text style={styles.subtitle}>{t('Sign in to continue', 'ログインして続ける')}</Text>
 
         <TextInput
           style={styles.input}
-          placeholder="Email"
+          placeholder={t('Email', 'メールアドレス')}
+          placeholderTextColor="#999"
           value={email}
           onChangeText={setEmail}
           keyboardType="email-address"
@@ -60,7 +66,8 @@ export default function LoginScreen() {
 
         <TextInput
           style={styles.input}
-          placeholder="Password"
+          placeholder={t('Password', 'パスワード')}
+          placeholderTextColor="#999"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
@@ -75,14 +82,14 @@ export default function LoginScreen() {
           {isLoading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>Sign In</Text>
+            <Text style={styles.buttonText}>{t('Sign In', 'ログイン')}</Text>
           )}
         </TouchableOpacity>
 
         <View style={styles.registerContainer}>
-          <Text style={styles.registerText}>Don't have an account? </Text>
+          <Text style={styles.registerText}>{t("Don't have an account? ", 'アカウントをお持ちでない方 ')}</Text>
           <TouchableOpacity onPress={navigateToRegister} disabled={isLoading}>
-            <Text style={styles.registerLink}>Sign Up</Text>
+            <Text style={styles.registerLink}>{t('Sign Up', '新規登録')}</Text>
           </TouchableOpacity>
         </View>
       </View>

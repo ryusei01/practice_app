@@ -74,6 +74,18 @@ export interface MigrationResult {
   };
 }
 
+export interface EvaluateTextAnswerRequest {
+  question_id: string;
+  user_answer: string;
+}
+
+export interface EvaluationResult {
+  is_correct: boolean;
+  confidence: number;
+  feedback: string;
+  exact_match: boolean;
+}
+
 export const answersApi = {
   submitAnswer: async (data: SubmitAnswerRequest): Promise<Answer> => {
     const response = await apiClient.post('/answers/submit', data);
@@ -94,6 +106,11 @@ export const answersApi = {
 
   migrateLocalData: async (data: MigrateLocalDataRequest): Promise<MigrationResult> => {
     const response = await apiClient.post('/answers/migrate-local-data', data);
+    return response.data;
+  },
+
+  evaluateTextAnswer: async (data: EvaluateTextAnswerRequest): Promise<EvaluationResult> => {
+    const response = await apiClient.post('/answers/evaluate-text', data);
     return response.data;
   },
 };
