@@ -176,6 +176,15 @@ export default function Home() {
             </Text>
           </View>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.menuButton, styles.settingsButton]}
+          onPress={() => router.push("/(app)/settings")}
+        >
+          <Text style={styles.menuButtonText}>
+            {t("Security Settings", "セキュリティ設定")}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <TouchableOpacity
@@ -276,6 +285,9 @@ const styles = StyleSheet.create({
   },
   sellerButton: {
     backgroundColor: "#34C759",
+  },
+  settingsButton: {
+    backgroundColor: "#FF9500",
   },
   button: {
     backgroundColor: "#007AFF",
