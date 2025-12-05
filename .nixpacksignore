@@ -1,0 +1,7 @@
+frontend/
+docs/
+*.md
+package.json
+package-lock.json
+.gitignore
+.git/
