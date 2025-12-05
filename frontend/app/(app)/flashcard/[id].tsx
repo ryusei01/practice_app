@@ -43,8 +43,10 @@ export default function FlashcardScreen() {
 
   useEffect(() => {
     // 問題が変わったら音声を停止
-    Speech.stop();
-    setIsSpeaking(false);
+    if (Speech) {
+      Speech.stop();
+      setIsSpeaking(false);
+    }
 
     // 自動再生がONで、問題が読み込まれていたら読み上げ
     if (autoPlay && questions.length > 0 && !showAnswer) {
@@ -61,7 +63,7 @@ export default function FlashcardScreen() {
 
   // 問題文を読み上げる関数
   const speakQuestion = () => {
-    if (questions.length === 0) return;
+    if (!Speech || questions.length === 0) return;
 
     const currentQuestion = questions[currentIndex];
     const language = detectLanguage(currentQuestion.question_text);
@@ -78,7 +80,7 @@ export default function FlashcardScreen() {
 
   // 答えを読み上げる関数
   const speakAnswer = () => {
-    if (questions.length === 0) return;
+    if (!Speech || questions.length === 0) return;
 
     const currentQuestion = questions[currentIndex];
     const language = detectLanguage(currentQuestion.correct_answer);
@@ -95,6 +97,7 @@ export default function FlashcardScreen() {
 
   // 音声を停止する関数
   const stopSpeaking = () => {
+    if (!Speech) return;
     Speech.stop();
     setIsSpeaking(false);
   };

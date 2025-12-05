@@ -68,7 +68,7 @@ export default function QuizScreen() {
 
   // 問題文を読み上げる関数
   const speakQuestion = () => {
-    if (questions.length === 0) return;
+    if (!Speech || questions.length === 0) return;
     const currentQuestion = questions[currentQuestionIndex];
     const questionLanguage = detectLanguage(currentQuestion.question_text);
 
@@ -84,6 +84,7 @@ export default function QuizScreen() {
 
   // 音声を停止する関数
   const stopSpeaking = () => {
+    if (!Speech) return;
     Speech.stop();
     setIsSpeaking(false);
   };
@@ -102,8 +103,10 @@ export default function QuizScreen() {
 
   // 問題が変わったら音声を停止し、自動再生がONなら読み上げ
   useEffect(() => {
-    Speech.stop();
-    setIsSpeaking(false);
+    if (Speech) {
+      Speech.stop();
+      setIsSpeaking(false);
+    }
 
     if (autoPlay && questions.length > 0 && !showResult) {
       // 少し遅延させて読み上げ
