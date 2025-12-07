@@ -4,10 +4,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "../src/contexts/AuthContext";
 import { useLanguage } from "../src/contexts/LanguageContext";
+import Header from "../src/components/Header";
 
 export default function Home() {
   const { user, isLoading, isAuthenticated, logout } = useAuth();
@@ -24,171 +26,197 @@ export default function Home() {
 
   if (!isAuthenticated) {
     return (
-      <View style={styles.container}>
-        {/* Language Switcher */}
-        <View style={styles.languageSwitcher}>
-          <TouchableOpacity
-            style={[
-              styles.langButton,
-              language === "en" && styles.langButtonActive,
-            ]}
-            onPress={() => setLanguage("en")}
-          >
-            <Text
-              style={[
-                styles.langButtonText,
-                language === "en" && styles.langButtonTextActive,
-              ]}
-            >
-              EN
+      <View style={styles.wrapper}>
+        <Header />
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.container}>
+            {/* Language Switcher */}
+            <View style={styles.languageSwitcher}>
+              <TouchableOpacity
+                style={[
+                  styles.langButton,
+                  language === "en" && styles.langButtonActive,
+                ]}
+                onPress={() => setLanguage("en")}
+              >
+                <Text
+                  style={[
+                    styles.langButtonText,
+                    language === "en" && styles.langButtonTextActive,
+                  ]}
+                >
+                  EN
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.langButton,
+                  language === "ja" && styles.langButtonActive,
+                ]}
+                onPress={() => setLanguage("ja")}
+              >
+                <Text
+                  style={[
+                    styles.langButtonText,
+                    language === "ja" && styles.langButtonTextActive,
+                  ]}
+                >
+                  日本語
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.title}>
+              {t("Quiz Marketplace", "クイズマーケットプレイス")}
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.langButton,
-              language === "ja" && styles.langButtonActive,
-            ]}
-            onPress={() => setLanguage("ja")}
-          >
-            <Text
-              style={[
-                styles.langButtonText,
-                language === "ja" && styles.langButtonTextActive,
-              ]}
-            >
-              日本語
+            <Text style={styles.subtitle}>
+              {t("AI-Powered Learning Platform", "AI搭載学習プラットフォーム")}
             </Text>
-          </TouchableOpacity>
-        </View>
 
-        <Text style={styles.title}>
-          {t("Quiz Marketplace", "クイズマーケットプレイス")}
-        </Text>
-        <Text style={styles.subtitle}>
-          {t("AI-Powered Learning Platform", "AI搭載学習プラットフォーム")}
-        </Text>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => router.push("/(auth)/login")}
+            >
+              <Text style={styles.buttonText}>{t("Sign In", "ログイン")}</Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => router.push("/(auth)/login")}
-        >
-          <Text style={styles.buttonText}>{t("Sign In", "ログイン")}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.button, styles.buttonOutline]}
-          onPress={() => router.push("/(auth)/register")}
-        >
-          <Text style={[styles.buttonText, styles.buttonOutlineText]}>
-            {t("Sign Up", "新規登録")}
-          </Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, styles.buttonOutline]}
+              onPress={() => router.push("/(auth)/register")}
+            >
+              <Text style={[styles.buttonText, styles.buttonOutlineText]}>
+                {t("Sign Up", "新規登録")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Language Switcher */}
-      <View style={styles.languageSwitcher}>
-        <TouchableOpacity
-          style={[
-            styles.langButton,
-            language === "en" && styles.langButtonActive,
-          ]}
-          onPress={() => setLanguage("en")}
-        >
-          <Text
-            style={[
-              styles.langButtonText,
-              language === "en" && styles.langButtonTextActive,
-            ]}
-          >
-            EN
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.langButton,
-            language === "ja" && styles.langButtonActive,
-          ]}
-          onPress={() => setLanguage("ja")}
-        >
-          <Text
-            style={[
-              styles.langButtonText,
-              language === "ja" && styles.langButtonTextActive,
-            ]}
-          >
-            日本語
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={styles.title}>
-        {t("Welcome", "ようこそ")}, {user?.full_name}!
-      </Text>
-      <Text style={styles.email}>{user?.email}</Text>
-
-      <View style={styles.menuContainer}>
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={() => router.push("/(app)/ai-dashboard")}
-        >
-          <Text style={styles.menuButtonText}>
-            {t("AI Dashboard", "AIダッシュボード")}
-          </Text>
-          <View style={styles.overlay}>
-            <Text style={styles.overlayText}>
-              {t("Under Preparation", "準備中")}
-            </Text>
+    <View style={styles.wrapper}>
+      <Header />
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.container}>
+          {/* Language Switcher */}
+          <View style={styles.languageSwitcher}>
+            <TouchableOpacity
+              style={[
+                styles.langButton,
+                language === "en" && styles.langButtonActive,
+              ]}
+              onPress={() => setLanguage("en")}
+            >
+              <Text
+                style={[
+                  styles.langButtonText,
+                  language === "en" && styles.langButtonTextActive,
+                ]}
+              >
+                EN
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.langButton,
+                language === "ja" && styles.langButtonActive,
+              ]}
+              onPress={() => setLanguage("ja")}
+            >
+              <Text
+                style={[
+                  styles.langButtonText,
+                  language === "ja" && styles.langButtonTextActive,
+                ]}
+              >
+                日本語
+              </Text>
+            </TouchableOpacity>
           </View>
-        </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={() => router.push("/(app)/question-sets")}
-        >
-          <Text style={styles.menuButtonText}>
-            {t("My Question Sets", "マイ問題集")}
+          <Text style={styles.title}>
+            {t("Welcome", "ようこそ")}, {user?.full_name}!
           </Text>
-        </TouchableOpacity>
+          <Text style={styles.email}>{user?.email}</Text>
 
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={() => router.push("/(app)/question-sets/create")}
-        >
-          <Text style={styles.menuButtonText}>
-            {t("Create Question Set", "問題集を作成")}
-          </Text>
-        </TouchableOpacity>
+          <View style={styles.menuContainer}>
+            <TouchableOpacity
+              style={styles.menuButton}
+              onPress={() => router.push("/(app)/ai-dashboard")}
+            >
+              <Text style={styles.menuButtonText}>
+                {t("AI Dashboard", "AIダッシュボード")}
+              </Text>
+              <View style={styles.overlay}>
+                <Text style={styles.overlayText}>
+                  {t("Under Preparation", "準備中")}
+                </Text>
+              </View>
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.menuButton, styles.sellerButton]}
-          onPress={() => router.push("/(app)/seller-dashboard")}
-        >
-          <Text style={styles.menuButtonText}>
-            {t("Seller Dashboard", "販売者ダッシュボード")}
-          </Text>
-          <View style={styles.overlay}>
-            <Text style={styles.overlayText}>
-              {t("Under Preparation", "準備中")}
-            </Text>
+            <TouchableOpacity
+              style={styles.menuButton}
+              onPress={() => router.push("/(app)/question-sets")}
+            >
+              <Text style={styles.menuButtonText}>
+                {t("My Question Sets", "マイ問題集")}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuButton}
+              onPress={() => router.push("/(app)/question-sets/create")}
+            >
+              <Text style={styles.menuButtonText}>
+                {t("Create Question Set", "問題集を作成")}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.menuButton, styles.sellerButton]}
+              onPress={() => router.push("/(app)/seller-dashboard")}
+            >
+              <Text style={styles.menuButtonText}>
+                {t("Seller Dashboard", "販売者ダッシュボード")}
+              </Text>
+              <View style={styles.overlay}>
+                <Text style={styles.overlayText}>
+                  {t("Under Preparation", "準備中")}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.menuButton, styles.settingsButton]}
+              onPress={() => router.push("/(app)/settings")}
+            >
+              <Text style={styles.menuButtonText}>
+                {t("Security Settings", "セキュリティ設定")}
+              </Text>
+            </TouchableOpacity>
           </View>
-        </TouchableOpacity>
-      </View>
 
-      <TouchableOpacity
-        style={[styles.button, styles.logoutButton]}
-        onPress={logout}
-      >
-        <Text style={styles.buttonText}>{t("Logout", "ログアウト")}</Text>
-      </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.button, styles.logoutButton]}
+            onPress={logout}
+          >
+            <Text style={styles.buttonText}>{t("Logout", "ログアウト")}</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
   container: {
     flex: 1,
     justifyContent: "center",
@@ -276,6 +304,9 @@ const styles = StyleSheet.create({
   },
   sellerButton: {
     backgroundColor: "#34C759",
+  },
+  settingsButton: {
+    backgroundColor: "#FF9500",
   },
   button: {
     backgroundColor: "#007AFF",

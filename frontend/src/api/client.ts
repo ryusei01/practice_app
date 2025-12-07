@@ -1,7 +1,12 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 
-const API_URL = "http://127.0.0.1:8003/api/v1";
+// 環境変数からAPI URLを取得（デフォルトは開発環境用）
+const API_URL =
+  Constants.expoConfig?.extra?.apiUrl ||
+  process.env.EXPO_PUBLIC_API_URL ||
+  "http://127.0.0.1:8003/api/v1";
 
 const apiClient = axios.create({
   baseURL: API_URL,

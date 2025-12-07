@@ -18,6 +18,8 @@ export default function RootLayout() {
           <Stack.Screen name="(app)/quiz/[id]" options={{ title: 'Quiz' }} />
           <Stack.Screen name="(app)/ai-dashboard" options={{ title: 'AI Dashboard' }} />
           <Stack.Screen name="(app)/seller-dashboard" options={{ title: 'Seller Dashboard' }} />
+          <Stack.Screen name="(app)/settings" options={{ title: 'Security Settings' }} />
+          <Stack.Screen name="(app)/verify-otp" options={{ title: 'Verify OTP' }} />
         </Stack>
       </AuthProvider>
     </LanguageProvider>

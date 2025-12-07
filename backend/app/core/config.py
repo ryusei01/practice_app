@@ -27,6 +27,16 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: Optional[str] = None
     PLATFORM_FEE_PERCENT: int = 20
 
+    # Email / SMTP
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM_EMAIL: str = "noreply@example.com"
+
+    # CORS
+    CORS_ORIGINS: str = "*"  # カンマ区切りで複数ドメイン指定可能
+
     class Config:
         env_file = ".env"
         case_sensitive = True

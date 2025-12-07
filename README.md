@@ -106,15 +106,42 @@ cd backend
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+cp .env.example .env
+# .env を編集して環境変数を設定
+uvicorn app.main:app --reload --port 8003
 ```
 
 ### フロントエンド
 ```bash
 cd frontend
-npm install
+npm install --legacy-peer-deps
+cp .env.example .env
+# .env を編集してAPI URLを設定
 npx expo start
 ```
+
+## デプロイ
+
+### Cloudflare Pages（フロントエンド）- 手動デプロイ
+
+```bash
+# Windows
+deploy-cloudflare.bat
+
+# Mac/Linux
+chmod +x deploy-cloudflare.sh
+./deploy-cloudflare.sh
+```
+
+その後、https://dash.cloudflare.com/ で `frontend/dist` をアップロード
+
+詳細は [DEPLOYMENT.md](DEPLOYMENT.md) を参照
+
+### Railway（バックエンド）
+
+1. https://railway.app/ でGitHub連携
+2. 環境変数を設定（`.env.example` 参照）
+3. 自動デプロイ
 
 ## 開発フェーズ
 

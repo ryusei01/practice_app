@@ -143,3 +143,49 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="非アクティブなユーザーです")
     return current_user
+
+
+async def get_current_admin_user(current_user: User = Depends(get_current_active_user)) -> User:
+    """
+    現在のユーザーが管理者権限を持つか確認
+
+    Args:
+        current_user: 現在のユーザー
+
+    Returns:
+        User オブジェクト
+
+    Raises:
+        HTTPException: ユーザーが管理者権限を持たない場合
+    """
+    from ..models.user import UserRole
+
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="管理者権限が必要です"
+        )
+    return current_user
+
+
+async def get_current_super_admin_user(current_user: User = Depends(get_current_active_user)) -> User:
+    """
+    現在のユーザーが最高管理者権限を持つか確認
+
+    Args:
+        current_user: 現在のユーザー
+
+    Returns:
+        User オブジェクト
+
+    Raises:
+        HTTPException: ユーザーが最高管理者権限を持たない場合
+    """
+    from ..models.user import UserRole
+
+    if current_user.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="最高管理者権限が必要です"
+        )
+    return current_user
