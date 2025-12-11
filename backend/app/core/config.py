@@ -9,21 +9,21 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
 
     # Supabase
-    SUPABASE_URL: str
-    SUPABASE_KEY: str
-    SUPABASE_SERVICE_KEY: str
+    SUPABASE_URL: str = "https://placeholder.supabase.co"
+    SUPABASE_KEY: str = "placeholder_key"
+    SUPABASE_SERVICE_KEY: str = "placeholder_service_key"
 
     # Database
-    DATABASE_URL: str
+    DATABASE_URL: str = "postgresql://user:password@localhost:5432/dbname"
 
     # JWT
-    SECRET_KEY: str
+    SECRET_KEY: str = "changeme-insecure-default-key-for-development-only"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # Stripe
-    STRIPE_SECRET_KEY: str
-    STRIPE_PUBLISHABLE_KEY: str
+    STRIPE_SECRET_KEY: str = "sk_test_placeholder"
+    STRIPE_PUBLISHABLE_KEY: str = "pk_test_placeholder"
     STRIPE_WEBHOOK_SECRET: Optional[str] = None
     PLATFORM_FEE_PERCENT: int = 20
 

@@ -173,9 +173,15 @@ async def get_my_question_sets(
     Returns:
         自分が作成した問題集のリスト
     """
-    question_sets = db.query(QuestionSet).filter(
-        QuestionSet.creator_id == current_user.id
-    ).all()
+    print(f"[QuestionSets] get_my_question_sets called by user: {current_user.id}")
+    try:
+        question_sets = db.query(QuestionSet).filter(
+            QuestionSet.creator_id == current_user.id
+        ).all()
+        print(f"[QuestionSets] Found {len(question_sets)} question sets")
+    except Exception as e:
+        print(f"[QuestionSets] Database query failed: {e}")
+        raise
 
     # NULL値を安全に処理
     result = []
@@ -209,20 +215,27 @@ async def get_purchased_question_sets(
     Returns:
         購入した問題集のリスト
     """
-    # 購入済みの問題集IDを取得
-    purchases = db.query(Purchase).filter(
-        Purchase.buyer_id == current_user.id
-    ).all()
+    print(f"[QuestionSets] get_purchased_question_sets called by user: {current_user.id}")
+    try:
+        # 購入済みの問題集IDを取得
+        purchases = db.query(Purchase).filter(
+            Purchase.buyer_id == current_user.id
+        ).all()
+        print(f"[QuestionSets] Found {len(purchases)} purchases")
 
-    purchased_ids = [p.question_set_id for p in purchases]
+        purchased_ids = [p.question_set_id for p in purchases]
 
-    if not purchased_ids:
-        return []
+        if not purchased_ids:
+            return []
 
-    # 問題集を取得
-    question_sets = db.query(QuestionSet).filter(
-        QuestionSet.id.in_(purchased_ids)
-    ).all()
+        # 問題集を取得
+        question_sets = db.query(QuestionSet).filter(
+            QuestionSet.id.in_(purchased_ids)
+        ).all()
+        print(f"[QuestionSets] Found {len(question_sets)} purchased question sets")
+    except Exception as e:
+        print(f"[QuestionSets] Database query failed: {e}")
+        raise
 
     result = []
     for qs in question_sets:

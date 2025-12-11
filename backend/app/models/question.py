@@ -49,6 +49,8 @@ class Question(Base):
     # メタデータ
     difficulty = Column(Float, default=0.5)  # 0.0(易) - 1.0(難)
     category = Column(String, index=True)
+    subcategory1 = Column(String, index=True)  # 第1レベルサブカテゴリ（グループ分け用）
+    subcategory2 = Column(String, index=True)  # 第2レベルサブカテゴリ（細分化用）
     order = Column(Integer, default=0)  # 問題集内での順序
 
     # 統計情報（全ユーザーの回答から算出）

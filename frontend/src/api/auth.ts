@@ -26,9 +26,23 @@ export interface AuthResponse {
   };
 }
 
+export interface RegisterPendingResponse {
+  user_id: string;
+  email: string;
+  message: string;
+}
+
 export const authApi = {
-  register: async (data: RegisterData): Promise<AuthResponse> => {
+  register: async (data: RegisterData): Promise<RegisterPendingResponse> => {
     const response = await apiClient.post('/auth/register', data);
+    return response.data;
+  },
+
+  verifyOTP: async (userId: string, otpCode: string): Promise<AuthResponse> => {
+    const response = await apiClient.post('/auth/verify-otp', {
+      user_id: userId,
+      otp_code: otpCode,
+    });
     if (response.data.access_token) {
       await AsyncStorage.setItem('access_token', response.data.access_token);
     }

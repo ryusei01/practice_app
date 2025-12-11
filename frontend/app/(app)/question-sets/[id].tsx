@@ -9,6 +9,7 @@ import {
   Alert,
   RefreshControl,
   Platform,
+  TextInput,
 } from "react-native";
 import * as FileSystem from "expo-file-system";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -28,6 +29,12 @@ export default function QuestionSetDetailScreen() {
   const [setupMode, setSetupMode] = useState(mode === "setup");
   const [setupStep, setSetupStep] = useState(1);
   const router = useRouter();
+
+  // 問題選択モーダル用のstate
+  const [selectionModalVisible, setSelectionModalVisible] = useState(false);
+  const [selectionMode, setSelectionMode] = useState<"all" | "ai" | "range">("all");
+  const [questionCount, setQuestionCount] = useState(10);
+  const [rangeStart, setRangeStart] = useState(0);
 
   // モーダル用のstate
   const [modalVisible, setModalVisible] = useState(false);
@@ -104,7 +111,45 @@ export default function QuestionSetDetailScreen() {
       );
       return;
     }
-    router.push(`/(app)/quiz/${id}`);
+    setSelectionModalVisible(true);
+  };
+
+  const handleStartQuizWithSelection = async () => {
+    try {
+      setSelectionModalVisible(false);
+      setIsLoading(true);
+
+      let selectedQuestions: Question[];
+
+      if (selectionMode === "all") {
+        selectedQuestions = questions;
+      } else if (selectionMode === "ai") {
+        selectedQuestions = await questionsApi.selectQuestionsByAI(id, questionCount);
+      } else {
+        selectedQuestions = await questionsApi.selectQuestionsByRange(id, rangeStart, questionCount);
+      }
+
+      if (selectedQuestions.length === 0) {
+        Alert.alert(
+          t("common.error"),
+          t("No questions match your selection", "選択条件に一致する問題がありません")
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // 選択した問題IDをクエリパラメータで渡す
+      const questionIds = selectedQuestions.map(q => q.id).join(',');
+      router.push(`/(app)/quiz/${id}?questionIds=${questionIds}`);
+    } catch (error) {
+      console.error("Failed to select questions:", error);
+      Alert.alert(
+        t("common.error"),
+        t("Failed to select questions", "問題の選択に失敗しました")
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleStartFlashcard = () => {
@@ -182,12 +227,14 @@ ${t("csv.optionalFields")}:
 • ${t("csv.explanation")}
 • ${t("csv.difficulty")}
 • ${t("csv.category")}
+• subcategory1 (${t("csv.subcategory1")})
+• subcategory2 (${t("csv.subcategory2")})
 
 ${t("csv.exampleCSV")}:
-question_text,question_type,options,correct_answer,explanation,difficulty,category
-"What is 2+2?",multiple_choice,"2,3,4,5",4,"Basic addition",0.2,math
-"The sky is blue",true_false,,true,"Common knowledge",0.1,general
-"Capital of France?",text_input,,Paris,"Paris is the capital",0.3,geography
+question_text,question_type,options,correct_answer,explanation,difficulty,category,subcategory1,subcategory2
+"What is 2+2?",multiple_choice,"2,3,4,5",4,"Basic addition",0.2,math,arithmetic,addition
+"The sky is blue",true_false,,true,"Common knowledge",0.1,general,nature,sky
+"Capital of France?",text_input,,Paris,"Paris is the capital",0.3,geography,europe,capitals
 
 ${t("csv.importantNotes")}:
 • ${t("csv.note1")}
@@ -345,11 +392,11 @@ ${t("csv.importantNotes")}:
   const downloadCSVSample = () => {
     console.log("downloadCSVSample called");
 
-    const csvSample = `question_text,question_type,options,correct_answer,explanation,difficulty,category
-What is 2 + 2?,text_input,,4,2+2 is 4 this is basic,0.1,addition
-Is the sky blue?,true_false,,true, the sky appears blue due to Rayleigh scattering,0.1,general
-What is the capital of Japan?,multiple_choice,"Tokyo,Berlin,Paris",Tokyo,Japan's capital is Tokyo,0.3,Geography
-What is the largest planet in our solar system?,,,Jupiter,,`;
+    const csvSample = `question_text,question_type,options,correct_answer,explanation,difficulty,category,subcategory1,subcategory2
+What is 2 + 2?,multiple_choice,"2,3,4,5",4,Basic addition,0.1,math,arithmetic,addition
+Is the sky blue?,true_false,,true,The sky appears blue due to Rayleigh scattering,0.1,science,physics,light
+What is the capital of Japan?,text_input,,Tokyo,Japan's capital is Tokyo,0.3,geography,asia,capitals
+What is the largest planet in our solar system?,text_input,,Jupiter,Jupiter is the largest planet,0.4,science,astronomy,planets`;
 
     const title = t("CSV Sample Format", "CSVサンプル形式");
     const message = `CSV format:
@@ -584,6 +631,153 @@ question_text,correct_answer,category,difficulty`;
         buttons={modalConfig.buttons}
         onClose={() => setModalVisible(false)}
       />
+
+      <Modal
+        visible={selectionModalVisible}
+        title={t("Select Questions", "問題選択")}
+        onClose={() => setSelectionModalVisible(false)}
+      >
+        <View style={styles.selectionModalContent}>
+          <Text style={styles.selectionLabel}>
+            {t("Selection Mode", "選択モード")}
+          </Text>
+
+          <TouchableOpacity
+            style={[
+              styles.selectionOption,
+              selectionMode === "all" && styles.selectionOptionActive,
+            ]}
+            onPress={() => setSelectionMode("all")}
+          >
+            <View style={styles.selectionOptionHeader}>
+              <Text
+                style={[
+                  styles.selectionOptionTitle,
+                  selectionMode === "all" && styles.selectionOptionTitleActive,
+                ]}
+              >
+                {t("All Questions", "全ての問題")}
+              </Text>
+            </View>
+            <Text style={styles.selectionOptionDesc}>
+              {t(
+                "Practice all questions in order",
+                "全ての問題を順番通りに解く"
+              )}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.selectionOption,
+              selectionMode === "ai" && styles.selectionOptionActive,
+            ]}
+            onPress={() => setSelectionMode("ai")}
+          >
+            <View style={styles.selectionOptionHeader}>
+              <Text
+                style={[
+                  styles.selectionOptionTitle,
+                  selectionMode === "ai" && styles.selectionOptionTitleActive,
+                ]}
+              >
+                🤖 {t("AI Selection", "AI選出")}
+              </Text>
+            </View>
+            <Text style={styles.selectionOptionDesc}>
+              {t(
+                "AI selects questions based on your performance",
+                "AIが苦手な問題を優先的に選出"
+              )}
+            </Text>
+            {selectionMode === "ai" && (
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>
+                  {t("Number of questions", "問題数")}:
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  value={questionCount.toString()}
+                  onChangeText={(text) => {
+                    const num = parseInt(text) || 1;
+                    setQuestionCount(Math.min(Math.max(num, 1), questions.length));
+                  }}
+                  keyboardType="numeric"
+                  placeholder="10"
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.selectionOption,
+              selectionMode === "range" && styles.selectionOptionActive,
+            ]}
+            onPress={() => setSelectionMode("range")}
+          >
+            <View style={styles.selectionOptionHeader}>
+              <Text
+                style={[
+                  styles.selectionOptionTitle,
+                  selectionMode === "range" && styles.selectionOptionTitleActive,
+                ]}
+              >
+                📊 {t("Range Selection", "範囲選出")}
+              </Text>
+            </View>
+            <Text style={styles.selectionOptionDesc}>
+              {t(
+                "Select questions from a specific range",
+                "指定した範囲の問題を選出"
+              )}
+            </Text>
+            {selectionMode === "range" && (
+              <View style={styles.inputContainer}>
+                <View style={styles.inputRow}>
+                  <Text style={styles.inputLabel}>
+                    {t("Start from question", "開始問題番号")}:
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    value={rangeStart.toString()}
+                    onChangeText={(text) => {
+                      const num = parseInt(text) || 0;
+                      setRangeStart(Math.min(Math.max(num, 0), questions.length - 1));
+                    }}
+                    keyboardType="numeric"
+                    placeholder="0"
+                  />
+                </View>
+                <View style={styles.inputRow}>
+                  <Text style={styles.inputLabel}>
+                    {t("Number of questions", "問題数")}:
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    value={questionCount.toString()}
+                    onChangeText={(text) => {
+                      const num = parseInt(text) || 1;
+                      setQuestionCount(Math.min(Math.max(num, 1), questions.length - rangeStart));
+                    }}
+                    keyboardType="numeric"
+                    placeholder="10"
+                  />
+                </View>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.startButton}
+            onPress={handleStartQuizWithSelection}
+          >
+            <Text style={styles.startButtonText}>
+              {t("Start Quiz", "クイズ開始")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -904,6 +1098,81 @@ const styles = StyleSheet.create({
   editButtonText: {
     color: "#fff",
     fontSize: 15,
+    fontWeight: "600",
+  },
+  selectionModalContent: {
+    paddingVertical: 16,
+  },
+  selectionLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 12,
+  },
+  selectionOption: {
+    backgroundColor: "#f8f8f8",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  selectionOptionActive: {
+    backgroundColor: "#E3F2FD",
+    borderColor: "#007AFF",
+  },
+  selectionOptionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  selectionOptionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+  },
+  selectionOptionTitleActive: {
+    color: "#007AFF",
+  },
+  selectionOptionDesc: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 8,
+  },
+  inputContainer: {
+    marginTop: 12,
+    gap: 8,
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  inputLabel: {
+    fontSize: 14,
+    color: "#333",
+    flex: 1,
+  },
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 16,
+    backgroundColor: "#fff",
+  },
+  startButton: {
+    backgroundColor: "#34C759",
+    borderRadius: 8,
+    padding: 16,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  startButtonText: {
+    color: "#fff",
+    fontSize: 16,
     fontWeight: "600",
   },
 });

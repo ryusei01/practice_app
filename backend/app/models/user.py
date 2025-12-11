@@ -21,7 +21,7 @@ class User(Base):
     username = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
-    role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)  # ユーザーロール
+    role = Column(Enum(UserRole, name="user_role", create_constraint=False, native_enum=False, values_callable=lambda x: [e.value for e in x]), default=UserRole.USER.value, nullable=False)  # ユーザーロール
     is_seller = Column(Boolean, default=False)  # 後方互換性のため残す
     is_premium = Column(Boolean, default=False)  # 課金ユーザーフラグ
     premium_expires_at = Column(DateTime, nullable=True)  # サブスク期限

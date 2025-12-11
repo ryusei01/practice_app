@@ -36,14 +36,34 @@ export default function QuestionSetsScreen() {
 
   const loadQuestionSets = async () => {
     try {
+      console.log('[QuestionSets] Loading question sets...');
+      console.log('[QuestionSets] User:', user?.id);
+
       const [myData, purchasedData] = await Promise.all([
         questionSetsApi.getMy(),
         questionSetsApi.getPurchased(),
       ]);
+
+      console.log('[QuestionSets] My sets:', myData?.length || 0);
+      console.log('[QuestionSets] Purchased sets:', purchasedData?.length || 0);
+
       setMyQuestionSets(myData);
       setPurchasedQuestionSets(purchasedData);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to load question sets:", error);
+      console.error("Error response:", error.response?.data);
+      console.error("Error status:", error.response?.status);
+
+      // 403エラーの場合、ユーザーに分かりやすいメッセージを表示
+      if (error.response?.status === 403) {
+        Alert.alert(
+          t("Permission Denied", "アクセス拒否"),
+          t(
+            "You don't have permission to access this resource. Please try logging in again.",
+            "このリソースへのアクセス権限がありません。再度ログインしてください。"
+          )
+        );
+      }
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);

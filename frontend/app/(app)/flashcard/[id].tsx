@@ -13,8 +13,12 @@ import {
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useTranslation } from "react-i18next";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { questionSetsApi, QuestionSet } from "../../../src/api/questionSets";
 import { questionsApi, Question } from "../../../src/api/questions";
+import { answersApi } from "../../../src/api/answers";
+import { useAuth } from "../../../src/contexts/AuthContext";
+import { localStorageService, LocalQuestionSet } from "../../../src/services/localStorageService";
 
 // expo-speechはモバイルのみ対応なので条件付きインポート
 let Speech: any = null;
@@ -24,18 +28,38 @@ if (Platform.OS !== "web") {
 
 const { width } = Dimensions.get("window");
 
+// お試し版と通常版の問題データの共通型
+interface UnifiedQuestion {
+  id: string;
+  question_text: string;
+  correct_answer: string;
+  options?: string[];
+  explanation?: string;
+  difficulty?: number | string;
+}
+
 export default function FlashcardScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useTranslation();
   const router = useRouter();
-  const [questionSet, setQuestionSet] = useState<QuestionSet | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
+  const [questionSet, setQuestionSet] = useState<QuestionSet | LocalQuestionSet | null>(null);
+  const [questions, setQuestions] = useState<UnifiedQuestion[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [pan] = useState(new Animated.ValueXY());
   const [autoPlay, setAutoPlay] = useState(true);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [redSheetEnabled, setRedSheetEnabled] = useState(false);
+  const [revealedCards, setRevealedCards] = useState<Set<number>>(new Set());
+  const [startTime, setStartTime] = useState<Date | null>(null);
+  const [answers, setAnswers] = useState<Array<{
+    question_id: string;
+    is_correct: boolean;
+    answer_time_sec: number;
+  }>>([]);
+  const { user } = useAuth();
+  const [isTrial, setIsTrial] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -143,14 +167,66 @@ export default function FlashcardScreen() {
 
   const loadData = async () => {
     try {
-      const [setData, questionsData] = await Promise.all([
-        questionSetsApi.getById(id),
-        questionsApi.getByQuestionSet(id),
-      ]);
-      setQuestionSet(setData);
-      setQuestions(questionsData);
+      console.log('[Flashcard] Loading data for question_set_id:', id);
+
+      // お試し版かどうかを判定（IDがtrial_またはdefault_で始まる）
+      const isTrialMode = id.startsWith('trial_') || id.startsWith('default_');
+      setIsTrial(isTrialMode);
+
+      if (isTrialMode) {
+        // お試し版：ローカルストレージから読み込み
+        console.log('[Flashcard] Loading from local storage (trial mode)');
+        const localSet = await localStorageService.getTrialQuestionSet(id);
+
+        if (!localSet) {
+          console.warn('[Flashcard] Trial question set not found');
+          setIsLoading(false);
+          return;
+        }
+
+        console.log('[Flashcard] Loaded trial question set:', localSet.title);
+        console.log('[Flashcard] Loaded questions:', localSet.questions.length, 'questions');
+
+        setQuestionSet(localSet);
+
+        // ローカル問題を共通型に変換
+        const unifiedQuestions: UnifiedQuestion[] = localSet.questions.map(q => ({
+          id: q.id,
+          question_text: q.question,
+          correct_answer: q.answer,
+          difficulty: q.difficulty,
+        }));
+
+        setQuestions(unifiedQuestions);
+
+        if (unifiedQuestions.length > 0) {
+          setStartTime(new Date());
+        }
+      } else {
+        // 通常版：APIから読み込み
+        console.log('[Flashcard] Loading from API (normal mode)');
+        const [setData, questionsData] = await Promise.all([
+          questionSetsApi.getById(id),
+          questionsApi.getAll({ question_set_id: id }),
+        ]);
+
+        console.log('[Flashcard] Loaded question set:', setData);
+        console.log('[Flashcard] Loaded questions:', questionsData?.length || 0, 'questions');
+
+        if (!questionsData || questionsData.length === 0) {
+          console.warn('[Flashcard] No questions returned from API');
+        }
+
+        setQuestionSet(setData);
+        setQuestions(questionsData || []);
+
+        if (questionsData && questionsData.length > 0) {
+          setStartTime(new Date());
+        }
+      }
     } catch (error) {
       console.error("Failed to load flashcard data:", error);
+      console.error("Error details:", JSON.stringify(error, null, 2));
     } finally {
       setIsLoading(false);
     }
@@ -160,6 +236,7 @@ export default function FlashcardScreen() {
     if (currentIndex < questions.length - 1) {
       setCurrentIndex(currentIndex + 1);
       setShowAnswer(false);
+      setStartTime(new Date());
     }
   };
 
@@ -167,11 +244,84 @@ export default function FlashcardScreen() {
     if (currentIndex > 0) {
       setCurrentIndex(currentIndex - 1);
       setShowAnswer(false);
+      setStartTime(new Date());
     }
   };
 
   const handleToggleAnswer = () => {
+    if (!showAnswer && !startTime) {
+      setStartTime(new Date());
+    }
     setShowAnswer(!showAnswer);
+  };
+
+  const submitAllAnswers = async (finalAnswers: typeof answers) => {
+    try {
+      // ローカルストレージに保存
+      const storageKey = `@flashcard_answers_${id}`;
+      const answerDataArray = finalAnswers.map((ans) => ({
+        question_id: ans.question_id,
+        question_set_id: id,
+        is_correct: ans.is_correct,
+        answer_time_sec: ans.answer_time_sec,
+        answered_at: new Date().toISOString(),
+      }));
+      await AsyncStorage.setItem(storageKey, JSON.stringify(answerDataArray));
+
+      // 通常版でユーザーがログインしている場合はAPIにも送信
+      if (!isTrial && user) {
+        for (const ans of finalAnswers) {
+          const question = questions.find(q => q.id === ans.question_id);
+          if (question) {
+            await answersApi.submitAnswer({
+              user_id: user.id,
+              question_id: ans.question_id,
+              user_answer: question.correct_answer,
+              is_correct: ans.is_correct,
+              answer_time_sec: ans.answer_time_sec,
+            });
+          }
+        }
+      }
+
+      console.log(`All answers submitted: ${finalAnswers.length} answers (trial: ${isTrial})`);
+    } catch (error) {
+      console.error("Failed to submit answers:", error);
+    }
+  };
+
+  const handleRecordAnswer = (isCorrect: boolean) => {
+    if (!startTime) return;
+
+    const answerTimeSec = (new Date().getTime() - startTime.getTime()) / 1000;
+    const currentQuestion = questions[currentIndex];
+
+    // answersに追加（最後にまとめて送信）
+    setAnswers([
+      ...answers,
+      {
+        question_id: currentQuestion.id,
+        is_correct: isCorrect,
+        answer_time_sec: answerTimeSec,
+      },
+    ]);
+
+    console.log(`Answer recorded: ${isCorrect ? 'Correct' : 'Incorrect'}, Time: ${answerTimeSec}s`);
+
+    // 次の問題へ
+    if (currentIndex < questions.length - 1) {
+      handleNext();
+    } else {
+      // 最後の問題なら結果を送信
+      submitAllAnswers([
+        ...answers,
+        {
+          question_id: currentQuestion.id,
+          is_correct: isCorrect,
+          answer_time_sec: answerTimeSec,
+        },
+      ]);
+    }
   };
 
   const handleRestart = () => {
@@ -192,6 +342,15 @@ export default function FlashcardScreen() {
       <View style={styles.centerContainer}>
         <Text style={styles.emptyText}>
           {t("No questions available", "問題がありません")}
+        </Text>
+        <Text style={styles.debugText}>
+          Question Set ID: {id}
+        </Text>
+        <Text style={styles.debugText}>
+          Question Set: {questionSet ? 'Loaded' : 'Not loaded'}
+        </Text>
+        <Text style={styles.debugText}>
+          Questions: {questions.length} items
         </Text>
         <TouchableOpacity
           style={styles.backButton}
@@ -258,7 +417,6 @@ export default function FlashcardScreen() {
         <ScrollView
           style={styles.cardScrollView}
           contentContainerStyle={styles.cardScrollContent}
-          scrollEnabled={!showAnswer}
         >
           <View style={styles.card}>
           <View style={styles.cardHeader}>
@@ -319,9 +477,24 @@ export default function FlashcardScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
-              <Text style={styles.answerText}>
-                {currentQuestion.correct_answer}
-              </Text>
+              {redSheetEnabled && !revealedCards.has(currentIndex) ? (
+                <TouchableOpacity
+                  style={styles.redSheetCover}
+                  onPress={() => {
+                    const newRevealed = new Set(revealedCards);
+                    newRevealed.add(currentIndex);
+                    setRevealedCards(newRevealed);
+                  }}
+                >
+                  <Text style={styles.redSheetText}>
+                    {t("Tap to reveal", "タップして表示")}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <Text style={styles.answerText}>
+                  {currentQuestion.correct_answer}
+                </Text>
+              )}
 
               {currentQuestion.explanation && (
                 <>
@@ -332,6 +505,28 @@ export default function FlashcardScreen() {
                     {currentQuestion.explanation}
                   </Text>
                 </>
+              )}
+
+              {/* Correct/Incorrect buttons - always show when answer is revealed */}
+              {(!redSheetEnabled || revealedCards.has(currentIndex)) && (
+                <View style={styles.resultButtons}>
+                  <TouchableOpacity
+                    style={[styles.resultButton, styles.correctButton]}
+                    onPress={() => handleRecordAnswer(true)}
+                  >
+                    <Text style={styles.resultButtonText}>
+                      ✓ {t("Correct", "正解")}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.resultButton, styles.incorrectButton]}
+                    onPress={() => handleRecordAnswer(false)}
+                  >
+                    <Text style={styles.resultButtonText}>
+                      ✗ {t("Incorrect", "不正解")}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
           ) : (
@@ -484,12 +679,12 @@ const styles = StyleSheet.create({
   },
   cardScrollContent: {
     padding: 16,
+    paddingBottom: 120,
   },
   card: {
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 24,
-    minHeight: 400,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -662,6 +857,12 @@ const styles = StyleSheet.create({
     color: "#666",
     marginBottom: 24,
   },
+  debugText: {
+    fontSize: 14,
+    color: "#999",
+    marginBottom: 8,
+    fontFamily: "monospace",
+  },
   backButton: {
     backgroundColor: "#007AFF",
     borderRadius: 12,
@@ -669,6 +870,42 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  redSheetCover: {
+    backgroundColor: "#FF4444",
+    borderRadius: 8,
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 80,
+    marginVertical: 12,
+  },
+  redSheetText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  resultButtons: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 16,
+  },
+  resultButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  correctButton: {
+    backgroundColor: "#4CAF50",
+  },
+  incorrectButton: {
+    backgroundColor: "#F44336",
+  },
+  resultButtonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",

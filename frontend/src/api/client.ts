@@ -37,8 +37,13 @@ const processQueue = (error: any = null) => {
 apiClient.interceptors.request.use(
   async (config) => {
     const token = await AsyncStorage.getItem("access_token");
+    console.log('[API Client] Request:', config.method?.toUpperCase(), config.url);
+    console.log('[API Client] Token exists:', !!token);
     if (token) {
+      console.log('[API Client] Token (first 20 chars):', token.substring(0, 20));
       config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      console.log('[API Client] No access token found in AsyncStorage');
     }
     return config;
   },

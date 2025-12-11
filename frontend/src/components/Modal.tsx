@@ -1,10 +1,11 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal as RNModal } from 'react-native';
+import React, { ReactNode } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Modal as RNModal, ScrollView } from 'react-native';
 
 interface ModalProps {
   visible: boolean;
   title: string;
-  message: string;
+  message?: string;
+  children?: ReactNode;
   buttons?: Array<{
     text: string;
     onPress?: () => void;
@@ -13,7 +14,7 @@ interface ModalProps {
   onClose?: () => void;
 }
 
-export default function Modal({ visible, title, message, buttons, onClose }: ModalProps) {
+export default function Modal({ visible, title, message, children, buttons, onClose }: ModalProps) {
   const defaultButtons = buttons || [{ text: 'OK', onPress: onClose }];
 
   return (
@@ -35,34 +36,40 @@ export default function Modal({ visible, title, message, buttons, onClose }: Mod
         >
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{title}</Text>
-            <Text style={styles.modalMessage}>{message}</Text>
 
-            <View style={styles.buttonContainer}>
-              {defaultButtons.map((button, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.button,
-                    button.style === 'cancel' && styles.cancelButton,
-                    button.style === 'destructive' && styles.destructiveButton,
-                  ]}
-                  onPress={() => {
-                    button.onPress?.();
-                    onClose?.();
-                  }}
-                >
-                  <Text
+            <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+              {message && <Text style={styles.modalMessage}>{message}</Text>}
+              {children}
+            </ScrollView>
+
+            {!children && (
+              <View style={styles.buttonContainer}>
+                {defaultButtons.map((button, index) => (
+                  <TouchableOpacity
+                    key={index}
                     style={[
-                      styles.buttonText,
-                      button.style === 'cancel' && styles.cancelButtonText,
-                      button.style === 'destructive' && styles.destructiveButtonText,
+                      styles.button,
+                      button.style === 'cancel' && styles.cancelButton,
+                      button.style === 'destructive' && styles.destructiveButton,
                     ]}
+                    onPress={() => {
+                      button.onPress?.();
+                      onClose?.();
+                    }}
                   >
-                    {button.text}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                    <Text
+                      style={[
+                        styles.buttonText,
+                        button.style === 'cancel' && styles.cancelButtonText,
+                        button.style === 'destructive' && styles.destructiveButtonText,
+                      ]}
+                    >
+                      {button.text}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
         </TouchableOpacity>
       </TouchableOpacity>
@@ -104,6 +111,9 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginBottom: 24,
     textAlign: 'center',
+  },
+  scrollView: {
+    maxHeight: 500,
   },
   buttonContainer: {
     flexDirection: 'row',

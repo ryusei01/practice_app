@@ -19,6 +19,8 @@ from ..core.auth import (
     get_current_active_user
 )
 from ..core.config import settings
+from ..core.otp import create_otp_code, verify_otp_code
+from ..core.email import send_otp_email
 from ..models import User
 from ..main import limiter
 
@@ -92,7 +94,18 @@ class TokenResponse(BaseModel):
     user: UserResponse
 
 
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+class RegisterPendingResponse(BaseModel):
+    user_id: str
+    email: str
+    message: str
+
+
+class OTPVerifyRequest(BaseModel):
+    user_id: str
+    otp_code: str
+
+
+@router.post("/register", response_model=RegisterPendingResponse, status_code=status.HTTP_201_CREATED)
 async def register(request: UserRegisterRequest, db: Session = Depends(get_db)):
     """
     新規ユーザー登録
@@ -107,61 +120,66 @@ async def register(request: UserRegisterRequest, db: Session = Depends(get_db)):
     Raises:
         HTTPException: メールアドレスが既に登録されている場合
     """
-    # パスワード強度チェック
-    is_valid, error_message = validate_password_strength(request.password)
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_message
+    try:
+        # パスワード強度チェック
+        is_valid, error_message = validate_password_strength(request.password)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_message
+            )
+
+        # メールアドレスの重複チェック
+        existing_user = db.query(User).filter(User.email == request.email).first()
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="このメールアドレスは既に登録されています"
+            )
+
+        # 新しいユーザーを作成（まだ未認証状態）
+        hashed_password = get_password_hash(request.password)
+        new_user = User(
+            id=str(uuid.uuid4()),
+            email=request.email,
+            username=request.full_name,
+            hashed_password=hashed_password,
+            is_active=False,  # OTP認証まで非アクティブ
+            is_seller=False
         )
 
-    # メールアドレスの重複チェック
-    existing_user = db.query(User).filter(User.email == request.email).first()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="このメールアドレスは既に登録されています"
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+
+        # OTPコードを生成してメール送信
+        otp_code = create_otp_code(db, new_user.id, purpose="registration")
+        await send_otp_email(new_user.email, otp_code, new_user.username)
+
+        return RegisterPendingResponse(
+            user_id=new_user.id,
+            email=new_user.email,
+            message="認証コードをメールで送信しました。10分以内に入力してください。"
         )
-
-    # 新しいユーザーを作成
-    hashed_password = get_password_hash(request.password)
-    new_user = User(
-        id=str(uuid.uuid4()),
-        email=request.email,
-        username=request.full_name,
-        hashed_password=hashed_password,
-        is_active=True,
-        is_seller=False
-    )
-
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-
-    # アクセストークンとリフレッシュトークンを生成
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": new_user.id},
-        expires_delta=access_token_expires
-    )
-    refresh_token = create_refresh_token(data={"sub": new_user.id})
-
-    # リフレッシュトークンをハッシュ化してDBに保存
-    new_user.refresh_token = get_password_hash(refresh_token)
-    db.commit()
-
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        user=UserResponse.from_orm(new_user)
-    )
+    except HTTPException:
+        # HTTPExceptionは再スロー
+        raise
+    except Exception as e:
+        # その他のエラーをキャッチしてログに記録
+        import logging
+        logging.error(f"[Register] Unexpected error: {str(e)}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"登録中にエラーが発生しました: {str(e)}"
+        )
 
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
 async def login(
-    http_request: Request,
-    request: UserLoginRequest,
+    request: Request,
+    login_data: UserLoginRequest,
     db: Session = Depends(get_db)
 ):
     """
@@ -169,8 +187,8 @@ async def login(
     レート制限: 1分間に5回まで
 
     Args:
-        http_request: HTTPリクエスト（レート制限用）
-        request: ログインリクエスト
+        request: HTTPリクエスト（レート制限用）
+        login_data: ログインリクエスト
         db: データベースセッション
 
     Returns:
@@ -180,7 +198,7 @@ async def login(
         HTTPException: 認証に失敗した場合
     """
     # ユーザーを検索
-    user = db.query(User).filter(User.email == request.email).first()
+    user = db.query(User).filter(User.email == login_data.email).first()
 
     # ユーザーが存在しない場合
     if not user:
@@ -188,6 +206,13 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="メールアドレスまたはパスワードが正しくありません",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # ユーザーがアクティブかチェック（パスワード検証の前に確認）
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="アカウントが有効化されていません。メールに送信されたOTPコードで認証を完了してください"
         )
 
     # アカウントロックチェック
@@ -199,7 +224,7 @@ async def login(
         )
 
     # パスワードを検証
-    if not verify_password(request.password, user.hashed_password):
+    if not verify_password(login_data.password, user.hashed_password):
         # ログイン失敗回数を増やす
         user.failed_login_attempts += 1
 
@@ -213,17 +238,13 @@ async def login(
             )
 
         db.commit()
+
+        # 残り試行回数を表示
+        remaining_attempts = 5 - user.failed_login_attempts
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="メールアドレスまたはパスワードが正しくありません",
+            detail=f"メールアドレスまたはパスワードが正しくありません（残り{remaining_attempts}回の試行が可能）",
             headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    # ユーザーがアクティブかチェック
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="このアカウントは無効化されています"
         )
 
     # ログイン成功: 失敗回数とロックをリセット
@@ -356,3 +377,128 @@ async def update_current_user(
     db.refresh(current_user)
 
     return UserResponse.from_orm(current_user)
+
+
+@router.post("/verify-otp", response_model=TokenResponse)
+async def verify_otp(request: OTPVerifyRequest, db: Session = Depends(get_db)):
+    """
+    OTPコードを検証してアカウントを有効化
+
+    Args:
+        request: OTP検証リクエスト
+        db: データベースセッション
+
+    Returns:
+        アクセストークンとリフレッシュトークン
+
+    Raises:
+        HTTPException: OTPコードが無効な場合
+    """
+    # ユーザーを取得
+    user = db.query(User).filter(User.id == request.user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="ユーザーが見つかりません"
+        )
+
+    # 既にアクティブな場合
+    if user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="このアカウントは既に有効化されています"
+        )
+
+    # OTPコードを検証
+    if not verify_otp_code(db, user.id, request.otp_code, purpose="registration"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="認証コードが無効または期限切れです"
+        )
+
+    # ユーザーをアクティブにする
+    user.is_active = True
+    db.commit()
+    db.refresh(user)
+
+    # アクセストークンとリフレッシュトークンを生成
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.id},
+        expires_delta=access_token_expires
+    )
+    refresh_token = create_refresh_token(data={"sub": user.id})
+
+    # リフレッシュトークンをハッシュ化してDBに保存
+    user.refresh_token = get_password_hash(refresh_token)
+    db.commit()
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user=UserResponse.from_orm(user)
+    )
+
+
+class ResendOTPRequest(BaseModel):
+    user_id: str
+
+
+@router.post("/resend-otp")
+async def resend_otp(request: ResendOTPRequest, db: Session = Depends(get_db)):
+    """
+    OTPコードを再送信
+
+    Args:
+        request: OTP再送信リクエスト
+        db: データベースセッション
+
+    Returns:
+        成功メッセージ
+
+    Raises:
+        HTTPException: ユーザーが見つからない、または既にアクティブな場合
+    """
+    try:
+        # ユーザーを取得
+        user = db.query(User).filter(User.id == request.user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="ユーザーが見つかりません"
+            )
+
+        # 既にアクティブな場合
+        if user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="このアカウントは既に有効化されています"
+            )
+
+        # 既存のOTPコードを無効化
+        from ..models import OTPCode
+        existing_codes = db.query(OTPCode).filter(
+            OTPCode.user_id == user.id,
+            OTPCode.purpose == "registration",
+            OTPCode.used == False
+        ).all()
+
+        for code in existing_codes:
+            code.used = True
+        db.commit()
+
+        # 新しいOTPコードを生成してメール送信
+        otp_code = create_otp_code(db, user.id, purpose="registration")
+        await send_otp_email(user.email, otp_code, user.username)
+
+        return {"message": "認証コードを再送信しました"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.error(f"[ResendOTP] Unexpected error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"OTPコードの再送信中にエラーが発生しました: {str(e)}"
+        )

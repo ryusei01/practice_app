@@ -42,6 +42,9 @@ export interface Question {
   correct_answer: string;
   explanation: string | null;
   difficulty: number;
+  category?: string | null;
+  subcategory1?: string | null;
+  subcategory2?: string | null;
 }
 
 export interface QuestionSetWithQuestions {

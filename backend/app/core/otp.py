@@ -4,10 +4,14 @@ OTP (One-Time Password) 生成・検証ユーティリティ
 import secrets
 import string
 from datetime import datetime, timedelta
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import json
+import uuid
+
+from sqlalchemy.orm import Session
 
 from .auth import get_password_hash, verify_password
+from ..models import OTPCode
 
 
 def generate_otp_code(length: int = 6) -> str:
@@ -107,3 +111,101 @@ def get_otp_expiry_time(minutes: int = 10) -> datetime:
         有効期限の日時
     """
     return datetime.utcnow() + timedelta(minutes=minutes)
+
+
+def create_otp_code(
+    db: Session,
+    user_id: str,
+    purpose: str = "registration",
+    expires_minutes: int = 10
+) -> str:
+    """
+    OTPコードを作成してDBに保存
+
+    Args:
+        db: データベースセッション
+        user_id: ユーザーID
+        purpose: 目的（registration, password_reset等）
+        expires_minutes: 有効期限（分）
+
+    Returns:
+        生成されたOTPコード
+    """
+    # 既存の未使用OTPを無効化
+    db.query(OTPCode).filter(
+        OTPCode.user_id == user_id,
+        OTPCode.purpose == purpose,
+        OTPCode.used == False
+    ).update({"used": True})
+    db.commit()
+
+    # 新しいOTPコードを生成
+    otp_code = generate_otp_code()
+    expires_at = get_otp_expiry_time(expires_minutes)
+
+    # DBに保存
+    otp_record = OTPCode(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        code=otp_code,
+        purpose=purpose,
+        expires_at=expires_at,
+        used=False
+    )
+    db.add(otp_record)
+    db.commit()
+
+    return otp_code
+
+
+def verify_otp_code(
+    db: Session,
+    user_id: str,
+    code: str,
+    purpose: str = "registration"
+) -> bool:
+    """
+    OTPコードを検証
+
+    Args:
+        db: データベースセッション
+        user_id: ユーザーID
+        code: 検証するOTPコード
+        purpose: 目的
+
+    Returns:
+        検証成功の場合True
+    """
+    # OTPコードを取得
+    otp_record = db.query(OTPCode).filter(
+        OTPCode.user_id == user_id,
+        OTPCode.code == code,
+        OTPCode.purpose == purpose,
+        OTPCode.used == False
+    ).first()
+
+    if not otp_record:
+        return False
+
+    # 有効期限チェック
+    if is_otp_expired(otp_record.expires_at):
+        return False
+
+    # OTPコードを使用済みにする
+    otp_record.used = True
+    db.commit()
+
+    return True
+
+
+def cleanup_expired_otp_codes(db: Session):
+    """
+    期限切れのOTPコードを削除
+
+    Args:
+        db: データベースセッション
+    """
+    db.query(OTPCode).filter(
+        OTPCode.expires_at < datetime.utcnow()
+    ).delete()
+    db.commit()

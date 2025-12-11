@@ -10,6 +10,8 @@ export interface Question {
   explanation: string | null;
   difficulty: number;
   category: string | null;
+  subcategory1: string | null;
+  subcategory2: string | null;
   order: number;
   total_attempts: number;
   correct_count: number;
@@ -25,6 +27,8 @@ export interface QuestionCreate {
   explanation?: string;
   difficulty?: number;
   category?: string;
+  subcategory1?: string;
+  subcategory2?: string;
   order?: number;
 }
 
@@ -36,12 +40,24 @@ export interface QuestionUpdate {
   explanation?: string;
   difficulty?: number;
   category?: string;
+  subcategory1?: string;
+  subcategory2?: string;
   order?: number;
 }
 
+export interface QuestionGroup {
+  category: string | null;
+  subcategory1: string | null;
+  subcategory2: string | null;
+  count: number;
+  questions: Question[];
+}
+
 export const questionsApi = {
-  getAll: async (params?: { question_set_id?: string; category?: string; skip?: number; limit?: number }): Promise<Question[]> => {
+  getAll: async (params?: { question_set_id?: string; category?: string; subcategory1?: string; subcategory2?: string; skip?: number; limit?: number }): Promise<Question[]> => {
+    console.log('[questionsApi.getAll] Request params:', params);
     const response = await apiClient.get('/questions/', { params });
+    console.log('[questionsApi.getAll] Response:', response.data?.length || 0, 'questions');
     return response.data;
   },
 
@@ -85,6 +101,27 @@ export const questionsApi = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+    });
+    return response.data;
+  },
+
+  selectQuestionsByAI: async (questionSetId: string, count: number): Promise<Question[]> => {
+    const response = await apiClient.get(`/questions/select/ai/${questionSetId}`, {
+      params: { count },
+    });
+    return response.data;
+  },
+
+  selectQuestionsByRange: async (questionSetId: string, start: number, count: number): Promise<Question[]> => {
+    const response = await apiClient.get(`/questions/select/range/${questionSetId}`, {
+      params: { start, count },
+    });
+    return response.data;
+  },
+
+  getGroups: async (questionSetId: string, groupBy?: 'category' | 'subcategory1' | 'subcategory2'): Promise<QuestionGroup[]> => {
+    const response = await apiClient.get(`/questions/groups/${questionSetId}`, {
+      params: { group_by: groupBy || 'subcategory1' },
     });
     return response.data;
   },

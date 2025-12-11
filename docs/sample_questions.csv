@@ -1,21 +1,21 @@
-question_text,question_type,options,correct_answer,explanation,difficulty
-What is the capital of Japan?,multiple_choice,"Tokyo,Osaka,Kyoto,Nagoya",Tokyo,Tokyo is the capital and largest city of Japan.,0.3
-What is 2 + 2?,multiple_choice,"3,4,5,6",4,Basic arithmetic: 2 + 2 = 4,0.1
-Which planet is known as the Red Planet?,multiple_choice,"Venus,Mars,Jupiter,Saturn",Mars,Mars appears red due to iron oxide on its surface.,0.4
-What is the largest ocean on Earth?,multiple_choice,"Atlantic,Indian,Arctic,Pacific",Pacific,The Pacific Ocean is the largest and deepest ocean.,0.3
-Who wrote 'Romeo and Juliet'?,multiple_choice,"Charles Dickens,William Shakespeare,Jane Austen,Mark Twain",William Shakespeare,Shakespeare wrote this famous tragedy in the 1590s.,0.5
-What is the chemical symbol for water?,multiple_choice,"H2O,CO2,O2,H2",H2O,Water is composed of two hydrogen atoms and one oxygen atom.,0.2
-How many continents are there?,multiple_choice,"5,6,7,8",7,"The seven continents are: Asia, Africa, North America, South America, Antarctica, Europe, and Australia.",0.3
-What is the speed of light?,multiple_choice,"300000 km/s,150000 km/s,450000 km/s,600000 km/s",300000 km/s,Light travels at approximately 300000 kilometers per second in a vacuum.,0.6
-Which language is most spoken worldwide?,multiple_choice,"English,Mandarin Chinese,Spanish,Hindi",Mandarin Chinese,Mandarin Chinese has the most native speakers in the world.,0.5
-What is the smallest prime number?,multiple_choice,"0,1,2,3",2,2 is the smallest and only even prime number.,0.4
-In which year did World War II end?,multiple_choice,"1943,1944,1945,1946",1945,World War II ended in 1945 with the surrender of Japan.,0.5
-What is the hardest natural substance?,multiple_choice,"Gold,Iron,Diamond,Platinum",Diamond,Diamond is the hardest known natural material.,0.4
-How many bones are in the adult human body?,multiple_choice,"206,256,180,220",206,An adult human skeleton has 206 bones.,0.6
-What is the largest mammal?,multiple_choice,"Elephant,Blue Whale,Giraffe,Polar Bear",Blue Whale,The blue whale is the largest animal ever known to have existed.,0.4
-Which gas do plants absorb from the atmosphere?,multiple_choice,"Oxygen,Nitrogen,Carbon Dioxide,Hydrogen",Carbon Dioxide,Plants absorb CO2 during photosynthesis to produce oxygen.,0.3
-What is the capital of France?,multiple_choice,"London,Paris,Berlin,Rome",Paris,Paris has been the capital of France for centuries.,0.2
-How many hours are in a day?,multiple_choice,"12,24,36,48",24,Earth completes one rotation in 24 hours.,0.1
-What is the freezing point of water in Celsius?,multiple_choice,"-10,0,10,32",0,Water freezes at 0 degrees Celsius (32 Fahrenheit).,0.2
-Which organ pumps blood through the body?,multiple_choice,"Brain,Lungs,Heart,Liver",Heart,The heart is responsible for pumping blood throughout the body.,0.2
-What is the square root of 144?,multiple_choice,"10,11,12,13",12,12 × 12 = 144,0.3
+question_text,question_type,options,correct_answer,explanation,difficulty,category,subcategory1,subcategory2
+What is the capital of Japan?,multiple_choice,"Tokyo,Osaka,Kyoto,Nagoya",Tokyo,Tokyo is the capital and largest city of Japan.,0.3,geography,asia,capitals
+What is 2 + 2?,multiple_choice,"3,4,5,6",4,Basic arithmetic: 2 + 2 = 4,0.1,math,arithmetic,addition
+Which planet is known as the Red Planet?,multiple_choice,"Venus,Mars,Jupiter,Saturn",Mars,Mars appears red due to iron oxide on its surface.,0.4,science,astronomy,planets
+What is the largest ocean on Earth?,multiple_choice,"Atlantic,Indian,Arctic,Pacific",Pacific,The Pacific Ocean is the largest and deepest ocean.,0.3,geography,physical,oceans
+Who wrote 'Romeo and Juliet'?,multiple_choice,"Charles Dickens,William Shakespeare,Jane Austen,Mark Twain",William Shakespeare,Shakespeare wrote this famous tragedy in the 1590s.,0.5,literature,drama,shakespeare
+What is the chemical symbol for water?,multiple_choice,"H2O,CO2,O2,H2",H2O,Water is composed of two hydrogen atoms and one oxygen atom.,0.2,science,chemistry,symbols
+How many continents are there?,multiple_choice,"5,6,7,8",7,"The seven continents are: Asia, Africa, North America, South America, Antarctica, Europe, and Australia.",0.3,geography,physical,continents
+What is the speed of light?,multiple_choice,"300000 km/s,150000 km/s,450000 km/s,600000 km/s",300000 km/s,Light travels at approximately 300000 kilometers per second in a vacuum.,0.6,science,physics,light
+Which language is most spoken worldwide?,multiple_choice,"English,Mandarin Chinese,Spanish,Hindi",Mandarin Chinese,Mandarin Chinese has the most native speakers in the world.,0.5,language,demographics,population
+What is the smallest prime number?,multiple_choice,"0,1,2,3",2,2 is the smallest and only even prime number.,0.4,math,number_theory,primes
+In which year did World War II end?,multiple_choice,"1943,1944,1945,1946",1945,World War II ended in 1945 with the surrender of Japan.,0.5,history,modern,wars
+What is the hardest natural substance?,multiple_choice,"Gold,Iron,Diamond,Platinum",Diamond,Diamond is the hardest known natural material.,0.4,science,geology,minerals
+How many bones are in the adult human body?,multiple_choice,"206,256,180,220",206,An adult human skeleton has 206 bones.,0.6,science,biology,anatomy
+What is the largest mammal?,multiple_choice,"Elephant,Blue Whale,Giraffe,Polar Bear",Blue Whale,The blue whale is the largest animal ever known to have existed.,0.4,science,biology,animals
+Which gas do plants absorb from the atmosphere?,multiple_choice,"Oxygen,Nitrogen,Carbon Dioxide,Hydrogen",Carbon Dioxide,Plants absorb CO2 during photosynthesis to produce oxygen.,0.3,science,biology,photosynthesis
+What is the capital of France?,multiple_choice,"London,Paris,Berlin,Rome",Paris,Paris has been the capital of France for centuries.,0.2,geography,europe,capitals
+How many hours are in a day?,multiple_choice,"12,24,36,48",24,Earth completes one rotation in 24 hours.,0.1,science,astronomy,time
+What is the freezing point of water in Celsius?,multiple_choice,"-10,0,10,32",0,Water freezes at 0 degrees Celsius (32 Fahrenheit).,0.2,science,physics,temperature
+Which organ pumps blood through the body?,multiple_choice,"Brain,Lungs,Heart,Liver",Heart,The heart is responsible for pumping blood throughout the body.,0.2,science,biology,anatomy
+What is the square root of 144?,multiple_choice,"10,11,12,13",12,12 × 12 = 144,0.3,math,arithmetic,roots

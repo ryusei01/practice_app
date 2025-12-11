@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
@@ -16,14 +15,16 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const { login } = useAuth();
   const { t, language, setLanguage } = useLanguage();
   const router = useRouter();
 
   const handleLogin = async () => {
+    setErrorMessage(""); // エラーメッセージをクリア
+
     if (!email || !password) {
-      Alert.alert(
-        t("Error", "エラー"),
+      setErrorMessage(
         t("Please fill in all fields", "すべてのフィールドを入力してください")
       );
       return;
@@ -34,14 +35,12 @@ export default function LoginScreen() {
       await login(email, password);
       router.replace("/");
     } catch (error: any) {
-      Alert.alert(
-        t("Login Failed", "ログイン失敗"),
-        error.response?.data?.detail ||
-          t(
-            "Invalid email or password",
-            "メールアドレスまたはパスワードが無効です"
-          )
-      );
+      console.error("[Login] Error:", error);
+      const message = error.response?.data?.detail ||
+        error.message ||
+        t("Invalid email or password", "メールアドレスまたはパスワードが無効です");
+
+      setErrorMessage(message);
     } finally {
       setIsLoading(false);
     }
@@ -80,13 +79,16 @@ export default function LoginScreen() {
           editable={!isLoading}
         />
 
+        {errorMessage ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{errorMessage}</Text>
+          </View>
+        ) : null}
+
         <TouchableOpacity
           style={[styles.button, isLoading && styles.buttonDisabled]}
           onPress={handleLogin}
-          disabled={
-            true
-            //isLoading
-          }
+          disabled={isLoading}
         >
           {isLoading ? (
             <ActivityIndicator color="#fff" />
@@ -146,6 +148,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderWidth: 1,
     borderColor: "#e0e0e0",
+  },
+  errorContainer: {
+    backgroundColor: "#FFEBEE",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#F44336",
+  },
+  errorText: {
+    color: "#C62828",
+    fontSize: 14,
+    lineHeight: 20,
   },
   button: {
     backgroundColor: "#007AFF",

@@ -111,19 +111,25 @@ async def get_current_user(
     )
 
     token = credentials.credentials
+    print(f"[Auth] Decoding token: {token[:20]}...")
     payload = decode_access_token(token)
 
     if payload is None:
+        print("[Auth] Token decode failed")
         raise credentials_exception
 
     user_id: str = payload.get("sub")
+    print(f"[Auth] Token payload user_id: {user_id}")
     if user_id is None:
+        print("[Auth] No user_id in token payload")
         raise credentials_exception
 
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
+        print(f"[Auth] User not found for id: {user_id}")
         raise credentials_exception
 
+    print(f"[Auth] User authenticated: {user.email}, is_active: {user.is_active}")
     return user
 
 

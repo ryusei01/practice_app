@@ -70,21 +70,31 @@ export default function Home() {
               {t("AI Practice Book", "AI Practice Book")}
             </Text>
             <Text style={styles.subtitle}>
-              {t("Your Personal Study Assistant", "あなた専用の学習アシスタント")}
+              {t(
+                "Your Personal Study Assistant",
+                "あなた専用の学習アシスタント"
+              )}
             </Text>
 
             <View style={styles.featuresContainer}>
               <View style={styles.featureItem}>
                 <Text style={styles.featureIcon}>📚</Text>
-                <Text style={styles.featureTitle}>{t("Create Question Sets", "問題集を作成")}</Text>
+                <Text style={styles.featureTitle}>
+                  {t("Create Question Sets", "問題集を作成")}
+                </Text>
                 <Text style={styles.featureDesc}>
-                  {t("Create custom quizzes with CSV import", "CSVで簡単に問題集を作成")}
+                  {t(
+                    "Create custom quizzes with CSV import",
+                    "CSVで簡単に問題集を作成"
+                  )}
                 </Text>
               </View>
 
               <View style={styles.featureItem}>
                 <Text style={styles.featureIcon}>🎯</Text>
-                <Text style={styles.featureTitle}>{t("AI Evaluation", "AI評価")}</Text>
+                <Text style={styles.featureTitle}>
+                  {t("AI Evaluation", "AI評価")}
+                </Text>
                 <Text style={styles.featureDesc}>
                   {t("Smart answer checking with AI", "AIが回答を賢く評価")}
                 </Text>
@@ -92,7 +102,9 @@ export default function Home() {
 
               <View style={styles.featureItem}>
                 <Text style={styles.featureIcon}>📇</Text>
-                <Text style={styles.featureTitle}>{t("Flashcard Mode", "単語帳モード")}</Text>
+                <Text style={styles.featureTitle}>
+                  {t("Flashcard Mode", "単語帳モード")}
+                </Text>
                 <Text style={styles.featureDesc}>
                   {t("Study with voice support", "音声読み上げで効率学習")}
                 </Text>
@@ -100,7 +112,9 @@ export default function Home() {
 
               <View style={styles.featureItem}>
                 <Text style={styles.featureIcon}>🔊</Text>
-                <Text style={styles.featureTitle}>{t("Voice Reading", "音声読み上げ")}</Text>
+                <Text style={styles.featureTitle}>
+                  {t("Voice Reading", "音声読み上げ")}
+                </Text>
                 <Text style={styles.featureDesc}>
                   {t("Japanese & English support", "日本語・英語対応")}
                 </Text>
@@ -110,16 +124,39 @@ export default function Home() {
             <TouchableOpacity
               style={styles.button}
               onPress={() => router.push("/(auth)/register")}
+              disabled={true}
             >
-              <Text style={styles.buttonText}>{t("Get Started", "今すぐ始める")}</Text>
+              <Text style={styles.buttonText}>
+                {t("Get Started", "今すぐ始める")}
+              </Text>
+              <View style={styles.overlay}>
+                <Text style={styles.overlayText}>
+                  {t("Under Preparation", "準備中")}
+                </Text>
+              </View>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.button, styles.buttonOutline]}
               onPress={() => router.push("/(auth)/login")}
+              // disabled={true}
             >
+              <View style={styles.overlay}>
+                <Text style={styles.overlayText}>
+                  {t("Under Preparation", "準備中")}
+                </Text>
+              </View>
               <Text style={[styles.buttonText, styles.buttonOutlineText]}>
                 {t("Sign In", "ログイン")}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.button, styles.trialButton]}
+              onPress={() => router.push("/(trial)/question-sets")}
+            >
+              <Text style={styles.buttonText}>
+                {t("Try Without Sign Up", "登録なしで試す")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -329,7 +366,7 @@ const styles = StyleSheet.create({
   overlayText: {
     fontWeight: "bold",
     fontSize: 18,
-    top: -15,
+    top: -20,
   },
   menuButtonText: {
     color: "#fff",
@@ -366,6 +403,9 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     backgroundColor: "#FF3B30",
+  },
+  trialButton: {
+    backgroundColor: "#34C759",
   },
   featuresContainer: {
     width: "100%",
