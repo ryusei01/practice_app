@@ -7,8 +7,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build:web": "expo export --platform web",
-    "export:web": "npx expo export -p web"
+    "build:web": "expo export --platform web && node scripts/inject-adsense.js",
+    "export:web": "npx expo export -p web && node scripts/inject-adsense.js"
   },
   "dependencies": {
     "expo": "54.0.26",
