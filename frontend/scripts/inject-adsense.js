@@ -5,7 +5,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const ADSENSE_SCRIPT = `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9679910712332333" crossorigin="anonymous"></script>`;
+const ADSENSE_SCRIPT = `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9679910712332333"
+     crossorigin="anonymous"></script>`;
+const ADSENSE_META = `<meta name="google-adsense-account" content="ca-pub-9679910712332333">`;
 
 function injectAdSenseScript(htmlPath) {
   try {
@@ -17,8 +19,8 @@ function injectAdSenseScript(htmlPath) {
       return;
     }
     
-    // Inject the script right after <head> tag (case-insensitive)
-    html = html.replace(/(<head[^>]*>)/i, `$1\n${ADSENSE_SCRIPT}`);
+    // Inject the meta tag and script right after <head> tag (case-insensitive)
+    html = html.replace(/(<head[^>]*>)/i, `$1\n${ADSENSE_META}\n${ADSENSE_SCRIPT}`);
     
     fs.writeFileSync(htmlPath, html, 'utf-8');
     console.log(`✓ Injected AdSense into: ${htmlPath}`);
