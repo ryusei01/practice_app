@@ -1,6 +1,6 @@
 {
   "build": {
-    "command": "cd frontend && npm install --legacy-peer-deps && npx expo export --platform web",
+    "command": "cd frontend && npm install --legacy-peer-deps && npm run build:web",
     "output": "frontend/dist",
     "root": "/"
   }
