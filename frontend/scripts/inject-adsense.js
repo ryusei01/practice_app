@@ -10,14 +10,14 @@ const ADSENSE_SCRIPT = `<script async src="https://pagead2.googlesyndication.com
 function injectAdSenseScript(htmlPath) {
   let html = fs.readFileSync(htmlPath, 'utf-8');
   
-  // Check if the AdSense script is already injected
-  if (html.includes('adsbygoogle.js')) {
+  // Check if the AdSense script with this specific client ID is already injected
+  if (html.includes('ca-pub-9679910712332333')) {
     console.log(`✓ AdSense already present in: ${htmlPath}`);
     return;
   }
   
-  // Inject the script right after <head> tag
-  html = html.replace('<head>', `<head>\n${ADSENSE_SCRIPT}`);
+  // Inject the script right after <head> tag (case-insensitive)
+  html = html.replace(/(<head[^>]*>)/i, `$1\n${ADSENSE_SCRIPT}`);
   
   fs.writeFileSync(htmlPath, html, 'utf-8');
   console.log(`✓ Injected AdSense into: ${htmlPath}`);
