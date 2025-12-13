@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Alert,
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
@@ -14,16 +13,24 @@ import { useLanguage } from "../../../src/contexts/LanguageContext";
 import { localStorageService, LocalQuestionSet } from "../../../src/services/localStorageService";
 import Header from "../../../src/components/Header";
 import QuizEngine, { QuizQuestion, QuizAnswer } from "../../../src/components/QuizEngine";
+import Modal from "../../../src/components/Modal";
 
 export default function TrialQuizScreen() {
-  const { id, startIndex } = useLocalSearchParams<{ id: string; startIndex?: string }>();
+  const { id, startIndex, questionIds } = useLocalSearchParams<{ 
+    id: string; 
+    startIndex?: string;
+    questionIds?: string;
+  }>();
   const [questionSet, setQuestionSet] = useState<LocalQuestionSet | null>(null);
+  const [selectedQuestions, setSelectedQuestions] = useState<LocalQuestion[] | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [finalScore, setFinalScore] = useState(0);
   const [finalTotal, setFinalTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const { t } = useLanguage();
   const router = useRouter();
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     loadQuestionSet();
@@ -36,19 +43,23 @@ export default function TrialQuizScreen() {
       const set = await localStorageService.getTrialQuestionSet(id);
       if (set) {
         setQuestionSet(set);
+
+        // questionIdsが指定されている場合は、選択された問題のみを使用
+        if (questionIds) {
+          const selectedIds = questionIds.split(',');
+          const selected = set.questions.filter(q => selectedIds.includes(q.id));
+          setSelectedQuestions(selected);
+        } else {
+          setSelectedQuestions(null); // 全ての問題を使用
+        }
       } else {
-        Alert.alert(
-          t("Error", "エラー"),
-          t("Question set not found", "問題セットが見つかりません"),
-          [{ text: t("OK", "OK"), onPress: () => router.back() }]
-        );
+        setErrorMessage(t("Question set not found", "問題セットが見つかりません"));
+        setErrorModalVisible(true);
       }
     } catch (error) {
       console.error("Error loading trial question set:", error);
-      Alert.alert(
-        t("Error", "エラー"),
-        t("Failed to load question set", "問題セットの読み込みに失敗しました")
-      );
+      setErrorMessage(t("Failed to load question set", "問題セットの読み込みに失敗しました"));
+      setErrorModalVisible(true);
     } finally {
       setIsLoading(false);
     }
@@ -81,8 +92,16 @@ export default function TrialQuizScreen() {
 
       const combinedAnswers = [...existingAnswers, ...newAnswerDataArray];
       await AsyncStorage.setItem(storageKey, JSON.stringify(combinedAnswers));
-    } catch (error) {
+
+      // 古い回答履歴をクリーンアップ（最新1000件のみ保持）
+      await localStorageService.cleanupOldAnswers(questionSet.id, 1000);
+    } catch (error: any) {
       console.error("Error saving trial result:", error);
+      // 容量超過エラーの場合はユーザーに通知
+      if (error?.name === 'QuotaExceededError' || error?.message?.includes('quota') || error?.message?.includes('Storage quota exceeded')) {
+        // エラーは表示するが、クイズ結果は表示する
+        console.warn("Storage quota exceeded. Some data may not be saved.");
+      }
     }
 
     // 結果画面を表示（回答数ベース）
@@ -109,10 +128,36 @@ export default function TrialQuizScreen() {
 
   if (!questionSet) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.errorText}>
-          {t("Question set not found", "問題セットが見つかりません")}
-        </Text>
+      <View style={styles.container}>
+        <Header title={t("Error", "エラー")} />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.errorText}>
+            {t("Question set not found", "問題セットが見つかりません")}
+          </Text>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.backButtonText}>
+              {t("Go Back", "戻る")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <Modal
+          visible={errorModalVisible}
+          title={t("Error", "エラー")}
+          message={errorMessage}
+          buttons={[
+            { text: t("OK", "OK"), onPress: () => {
+              setErrorModalVisible(false);
+              router.back();
+            }}
+          ]}
+          onClose={() => {
+            setErrorModalVisible(false);
+            router.back();
+          }}
+        />
       </View>
     );
   }
@@ -147,8 +192,11 @@ export default function TrialQuizScreen() {
     );
   }
 
+  // 使用する問題を決定（選択された問題があればそれを使用、なければ全て）
+  const questionsToUse = selectedQuestions || questionSet.questions;
+
   // LocalQuestionをQuizQuestionに変換
-  const quizQuestions: QuizQuestion[] = questionSet.questions.map((q, index) => ({
+  const quizQuestions: QuizQuestion[] = questionsToUse.map((q, index) => ({
     id: q.id || `${questionSet.id}_q${index}`,
     question_text: q.question,
     correct_answer: q.answer,
@@ -171,6 +219,15 @@ export default function TrialQuizScreen() {
         showAdvancedFeatures={true}
         initialRedSheetEnabled={questionSet.redSheetEnabled || false}
         initialQuestionIndex={parseInt(startIndex || "0")}
+      />
+      <Modal
+        visible={errorModalVisible}
+        title={t("Error", "エラー")}
+        message={errorMessage}
+        buttons={[
+          { text: t("OK", "OK"), onPress: () => setErrorModalVisible(false) }
+        ]}
+        onClose={() => setErrorModalVisible(false)}
       />
     </View>
   );
@@ -250,5 +307,17 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 16,
     color: "#666",
+    marginBottom: 20,
+  },
+  backButton: {
+    backgroundColor: "#007AFF",
+    borderRadius: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  backButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Alert,
   Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
@@ -15,12 +14,40 @@ import {
   LocalQuestionSet,
 } from "../../src/services/localStorageService";
 import Header from "../../src/components/Header";
+import Modal from "../../src/components/Modal";
 
 export default function TrialQuestionSetsScreen() {
   const [questionSets, setQuestionSets] = useState<LocalQuestionSet[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { t } = useLanguage();
   const router = useRouter();
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    title: string;
+    message: string;
+    buttons: Array<{
+      text: string;
+      onPress?: () => void;
+      style?: "default" | "cancel" | "destructive";
+    }>;
+  }>({
+    title: "",
+    message: "",
+    buttons: [],
+  });
+
+  const showModal = (
+    title: string,
+    message: string,
+    buttons: Array<{
+      text: string;
+      onPress?: () => void;
+      style?: "default" | "cancel" | "destructive";
+    }>
+  ) => {
+    setModalConfig({ title, message, buttons });
+    setModalVisible(true);
+  };
 
   const loadQuestionSets = async () => {
     setIsLoading(true);
@@ -31,9 +58,10 @@ export default function TrialQuestionSetsScreen() {
       setQuestionSets(sets);
     } catch (error) {
       console.error("Error loading trial question sets:", error);
-      Alert.alert(
+      showModal(
         t("Error", "エラー"),
-        t("Failed to load question sets", "問題セットの読み込みに失敗しました")
+        t("Failed to load question sets", "問題セットの読み込みに失敗しました"),
+        [{ text: t("OK", "OK"), onPress: () => setModalVisible(false) }]
       );
     } finally {
       setIsLoading(false);
@@ -87,7 +115,7 @@ export default function TrialQuestionSetsScreen() {
   }, []);
 
   const handleDelete = async (id: string) => {
-    Alert.alert(
+    showModal(
       t("Delete Question Set", "問題セットを削除"),
       t(
         "Are you sure you want to delete this question set?",
@@ -97,25 +125,29 @@ export default function TrialQuestionSetsScreen() {
         {
           text: t("Cancel", "キャンセル"),
           style: "cancel",
+          onPress: () => setModalVisible(false),
         },
         {
           text: t("Delete", "削除"),
           style: "destructive",
           onPress: async () => {
+            setModalVisible(false);
             try {
               await localStorageService.deleteTrialQuestionSet(id);
               await loadQuestionSets();
-              Alert.alert(
+              showModal(
                 t("Success", "成功"),
-                t("Question set deleted", "問題セットを削除しました")
+                t("Question set deleted", "問題セットを削除しました"),
+                [{ text: t("OK", "OK"), onPress: () => setModalVisible(false) }]
               );
             } catch (error) {
-              Alert.alert(
+              showModal(
                 t("Error", "エラー"),
                 t(
                   "Failed to delete question set",
                   "問題セットの削除に失敗しました"
-                )
+                ),
+                [{ text: t("OK", "OK"), onPress: () => setModalVisible(false) }]
               );
             }
           },

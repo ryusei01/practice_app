@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
+  TextInput,
 } from "react-native";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -14,8 +14,10 @@ import { useLanguage } from "../../../src/contexts/LanguageContext";
 import {
   localStorageService,
   LocalQuestionSet,
+  LocalQuestion,
 } from "../../../src/services/localStorageService";
 import Header from "../../../src/components/Header";
+import Modal from "../../../src/components/Modal";
 
 // 問題ごとの回答統計
 interface QuestionStats {
@@ -33,12 +35,32 @@ export default function TrialSetDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [questionStats, setQuestionStats] = useState<Map<string, QuestionStats>>(new Map());
 
+  // 問題選択モーダル用のstate
+  const [selectionModalVisible, setSelectionModalVisible] = useState(false);
+  const [selectionMode, setSelectionMode] = useState<"all" | "ai" | "count">("all");
+  const [questionCount, setQuestionCount] = useState(10); // 初期値10問
+
+  // エラーモーダル用のstate
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorModalConfig, setErrorModalConfig] = useState<{
+    title: string;
+    message: string;
+  }>({
+    title: "",
+    message: "",
+  });
+
   // 画面がフォーカスされるたびにデータをリロード
   useFocusEffect(
     useCallback(() => {
       loadData();
     }, [id])
   );
+
+  const showErrorModal = (title: string, message: string) => {
+    setErrorModalConfig({ title, message });
+    setErrorModalVisible(true);
+  };
 
   const loadData = async () => {
     try {
@@ -49,7 +71,7 @@ export default function TrialSetDetailScreen() {
       await loadAnswerStats();
     } catch (error) {
       console.error("Failed to load question set:", error);
-      Alert.alert(
+      showErrorModal(
         t("Error", "エラー"),
         t("Failed to load question set", "問題セットの読み込みに失敗しました")
       );
@@ -100,9 +122,74 @@ export default function TrialSetDetailScreen() {
     }
   };
 
+  // ローカルストレージから回答履歴を読み取ってAI選出
+  const selectQuestionsByAI = async (count: number): Promise<LocalQuestion[]> => {
+    if (!questionSet) return [];
+
+    const storageKey = `@flashcard_answers_${id}`;
+    const answersData = await AsyncStorage.getItem(storageKey);
+    const answers = answersData ? JSON.parse(answersData) : [];
+
+    // 各問題の統計を計算
+    const questionStatsMap = new Map<string, {
+      attemptCount: number;
+      errorCount: number;
+      avgTime: number;
+      totalTime: number;
+    }>();
+
+    answers.forEach((answer: any) => {
+      const questionId = answer.question_id;
+      const existing = questionStatsMap.get(questionId) || {
+        attemptCount: 0,
+        errorCount: 0,
+        avgTime: 0,
+        totalTime: 0,
+      };
+
+      existing.attemptCount += 1;
+      if (!answer.is_correct) {
+        existing.errorCount += 1;
+      }
+      existing.totalTime = existing.totalTime + (answer.answer_time_sec || 0);
+      existing.avgTime = existing.totalTime / existing.attemptCount;
+
+      questionStatsMap.set(questionId, existing);
+    });
+
+    // 問題をスコアリングしてソート
+    const scoredQuestions = questionSet.questions.map((q) => {
+      const stats = questionStatsMap.get(q.id) || {
+        attemptCount: 0,
+        errorCount: 0,
+        avgTime: 0,
+      };
+
+      // スコア計算（高いほど優先）
+      // 1. 回答履歴がない問題を優先（attemptCount === 0 なら高スコア）
+      // 2. 間違えた回数が多い問題
+      // 3. 解いた回数が少ない問題
+      // 4. 平均回答時間が長い問題
+      let score = 0;
+      if (stats.attemptCount === 0) {
+        score = 1000; // 未回答は最優先
+      } else {
+        score = stats.errorCount * 100 + (10 - stats.attemptCount) * 10 + stats.avgTime;
+      }
+
+      return { question: q, score, stats };
+    });
+
+    // スコアでソート（降順）
+    scoredQuestions.sort((a, b) => b.score - a.score);
+
+    // 上位count件を返す
+    return scoredQuestions.slice(0, count).map((item) => item.question);
+  };
+
   const handleStartQuiz = () => {
     if (!questionSet || questionSet.questions.length === 0) {
-      Alert.alert(
+      showErrorModal(
         t("No Questions", "問題がありません"),
         t(
           "This question set has no questions",
@@ -111,7 +198,49 @@ export default function TrialSetDetailScreen() {
       );
       return;
     }
-    router.push(`/(trial)/quiz/${id}`);
+    setSelectionModalVisible(true);
+  };
+
+  const handleStartQuizWithSelection = async () => {
+    if (!questionSet) return;
+
+    try {
+      setSelectionModalVisible(false);
+      setIsLoading(true);
+
+      let selectedQuestions: LocalQuestion[];
+
+      if (selectionMode === "all") {
+        selectedQuestions = questionSet.questions;
+      } else if (selectionMode === "ai") {
+        selectedQuestions = await selectQuestionsByAI(questionCount);
+      } else {
+        // countモード: 指定した問題数をランダムに選出
+        const shuffled = [...questionSet.questions].sort(() => Math.random() - 0.5);
+        selectedQuestions = shuffled.slice(0, questionCount);
+      }
+
+      if (selectedQuestions.length === 0) {
+        showErrorModal(
+          t("Error", "エラー"),
+          t("No questions match your selection", "選択条件に一致する問題がありません")
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // 選択した問題IDをクエリパラメータで渡す
+      const questionIds = selectedQuestions.map(q => q.id).join(',');
+      router.push(`/(trial)/quiz/${id}?questionIds=${questionIds}`);
+    } catch (error) {
+      console.error("Failed to select questions:", error);
+      showErrorModal(
+        t("Error", "エラー"),
+        t("Failed to select questions", "問題の選択に失敗しました")
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleStartFlashcard = () => {
@@ -274,6 +403,146 @@ export default function TrialSetDetailScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* 問題選択モーダル */}
+      <Modal
+        visible={selectionModalVisible}
+        title={t("Select Questions", "問題選択")}
+        onClose={() => setSelectionModalVisible(false)}
+      >
+        <View style={styles.selectionModalContent}>
+          <Text style={styles.selectionLabel}>
+            {t("Selection Mode", "選択モード")}
+          </Text>
+
+          <TouchableOpacity
+            style={[
+              styles.selectionOption,
+              selectionMode === "all" && styles.selectionOptionActive,
+            ]}
+            onPress={() => setSelectionMode("all")}
+          >
+            <View style={styles.selectionOptionHeader}>
+              <Text
+                style={[
+                  styles.selectionOptionTitle,
+                  selectionMode === "all" && styles.selectionOptionTitleActive,
+                ]}
+              >
+                {t("All Questions", "全ての問題")}
+              </Text>
+            </View>
+            <Text style={styles.selectionOptionDesc}>
+              {t(
+                "Practice all questions in order",
+                "全ての問題を順番通りに解く"
+              )}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.selectionOption,
+              selectionMode === "ai" && styles.selectionOptionActive,
+            ]}
+            onPress={() => setSelectionMode("ai")}
+          >
+            <View style={styles.selectionOptionHeader}>
+              <Text
+                style={[
+                  styles.selectionOptionTitle,
+                  selectionMode === "ai" && styles.selectionOptionTitleActive,
+                ]}
+              >
+                🤖 {t("AI Selection", "AI選出")}
+              </Text>
+            </View>
+            <Text style={styles.selectionOptionDesc}>
+              {t(
+                "AI selects questions based on wrong answers, attempt count, and answer time (default: 10 questions)",
+                "AIが間違えた数、出題回数、回答時間から問題を選出（初期値：10問）"
+              )}
+            </Text>
+            {selectionMode === "ai" && (
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>
+                  {t("Number of questions", "問題数")}:
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  value={questionCount.toString()}
+                  onChangeText={(text) => {
+                    const num = parseInt(text) || 10;
+                    setQuestionCount(Math.min(Math.max(num, 1), questionSet.questions.length));
+                  }}
+                  keyboardType="numeric"
+                  placeholder="10"
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.selectionOption,
+              selectionMode === "count" && styles.selectionOptionActive,
+            ]}
+            onPress={() => setSelectionMode("count")}
+          >
+            <View style={styles.selectionOptionHeader}>
+              <Text
+                style={[
+                  styles.selectionOptionTitle,
+                  selectionMode === "count" && styles.selectionOptionTitleActive,
+                ]}
+              >
+                📊 {t("Random Selection", "ランダム選出")}
+              </Text>
+            </View>
+            <Text style={styles.selectionOptionDesc}>
+              {t(
+                "Select a specified number of questions randomly",
+                "指定した問題数をランダムに選出"
+              )}
+            </Text>
+            {selectionMode === "count" && (
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>
+                  {t("Number of questions", "問題数")}:
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  value={questionCount.toString()}
+                  onChangeText={(text) => {
+                    const num = parseInt(text) || 10;
+                    setQuestionCount(Math.min(Math.max(num, 1), questionSet.questions.length));
+                  }}
+                  keyboardType="numeric"
+                  placeholder="10"
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.startButton}
+            onPress={handleStartQuizWithSelection}
+          >
+            <Text style={styles.startButtonText}>
+              {t("Start Quiz", "クイズ開始")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* エラーモーダル */}
+      <Modal
+        visible={errorModalVisible}
+        title={errorModalConfig.title}
+        message={errorModalConfig.message}
+        buttons={[{ text: t("OK", "OK"), onPress: () => setErrorModalVisible(false) }]}
+        onClose={() => setErrorModalVisible(false)}
+      />
     </View>
   );
 }
@@ -497,5 +766,70 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#007AFF",
     fontWeight: "500",
+  },
+  selectionModalContent: {
+    gap: 16,
+  },
+  selectionLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+  },
+  selectionOption: {
+    backgroundColor: "#f5f5f5",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: "#e0e0e0",
+  },
+  selectionOptionActive: {
+    borderColor: "#007AFF",
+    backgroundColor: "#E3F2FD",
+  },
+  selectionOptionHeader: {
+    marginBottom: 8,
+  },
+  selectionOptionTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#333",
+  },
+  selectionOptionTitleActive: {
+    color: "#007AFF",
+  },
+  selectionOptionDesc: {
+    fontSize: 14,
+    color: "#666",
+    lineHeight: 20,
+  },
+  inputContainer: {
+    marginTop: 12,
+    gap: 8,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+  },
+  input: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    fontSize: 16,
+  },
+  startButton: {
+    backgroundColor: "#34C759",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  startButtonText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "600",
   },
 });

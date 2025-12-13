@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useLanguage } from "../../../../../src/contexts/LanguageContext";
@@ -15,6 +14,7 @@ import {
   LocalQuestionSet,
 } from "../../../../../src/services/localStorageService";
 import Header from "../../../../../src/components/Header";
+import Modal from "../../../../../src/components/Modal";
 
 export default function QuestionDetailScreen() {
   const { id, questionIndex } = useLocalSearchParams<{
@@ -26,6 +26,8 @@ export default function QuestionDetailScreen() {
   const [questionSet, setQuestionSet] = useState<LocalQuestionSet | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const currentIndex = parseInt(questionIndex || "0");
 
@@ -41,18 +43,13 @@ export default function QuestionDetailScreen() {
       if (set) {
         setQuestionSet(set);
       } else {
-        Alert.alert(
-          t("Error", "エラー"),
-          t("Question set not found", "問題セットが見つかりません"),
-          [{ text: t("OK", "OK"), onPress: () => router.back() }]
-        );
+        setErrorMessage(t("Question set not found", "問題セットが見つかりません"));
+        setErrorModalVisible(true);
       }
     } catch (error) {
       console.error("Error loading question set:", error);
-      Alert.alert(
-        t("Error", "エラー"),
-        t("Failed to load question set", "問題セットの読み込みに失敗しました")
-      );
+      setErrorMessage(t("Failed to load question set", "問題セットの読み込みに失敗しました"));
+      setErrorModalVisible(true);
     } finally {
       setIsLoading(false);
     }
@@ -230,6 +227,22 @@ export default function QuestionDetailScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={errorModalVisible}
+        title={t("Error", "エラー")}
+        message={errorMessage}
+        buttons={[
+          { text: t("OK", "OK"), onPress: () => {
+            setErrorModalVisible(false);
+            router.back();
+          }}
+        ]}
+        onClose={() => {
+          setErrorModalVisible(false);
+          router.back();
+        }}
+      />
     </View>
   );
 }

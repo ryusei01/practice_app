@@ -43,7 +43,7 @@ export default function QuestionSetDetailScreen() {
   // 問題選択モーダル用のstate
   const [selectionModalVisible, setSelectionModalVisible] = useState(false);
   const [selectionMode, setSelectionMode] = useState<"all" | "ai" | "range">("all");
-  const [questionCount, setQuestionCount] = useState(10);
+  const [questionCount, setQuestionCount] = useState(10); // 初期値10問
   const [rangeStart, setRangeStart] = useState(0);
 
   // モーダル用のstate
@@ -772,8 +772,8 @@ question_text,correct_answer,category,difficulty`;
             </View>
             <Text style={styles.selectionOptionDesc}>
               {t(
-                "AI selects questions based on your performance",
-                "AIが苦手な問題を優先的に選出"
+                "AI selects questions based on wrong answers, attempt count, and answer time (default: 10 questions)",
+                "AIが間違えた数、出題回数、回答時間から問題を選出（初期値：10問）"
               )}
             </Text>
             {selectionMode === "ai" && (
@@ -785,7 +785,7 @@ question_text,correct_answer,category,difficulty`;
                   style={styles.input}
                   value={questionCount.toString()}
                   onChangeText={(text) => {
-                    const num = parseInt(text) || 1;
+                    const num = parseInt(text) || 10;
                     setQuestionCount(Math.min(Math.max(num, 1), questions.length));
                   }}
                   keyboardType="numeric"

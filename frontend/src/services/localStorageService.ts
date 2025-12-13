@@ -54,8 +54,12 @@ export const localStorageService = {
       sets.push(newSet);
       await AsyncStorage.setItem(TRIAL_QUESTION_SETS_KEY, JSON.stringify(sets));
       return newSet;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving trial question set:", error);
+      // 容量超過エラーの場合
+      if (error?.name === 'QuotaExceededError' || error?.message?.includes('quota')) {
+        throw new Error('Storage quota exceeded. Please delete some question sets or clear old data.');
+      }
       throw error;
     }
   },
@@ -124,9 +128,67 @@ export const localStorageService = {
 
       results[questionSetId].push(result);
       await AsyncStorage.setItem(TRIAL_RESULTS_KEY, JSON.stringify(results));
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving trial result:", error);
+      // 容量超過エラーの場合
+      if (error?.name === 'QuotaExceededError' || error?.message?.includes('quota')) {
+        throw new Error('Storage quota exceeded. Please clear old quiz results.');
+      }
       throw error;
+    }
+  },
+
+  // 古い回答履歴を削除（最新のN件のみ保持）
+  async cleanupOldAnswers(questionSetId: string, keepCount: number = 1000): Promise<void> {
+    try {
+      const storageKey = `@flashcard_answers_${questionSetId}`;
+      const answersData = await AsyncStorage.getItem(storageKey);
+      if (!answersData) return;
+
+      const answers = JSON.parse(answersData);
+      if (answers.length <= keepCount) return;
+
+      // 最新のN件のみ保持（answered_atでソート）
+      const sortedAnswers = answers.sort((a: any, b: any) => {
+        const dateA = new Date(a.answered_at || 0).getTime();
+        const dateB = new Date(b.answered_at || 0).getTime();
+        return dateB - dateA; // 降順（新しい順）
+      });
+
+      const keptAnswers = sortedAnswers.slice(0, keepCount);
+      await AsyncStorage.setItem(storageKey, JSON.stringify(keptAnswers));
+      console.log(`[LocalStorage] Cleaned up answers for ${questionSetId}: kept ${keptAnswers.length} of ${answers.length}`);
+    } catch (error) {
+      console.error("Error cleaning up old answers:", error);
+    }
+  },
+
+  // ストレージ使用量を確認（概算）
+  async getStorageUsage(): Promise<{ approximate: number; unit: string }> {
+    try {
+      let totalSize = 0;
+      const keys = await AsyncStorage.getAllKeys();
+      
+      for (const key of keys) {
+        if (key.startsWith('@trial_') || key.startsWith('@flashcard_answers_')) {
+          const value = await AsyncStorage.getItem(key);
+          if (value) {
+            totalSize += value.length * 2; // UTF-16文字列として概算（バイト数）
+          }
+        }
+      }
+
+      // MBに変換
+      const mb = totalSize / (1024 * 1024);
+      if (mb >= 1) {
+        return { approximate: Math.round(mb * 10) / 10, unit: 'MB' };
+      } else {
+        const kb = totalSize / 1024;
+        return { approximate: Math.round(kb * 10) / 10, unit: 'KB' };
+      }
+    } catch (error) {
+      console.error("Error getting storage usage:", error);
+      return { approximate: 0, unit: 'KB' };
     }
   },
 

@@ -280,6 +280,9 @@ export default function FlashcardScreen() {
       const combinedAnswers = [...existingAnswers, ...newAnswerDataArray];
       await AsyncStorage.setItem(storageKey, JSON.stringify(combinedAnswers));
 
+      // 古い回答履歴をクリーンアップ（最新1000件のみ保持）
+      await localStorageService.cleanupOldAnswers(id, 1000);
+
       // 通常版でユーザーがログインしている場合はAPIにも送信
       if (!isTrial && user) {
         for (const ans of finalAnswers) {
