@@ -292,7 +292,7 @@ question_text,question_type,options ,correct_answer ,explanation ,difficulty ,ca
 責任,,,responsibility,この結果についての責任は私にあります。I am responsible for this result.,0.7,N2
 可能性,,,possibility,彼が遅れる可能性は十分あります。There is a good possibility that he will be late.,0.7,N2
 事実,,,fact,その話が事実かどうか確認したい。I want to check whether that story is a fact.,0.7,N2
-条件,,,condition,\"条件がそろえば、すぐに開始できます。If the conditions are met, we can start immediately.\",0.7,N2
+条件,,,condition,"条件がそろえば、すぐに開始できます。If the conditions are met, we can start immediately.",0.7,N2
 提案,,,suggestion,彼の提案はとても現実的だ。His suggestion is very realistic.,0.7,N2
 許可,,,permission,写真を撮る前に許可を取ってください。Please get permission before taking photos.,0.7,N2
 期間,,,period,申し込み期間は今月末までです。The application period is until the end of this month.,0.7,N2
@@ -382,7 +382,7 @@ question_text,question_type,options ,correct_answer ,explanation ,difficulty ,ca
 前提,,,premise,その議論は重要な前提を見落としている。The argument overlooks an important premise.,1,N1
 抽象,,,abstract,この問題を解くには抽象的な思考が必要だ。Solving this issue requires abstract thinking.,1,N1
 構想,,,concept/plan,新しい都市計画の構想が発表された。A concept for a new urban plan was announced.,1,N1
-特質,,,characteristic,\"その社会の特質を理解するには歴史を知る必要がある。To understand the characteristics of that society, one must know its history.\",1,N1
+特質,,,characteristic,"その社会の特質を理解するには歴史を知る必要がある。To understand the characteristics of that society, one must know its history.",1,N1
 包含,,,include,この規定は広い範囲の行為を包含している。This regulation includes a wide range of behaviors.,1,N1
 徹底,,,thoroughness,安全管理を徹底しなければ事故は防げない。Accidents cannot be prevented without thorough safety management.,1,N1
 保証,,,guarantee,この制度は結果を保証するものではない。This system does not guarantee results.,1,N1
@@ -463,5 +463,4 @@ question_text,question_type,options ,correct_answer ,explanation ,difficulty ,ca
 起因,,,originate,事故は機械の故障に起因している。The accident originated from a machine failure.,1,N1
 提示,,,presentation,会社が新しいビジョンを提示した。The company presented a new vision.,1,N1
 緩やか,,,moderate,景気は緩やかに回復している。The economy is recovering moderately.,1,N1
-整える,,,prepare,次の会議に向けて資料を整えている。I am preparing the documents for the next meeting.,1,N1
-`;
+整える,,,prepare,次の会議に向けて資料を整えている。I am preparing the documents for the next meeting.,1,N1`;

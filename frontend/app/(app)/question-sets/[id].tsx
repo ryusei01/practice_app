@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   RefreshControl,
   Platform,
   TextInput,
+  ScrollView,
 } from "react-native";
 import * as FileSystem from "expo-file-system";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -17,8 +18,13 @@ import * as DocumentPicker from "expo-document-picker";
 import { useTranslation } from "react-i18next";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { questionSetsApi, QuestionSet } from "../../../src/api/questionSets";
-import { questionsApi, Question } from "../../../src/api/questions";
+import {
+  questionsApi,
+  Question,
+  QuestionGroup,
+} from "../../../src/api/questions";
 import Modal from "../../../src/components/Modal";
+import { commonStyles } from "../../../src/styles/questionSetDetailStyles";
 
 // 問題ごとの回答統計
 interface QuestionStats {
@@ -38,13 +44,20 @@ export default function QuestionSetDetailScreen() {
   const [setupMode, setSetupMode] = useState(mode === "setup");
   const [setupStep, setSetupStep] = useState(1);
   const router = useRouter();
-  const [questionStats, setQuestionStats] = useState<Map<string, QuestionStats>>(new Map());
+  const [questionStats, setQuestionStats] = useState<
+    Map<string, QuestionStats>
+  >(new Map());
 
   // 問題選択モーダル用のstate
   const [selectionModalVisible, setSelectionModalVisible] = useState(false);
-  const [selectionMode, setSelectionMode] = useState<"all" | "ai" | "range">("all");
+  const [selectionMode, setSelectionMode] = useState<
+    "all" | "ai" | "range" | "category"
+  >("all");
   const [questionCount, setQuestionCount] = useState(10); // 初期値10問
   const [rangeStart, setRangeStart] = useState(0);
+  const [questionGroups, setQuestionGroups] = useState<QuestionGroup[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const flatListRef = useRef<FlatList>(null);
 
   // モーダル用のstate
   const [modalVisible, setModalVisible] = useState(false);
@@ -89,6 +102,14 @@ export default function QuestionSetDetailScreen() {
       setQuestionSet(setData);
       setQuestions(questionsData);
 
+      // カテゴリグループを取得
+      try {
+        const groups = await questionsApi.getGroups(id, "category");
+        setQuestionGroups(groups);
+      } catch (error) {
+        console.error("Failed to load question groups:", error);
+      }
+
       // 回答データを読み込み
       await loadAnswerStats();
     } catch (error) {
@@ -126,10 +147,14 @@ export default function QuestionSetDetailScreen() {
         if (answer.is_correct) {
           existing.correctCount += 1;
         }
-        existing.accuracy = (existing.correctCount / existing.totalAttempts) * 100;
+        existing.accuracy =
+          (existing.correctCount / existing.totalAttempts) * 100;
 
         // 最新の回答日時を更新
-        if (!existing.lastAnsweredAt || answer.answered_at > existing.lastAnsweredAt) {
+        if (
+          !existing.lastAnsweredAt ||
+          answer.answered_at > existing.lastAnsweredAt
+        ) {
           existing.lastAnsweredAt = answer.answered_at;
         }
 
@@ -179,22 +204,48 @@ export default function QuestionSetDetailScreen() {
       if (selectionMode === "all") {
         selectedQuestions = questions;
       } else if (selectionMode === "ai") {
-        selectedQuestions = await questionsApi.selectQuestionsByAI(id, questionCount);
+        selectedQuestions = await questionsApi.selectQuestionsByAI(
+          id,
+          questionCount
+        );
+      } else if (selectionMode === "category") {
+        // カテゴリ別選択
+        if (!selectedCategory) {
+          Alert.alert(
+            t("common.error"),
+            t("Please select a category", "カテゴリを選択してください")
+          );
+          setIsLoading(false);
+          return;
+        }
+        const group = questionGroups.find(
+          (g) =>
+            g.category === selectedCategory ||
+            (g.category === null && selectedCategory === "未分類")
+        );
+        selectedQuestions = group?.questions || [];
       } else {
-        selectedQuestions = await questionsApi.selectQuestionsByRange(id, rangeStart, questionCount);
+        selectedQuestions = await questionsApi.selectQuestionsByRange(
+          id,
+          rangeStart,
+          questionCount
+        );
       }
 
       if (selectedQuestions.length === 0) {
         Alert.alert(
           t("common.error"),
-          t("No questions match your selection", "選択条件に一致する問題がありません")
+          t(
+            "No questions match your selection",
+            "選択条件に一致する問題がありません"
+          )
         );
         setIsLoading(false);
         return;
       }
 
       // 選択した問題IDをクエリパラメータで渡す
-      const questionIds = selectedQuestions.map(q => q.id).join(',');
+      const questionIds = selectedQuestions.map((q) => q.id).join(",");
       router.push(`/(app)/quiz/${id}?questionIds=${questionIds}`);
     } catch (error) {
       console.error("Failed to select questions:", error);
@@ -574,11 +625,61 @@ question_text,correct_answer,category,difficulty`;
         </View>
       )}
 
-      <View style={styles.header}>
-        <Text style={styles.title}>{questionSet.title}</Text>
-        {questionSet.description && (
-          <Text style={styles.description}>{questionSet.description}</Text>
-        )}
+      <View style={styles.header} nativeID="question-set-header">
+        <Text style={styles.title} nativeID="question-set-title">
+          {questionSet.title}
+          {questionSet.description && (
+            <Text
+              style={styles.description}
+              nativeID="question-set-description"
+            >
+              {questionSet.description}
+            </Text>
+          )}
+        </Text>
+
+        <View style={styles.descriptionRow} nativeID="description-row">
+          {/* カテゴリリンク */}
+          {questionGroups.length > 0 && (
+            <View
+              style={styles.categoryLinksContainer}
+              nativeID="category-links-container"
+            >
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.categoryLinksScroll}
+                contentContainerStyle={styles.categoryLinksContent}
+                nativeID="category-links-scroll"
+              >
+                {questionGroups.map((group, index) => (
+                  <TouchableOpacity
+                    key={`category_link_${index}`}
+                    style={styles.categoryLink}
+                    onPress={() => {
+                      // 該当するカテゴリのインデックスまでスクロール
+                      if (flatListRef.current) {
+                        flatListRef.current.scrollToIndex({
+                          index: index,
+                          animated: true,
+                          viewPosition: 0, // 画面の上部に配置
+                        });
+                      }
+                    }}
+                  >
+                    <Text
+                      style={styles.categoryLinkText}
+                      nativeID={`category-link-text-${index}`}
+                    >
+                      {group.category || t("Uncategorized", "未分類")} (
+                      {group.count})
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+        </View>
         <View style={styles.metadata}>
           <Text style={styles.category}>{questionSet.category}</Text>
           {questionSet.is_published && (
@@ -609,21 +710,92 @@ question_text,correct_answer,category,difficulty`;
         </View>
       </View>
 
-      <FlatList
-        data={questions}
-        renderItem={renderQuestion}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No questions yet</Text>
-            <Text style={styles.emptySubtext}>Add your first question</Text>
-          </View>
-        }
-      />
+      {/* カテゴリ別にグループ化して表示 */}
+      {questionGroups.length > 0 ? (
+        <FlatList
+          ref={flatListRef}
+          data={questionGroups}
+          keyExtractor={(item, index) =>
+            `category_${item.category || "uncategorized"}_${index}`
+          }
+          contentContainerStyle={styles.listContainer}
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
+          }
+          onScrollToIndexFailed={(info) => {
+            // スクロール失敗時のフォールバック
+            const wait = new Promise((resolve) => setTimeout(resolve, 500));
+            wait.then(() => {
+              if (flatListRef.current) {
+                flatListRef.current.scrollToIndex({
+                  index: info.index,
+                  animated: true,
+                });
+              }
+            });
+          }}
+          renderItem={({ item: group }) => (
+            <View style={styles.categorySection}>
+              <View style={styles.categoryHeader}>
+                <Text style={styles.categoryTitle}>
+                  {group.category || t("Uncategorized", "未分類")}
+                </Text>
+                <Text style={styles.categoryCount}>
+                  {group.count} {t("questions", "問")}
+                </Text>
+                <TouchableOpacity
+                  style={styles.categoryQuizButton}
+                  onPress={() => {
+                    setSelectedCategory(group.category || "未分類");
+                    setSelectionMode("category");
+                    setSelectionModalVisible(true);
+                    // すぐにクイズを開始
+                    setTimeout(() => {
+                      handleStartQuizWithSelection();
+                    }, 100);
+                  }}
+                >
+                  <Text style={styles.categoryQuizButtonText}>
+                    {t("Start Quiz", "クイズ開始")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              {group.questions.map((question, index) => {
+                const globalIndex = questions.findIndex(
+                  (q) => q.id === question.id
+                );
+                return (
+                  <View key={question.id || `question_${index}`}>
+                    {renderQuestion({ item: question, index: globalIndex })}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No questions yet</Text>
+              <Text style={styles.emptySubtext}>Add your first question</Text>
+            </View>
+          }
+        />
+      ) : (
+        <FlatList
+          data={questions}
+          renderItem={renderQuestion}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No questions yet</Text>
+              <Text style={styles.emptySubtext}>Add your first question</Text>
+            </View>
+          }
+        />
+      )}
 
       <View style={styles.buttonContainer}>
         <View style={styles.buttonRow}>
@@ -634,8 +806,12 @@ question_text,correct_answer,category,difficulty`;
             ]}
             onPress={handleStartQuiz}
             disabled={questions.length === 0}
+            activeOpacity={0.7}
           >
-            <Text style={styles.startQuizButtonText}>
+            <Text
+              style={styles.startQuizButtonText}
+              nativeID="start-quiz-button-text"
+            >
               {t("questionSets.startQuiz")}
             </Text>
           </TouchableOpacity>
@@ -733,7 +909,15 @@ question_text,correct_answer,category,difficulty`;
               styles.selectionOption,
               selectionMode === "all" && styles.selectionOptionActive,
             ]}
-            onPress={() => setSelectionMode("all")}
+            onPress={() => {
+              if (selectionMode === "all") {
+                // 既に選択されている場合はクイズを開始
+                handleStartQuizWithSelection();
+              } else {
+                // 初回選択時はモードを設定
+                setSelectionMode("all");
+              }
+            }}
           >
             <View style={styles.selectionOptionHeader}>
               <Text
@@ -758,7 +942,15 @@ question_text,correct_answer,category,difficulty`;
               styles.selectionOption,
               selectionMode === "ai" && styles.selectionOptionActive,
             ]}
-            onPress={() => setSelectionMode("ai")}
+            onPress={() => {
+              if (selectionMode === "ai") {
+                // 既に選択されている場合はクイズを開始
+                handleStartQuizWithSelection();
+              } else {
+                // 初回選択時はモードを設定
+                setSelectionMode("ai");
+              }
+            }}
           >
             <View style={styles.selectionOptionHeader}>
               <Text
@@ -786,7 +978,9 @@ question_text,correct_answer,category,difficulty`;
                   value={questionCount.toString()}
                   onChangeText={(text) => {
                     const num = parseInt(text) || 10;
-                    setQuestionCount(Math.min(Math.max(num, 1), questions.length));
+                    setQuestionCount(
+                      Math.min(Math.max(num, 1), questions.length)
+                    );
                   }}
                   keyboardType="numeric"
                   placeholder="10"
@@ -798,15 +992,96 @@ question_text,correct_answer,category,difficulty`;
           <TouchableOpacity
             style={[
               styles.selectionOption,
-              selectionMode === "range" && styles.selectionOptionActive,
+              selectionMode === "category" && styles.selectionOptionActive,
             ]}
-            onPress={() => setSelectionMode("range")}
+            onPress={() => {
+              if (selectionMode === "category" && selectedCategory) {
+                // 既に選択されていてカテゴリも選択されている場合はクイズを開始
+                handleStartQuizWithSelection();
+              } else {
+                // 初回選択時はモードを設定
+                setSelectionMode("category");
+              }
+            }}
           >
             <View style={styles.selectionOptionHeader}>
               <Text
                 style={[
                   styles.selectionOptionTitle,
-                  selectionMode === "range" && styles.selectionOptionTitleActive,
+                  selectionMode === "category" &&
+                    styles.selectionOptionTitleActive,
+                ]}
+              >
+                📁 {t("Category Selection", "カテゴリ別選出")}
+              </Text>
+            </View>
+            <Text style={styles.selectionOptionDesc}>
+              {t("Select questions by category", "カテゴリごとに問題を選出")}
+            </Text>
+            {selectionMode === "category" && questionGroups.length > 0 && (
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>
+                  {t("Select Category", "カテゴリを選択")}:
+                </Text>
+                <FlatList
+                  data={questionGroups}
+                  keyExtractor={(item, index) =>
+                    `cat_${item.category || "uncategorized"}_${index}`
+                  }
+                  renderItem={({ item: group }) => (
+                    <TouchableOpacity
+                      style={[
+                        styles.categoryOption,
+                        selectedCategory === (group.category || "未分類") &&
+                          styles.categoryOptionActive,
+                      ]}
+                      onPress={() => {
+                        const category = group.category || "未分類";
+                        setSelectedCategory(category);
+                        // カテゴリ選択後、少し待ってからクイズを開始
+                        setTimeout(() => {
+                          handleStartQuizWithSelection();
+                        }, 300);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryOptionText,
+                          selectedCategory === (group.category || "未分類") &&
+                            styles.categoryOptionTextActive,
+                        ]}
+                      >
+                        {group.category || t("Uncategorized", "未分類")} (
+                        {group.count} {t("questions", "問")})
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.selectionOption,
+              selectionMode === "range" && styles.selectionOptionActive,
+            ]}
+            onPress={() => {
+              if (selectionMode === "range") {
+                // 既に選択されている場合はクイズを開始
+                handleStartQuizWithSelection();
+              } else {
+                // 初回選択時はモードを設定
+                setSelectionMode("range");
+              }
+            }}
+          >
+            <View style={styles.selectionOptionHeader}>
+              <Text
+                style={[
+                  styles.selectionOptionTitle,
+                  selectionMode === "range" &&
+                    styles.selectionOptionTitleActive,
                 ]}
               >
                 📊 {t("Range Selection", "範囲選出")}
@@ -829,7 +1104,9 @@ question_text,correct_answer,category,difficulty`;
                     value={rangeStart.toString()}
                     onChangeText={(text) => {
                       const num = parseInt(text) || 0;
-                      setRangeStart(Math.min(Math.max(num, 0), questions.length - 1));
+                      setRangeStart(
+                        Math.min(Math.max(num, 0), questions.length - 1)
+                      );
                     }}
                     keyboardType="numeric"
                     placeholder="0"
@@ -844,7 +1121,12 @@ question_text,correct_answer,category,difficulty`;
                     value={questionCount.toString()}
                     onChangeText={(text) => {
                       const num = parseInt(text) || 1;
-                      setQuestionCount(Math.min(Math.max(num, 1), questions.length - rangeStart));
+                      setQuestionCount(
+                        Math.min(
+                          Math.max(num, 1),
+                          questions.length - rangeStart
+                        )
+                      );
                     }}
                     keyboardType="numeric"
                     placeholder="10"
@@ -869,15 +1151,7 @@ question_text,correct_answer,category,difficulty`;
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  ...commonStyles,
   setupGuide: {
     backgroundColor: "#FFF8E1",
     padding: 16,
@@ -936,23 +1210,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#333",
   },
-  header: {
-    backgroundColor: "#fff",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 8,
-  },
-  description: {
-    fontSize: 16,
-    color: "#666",
-    marginBottom: 12,
-  },
   metadata: {
     flexDirection: "row",
     alignItems: "center",
@@ -990,85 +1247,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
   },
-  statsContainer: {
-    flexDirection: "row",
-    backgroundColor: "#fff",
-    padding: 20,
-    marginTop: 1,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
-  },
-  stat: {
-    flex: 1,
-    alignItems: "center",
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  statLabel: {
-    fontSize: 14,
-    color: "#666",
-    marginTop: 4,
-  },
-  listContainer: {
-    padding: 16,
-    paddingBottom: 100,
-  },
-  questionCard: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  questionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  questionNumber: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#007AFF",
-  },
   deleteText: {
     fontSize: 14,
     color: "#FF3B30",
     fontWeight: "600",
   },
-  questionText: {
-    fontSize: 16,
-    color: "#333",
-    marginBottom: 8,
-  },
-  statsContainer: {
-    flexDirection: "row",
-    gap: 16,
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
-  },
   statItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-  },
-  statGood: {
-    color: "#4CAF50",
-  },
-  statMedium: {
-    color: "#FF9800",
-  },
-  statPoor: {
-    color: "#F44336",
   },
   questionFooter: {
     flexDirection: "row",
@@ -1082,57 +1269,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
   },
-  emptyContainer: {
-    alignItems: "center",
-    marginTop: 40,
-  },
-  emptyText: {
-    fontSize: 18,
-    color: "#666",
-    marginBottom: 8,
-  },
   emptySubtext: {
     fontSize: 14,
     color: "#999",
-  },
-  buttonContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "#fff",
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
-    gap: 8,
-  },
-  buttonRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  startQuizButton: {
-    flex: 1,
-    backgroundColor: "#34C759",
-    borderRadius: 8,
-    padding: 14,
-    alignItems: "center",
-  },
-  startQuizButtonText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  flashcardButton: {
-    flex: 1,
-    backgroundColor: "#ff1d69ff",
-    borderRadius: 8,
-    padding: 14,
-    alignItems: "center",
-  },
-  flashcardButtonText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "600",
   },
   addButton: {
     flex: 1,
@@ -1206,81 +1345,6 @@ const styles = StyleSheet.create({
   editButtonText: {
     color: "#fff",
     fontSize: 15,
-    fontWeight: "600",
-  },
-  selectionModalContent: {
-    paddingVertical: 16,
-  },
-  selectionLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 12,
-  },
-  selectionOption: {
-    backgroundColor: "#f8f8f8",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  selectionOptionActive: {
-    backgroundColor: "#E3F2FD",
-    borderColor: "#007AFF",
-  },
-  selectionOptionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  selectionOptionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-  },
-  selectionOptionTitleActive: {
-    color: "#007AFF",
-  },
-  selectionOptionDesc: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 8,
-  },
-  inputContainer: {
-    marginTop: 12,
-    gap: 8,
-  },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  inputLabel: {
-    fontSize: 14,
-    color: "#333",
-    flex: 1,
-  },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 16,
-    backgroundColor: "#fff",
-  },
-  startButton: {
-    backgroundColor: "#34C759",
-    borderRadius: 8,
-    padding: 16,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  startButtonText: {
-    color: "#fff",
-    fontSize: 16,
     fontWeight: "600",
   },
 });

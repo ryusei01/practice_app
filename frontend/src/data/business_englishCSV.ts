@@ -59,5 +59,4 @@ optimization,,,最適化,We focus on process optimization.プロセス最適化�
 stakeholder,,,利害関係者,Stakeholders approved the plan.利害関係者が計画を承認しました。,1.0,
 contingency plan,,,代替計画,We prepared a contingency plan.代替計画を準備しました。,1.0,
 margin,,,利幅,Their profit margin increased.利益幅が増えました。,1.0,
-liquidity,,,流動性,We must maintain liquidity.流動性を維持しなければなりません。,1.0,
-`;
+liquidity,,,流動性,We must maintain liquidity.流動性を維持しなければなりません。,1.0,`;

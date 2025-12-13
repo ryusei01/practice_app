@@ -22,16 +22,23 @@ export default function Header({ title }: HeaderProps) {
             onPress={() => router.back()}
             nativeID="header-back-btn"
           >
-            <Text style={styles.backButtonText} nativeID="header-back-text">←</Text>
+            <Text style={styles.backButtonText} nativeID="header-back-text">
+              ←
+            </Text>
           </TouchableOpacity>
         )}
 
         <View style={styles.titleContainer}>
           <Text style={styles.appName} nativeID="app-name">
-            AI Practice Book <Text style={styles.beta} nativeID="app-version">Ver.β</Text>
+            AI Practice Book{" "}
+            <Text style={styles.beta} nativeID="app-version">
+              Ver.β
+            </Text>
           </Text>
           {title && (
-            <Text style={styles.pageTitle} nativeID="page-title">{title}</Text>
+            <Text style={styles.pageTitle} nativeID="page-title">
+              {title}
+            </Text>
           )}
         </View>
       </View>
@@ -44,7 +51,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#007AFF",
     paddingVertical: 16,
     paddingHorizontal: 20,
-    paddingTop: 50, // ステータスバー分のスペース
+    paddingTop: 10, // ステータスバー分のスペース
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,

@@ -12,29 +12,42 @@ interface CSVFile {
 // 全CSVファイルのコンテンツをここにインポート（自動生成）
 import { AiPractice_CSV } from "../data/ai_practiceCSV";
 import { BusinessEnglish_CSV } from "../data/business_englishCSV";
+import { DeepLearningEngineeringQuestions_CSV } from "../data/deep_learning_engineering_questionsCSV";
+import { EQualificationQuestionSet_CSV } from "../data/e_qualification_question_setCSV";
 import { JapaneseWordbook_CSV } from "../data/japanese_wordbookCSV";
 
 // CSVファイルのリスト
 const CSV_FILES: CSVFile[] = [
   {
     fileName: "ai_practice.csv",
-    title: "AI Practice",
-    description: "AI technology questions",
+    title: "ai practice",
+    description: "ai practice",
     csvContent: AiPractice_CSV,
   },
   {
     fileName: "business_english.csv",
-    title: "ビジネス英単語",
-    description: "ビジネスシーンで使われる基礎的な英単語集",
+    title: "business english",
+    description: "business english",
     csvContent: BusinessEnglish_CSV,
   },
   {
-    fileName: "japanese_wordbook.csv",
-    title: "Japanese Vocabulary Book (N5-N1)",
-    description:
-      "JLPT level-based Japanese vocabulary. 465 words from N5 to N1",
-    csvContent: JapaneseWordbook_CSV,
+    fileName: "Deep_Learning_Engineering_Questions.csv",
+    title: "Deep Learning Engineering Questions",
+    description: "Deep Learning Engineering Questions",
+    csvContent: DeepLearningEngineeringQuestions_CSV,
   },
+  {
+    fileName: "E資格_問題集.csv",
+    title: "E資格 問題集",
+    description: "E資格 問題集",
+    csvContent: EQualificationQuestionSet_CSV,
+  },
+  {
+    fileName: "japanese_wordbook.csv",
+    title: "japanese wordbook",
+    description: "japanese wordbook",
+    csvContent: JapaneseWordbook_CSV,
+  }
 ];
 
 /**

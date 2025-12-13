@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   Platform,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { useLanguage } from "../../src/contexts/LanguageContext";
 import {
   localStorageService,
@@ -68,9 +68,14 @@ export default function TrialQuestionSetsScreen() {
     }
   };
 
-  useEffect(() => {
-    loadQuestionSets();
+  // 画面がフォーカスされたときに問題セット一覧を再読み込み
+  useFocusEffect(
+    useCallback(() => {
+      loadQuestionSets();
+    }, [])
+  );
 
+  useEffect(() => {
     // Web版の場合、動的にメタタグを設定
     if (Platform.OS === "web") {
       document.title = "AI Practice Book Ver.β";

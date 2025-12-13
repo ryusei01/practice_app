@@ -28,10 +28,13 @@ export const localStorageService = {
   // 問題セット一覧を取得
   async getTrialQuestionSets(): Promise<LocalQuestionSet[]> {
     try {
-      console.log('[LocalStorage] Getting trial question sets from key:', TRIAL_QUESTION_SETS_KEY);
+      console.log(
+        "[LocalStorage] Getting trial question sets from key:",
+        TRIAL_QUESTION_SETS_KEY
+      );
       const data = await AsyncStorage.getItem(TRIAL_QUESTION_SETS_KEY);
       const sets = data ? JSON.parse(data) : [];
-      console.log('[LocalStorage] Found', sets.length, 'question sets');
+      console.log("[LocalStorage] Found", sets.length, "question sets");
       return sets;
     } catch (error) {
       console.error("Error getting trial question sets:", error);
@@ -57,8 +60,13 @@ export const localStorageService = {
     } catch (error: any) {
       console.error("Error saving trial question set:", error);
       // 容量超過エラーの場合
-      if (error?.name === 'QuotaExceededError' || error?.message?.includes('quota')) {
-        throw new Error('Storage quota exceeded. Please delete some question sets or clear old data.');
+      if (
+        error?.name === "QuotaExceededError" ||
+        error?.message?.includes("quota")
+      ) {
+        throw new Error(
+          "Storage quota exceeded. Please delete some question sets or clear old data."
+        );
       }
       throw error;
     }
@@ -131,15 +139,23 @@ export const localStorageService = {
     } catch (error: any) {
       console.error("Error saving trial result:", error);
       // 容量超過エラーの場合
-      if (error?.name === 'QuotaExceededError' || error?.message?.includes('quota')) {
-        throw new Error('Storage quota exceeded. Please clear old quiz results.');
+      if (
+        error?.name === "QuotaExceededError" ||
+        error?.message?.includes("quota")
+      ) {
+        throw new Error(
+          "Storage quota exceeded. Please clear old quiz results."
+        );
       }
       throw error;
     }
   },
 
   // 古い回答履歴を削除（最新のN件のみ保持）
-  async cleanupOldAnswers(questionSetId: string, keepCount: number = 1000): Promise<void> {
+  async cleanupOldAnswers(
+    questionSetId: string,
+    keepCount: number = 1000
+  ): Promise<void> {
     try {
       const storageKey = `@flashcard_answers_${questionSetId}`;
       const answersData = await AsyncStorage.getItem(storageKey);
@@ -157,7 +173,9 @@ export const localStorageService = {
 
       const keptAnswers = sortedAnswers.slice(0, keepCount);
       await AsyncStorage.setItem(storageKey, JSON.stringify(keptAnswers));
-      console.log(`[LocalStorage] Cleaned up answers for ${questionSetId}: kept ${keptAnswers.length} of ${answers.length}`);
+      console.log(
+        `[LocalStorage] Cleaned up answers for ${questionSetId}: kept ${keptAnswers.length} of ${answers.length}`
+      );
     } catch (error) {
       console.error("Error cleaning up old answers:", error);
     }
@@ -168,9 +186,12 @@ export const localStorageService = {
     try {
       let totalSize = 0;
       const keys = await AsyncStorage.getAllKeys();
-      
+
       for (const key of keys) {
-        if (key.startsWith('@trial_') || key.startsWith('@flashcard_answers_')) {
+        if (
+          key.startsWith("@trial_") ||
+          key.startsWith("@flashcard_answers_")
+        ) {
           const value = await AsyncStorage.getItem(key);
           if (value) {
             totalSize += value.length * 2; // UTF-16文字列として概算（バイト数）
@@ -181,14 +202,14 @@ export const localStorageService = {
       // MBに変換
       const mb = totalSize / (1024 * 1024);
       if (mb >= 1) {
-        return { approximate: Math.round(mb * 10) / 10, unit: 'MB' };
+        return { approximate: Math.round(mb * 10) / 10, unit: "MB" };
       } else {
         const kb = totalSize / 1024;
-        return { approximate: Math.round(kb * 10) / 10, unit: 'KB' };
+        return { approximate: Math.round(kb * 10) / 10, unit: "KB" };
       }
     } catch (error) {
       console.error("Error getting storage usage:", error);
-      return { approximate: 0, unit: 'KB' };
+      return { approximate: 0, unit: "KB" };
     }
   },
 
@@ -207,23 +228,37 @@ export const localStorageService = {
 
   // デフォルト問題セットを初期化
   async initializeDefaultQuestions(
-    defaultSets: Omit<LocalQuestionSet, "createdAt" | "isTrial">[]
+    defaultSets: Omit<LocalQuestionSet, "id" | "createdAt" | "isTrial">[]
   ): Promise<void> {
     try {
-      console.log('[LocalStorage] initializeDefaultQuestions called with', defaultSets.length, 'sets');
-      const initialized = await AsyncStorage.getItem(DEFAULT_INITIALIZED_KEY);
-      console.log('[LocalStorage] Already initialized?', initialized === "true");
-
-      if (initialized === "true") {
-        console.log("[LocalStorage] Default questions already initialized, skipping");
-        return;
-      }
+      console.log(
+        "[LocalStorage] initializeDefaultQuestions called with",
+        defaultSets.length,
+        "sets"
+      );
 
       const existingSets = await this.getTrialQuestionSets();
-      console.log('[LocalStorage] Existing sets:', existingSets.length);
+      console.log("[LocalStorage] Existing sets:", existingSets.length);
 
+      // 既存の問題セットのタイトルをセットに変換（重複チェック用）
+      const existingTitles = new Set(
+        existingSets
+          .filter((set) => set.id.startsWith("default_"))
+          .map((set) => set.title)
+      );
+
+      let addedCount = 0;
       for (const defaultSet of defaultSets) {
-        console.log('[LocalStorage] Adding default set:', defaultSet.title);
+        // 既に存在するタイトルの場合はスキップ
+        if (existingTitles.has(defaultSet.title)) {
+          console.log(
+            "[LocalStorage] Skipping existing set:",
+            defaultSet.title
+          );
+          continue;
+        }
+
+        console.log("[LocalStorage] Adding new default set:", defaultSet.title);
         const newSet: LocalQuestionSet = {
           ...defaultSet,
           id: `default_${Date.now()}_${Math.random()
@@ -233,15 +268,31 @@ export const localStorageService = {
           isTrial: true,
         };
         existingSets.push(newSet);
+        addedCount++;
       }
 
-      console.log('[LocalStorage] Total sets after adding defaults:', existingSets.length);
-      await AsyncStorage.setItem(
-        TRIAL_QUESTION_SETS_KEY,
-        JSON.stringify(existingSets)
-      );
-      await AsyncStorage.setItem(DEFAULT_INITIALIZED_KEY, "true");
-      console.log("[LocalStorage] Default questions initialized successfully");
+      if (addedCount > 0) {
+        console.log(
+          "[LocalStorage] Total sets after adding defaults:",
+          existingSets.length
+        );
+        await AsyncStorage.setItem(
+          TRIAL_QUESTION_SETS_KEY,
+          JSON.stringify(existingSets)
+        );
+        console.log(
+          `[LocalStorage] Added ${addedCount} new default question set(s)`
+        );
+      } else {
+        console.log("[LocalStorage] No new default question sets to add");
+      }
+
+      // 初期化済みフラグを設定（初回のみ）
+      const initialized = await AsyncStorage.getItem(DEFAULT_INITIALIZED_KEY);
+      if (initialized !== "true") {
+        await AsyncStorage.setItem(DEFAULT_INITIALIZED_KEY, "true");
+        console.log("[LocalStorage] Default questions initialization flag set");
+      }
     } catch (error) {
       console.error("Error initializing default questions:", error);
       throw error;
