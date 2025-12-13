@@ -333,8 +333,11 @@ export function evaluateTextAnswer(correctAnswer: string, userAnswer: string, la
     userAnswer,
   });
 
+  // 改行で分割し、最初の行を正解として使用（例文などを除外）
+  const firstLine = correctAnswer.split('\n')[0].trim();
+
   // 「/」で区切られた複数の正解パターンに対応
-  const correctAnswerPatterns = correctAnswer.split('/').map(s => s.trim());
+  const correctAnswerPatterns = firstLine.split('/').map(s => s.trim());
   console.log('[evaluateTextAnswer] Patterns:', correctAnswerPatterns);
 
   let bestResult: EvaluationResult = {

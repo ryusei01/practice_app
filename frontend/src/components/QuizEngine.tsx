@@ -9,6 +9,7 @@ import {
   Alert,
   TextInput,
   Platform,
+  Modal,
 } from "react-native";
 import { useLanguage } from "../contexts/LanguageContext";
 import { evaluateTextAnswer } from "../utils/aiEvaluator";
@@ -45,6 +46,7 @@ export interface QuizEngineProps {
   headerColor?: string;
   showAdvancedFeatures?: boolean; // 音声読み上げ、AI評価など
   initialRedSheetEnabled?: boolean; // 赤シート機能の初期状態
+  initialQuestionIndex?: number; // 開始する問題のインデックス
 }
 
 export default function QuizEngine({
@@ -54,10 +56,11 @@ export default function QuizEngine({
   headerColor = "#007AFF",
   showAdvancedFeatures = true,
   initialRedSheetEnabled = false,
+  initialQuestionIndex = 0,
 }: QuizEngineProps) {
   const { t, language } = useLanguage();
 
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(initialQuestionIndex);
   const [userAnswer, setUserAnswer] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [startTime, setStartTime] = useState<number>(Date.now());
@@ -75,6 +78,11 @@ export default function QuizEngine({
   const [translatedQuestion, setTranslatedQuestion] = useState<string>("");
   const [isTranslating, setIsTranslating] = useState(false);
   const [showTranslation, setShowTranslation] = useState(false);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [showOverrideModal, setShowOverrideModal] = useState(false);
+  const [overrideType, setOverrideType] = useState<'correct' | 'incorrect'>('correct');
+  const [overrideMessage, setOverrideMessage] = useState("");
 
   const answersRef = useRef(answers);
   useEffect(() => {
@@ -192,11 +200,18 @@ export default function QuizEngine({
 
       // text_input問題の場合はAI評価（高度な機能が有効な場合のみ）
       if (questionType === "text_input" && showAdvancedFeatures) {
+        console.log('[QuizEngine] Calling AI evaluation with:', {
+          correctAnswer: currentQuestion.correct_answer,
+          userAnswer: userAnswer,
+          language: language,
+          questionType: questionType
+        });
         const evaluation = evaluateTextAnswer(
           currentQuestion.correct_answer,
           userAnswer,
-          language
+          language as 'en' | 'ja'
         );
+        console.log('[QuizEngine] AI evaluation result:', evaluation);
         correct = evaluation.is_correct;
         feedback = evaluation.feedback;
         confidence = evaluation.confidence;
@@ -237,54 +252,43 @@ export default function QuizEngine({
   };
 
   const handleOverrideCorrect = () => {
-    Alert.alert(
-      t("Mark as Correct?", "正解として記録しますか？"),
-      t("Save this answer as correct.", "この回答を正解として保存します。"),
-      [
-        { text: t("Cancel", "キャンセル"), style: "cancel" },
-        {
-          text: t("Mark Correct", "正解として記録"),
-          onPress: () => {
-            const updatedAnswers = [...answers];
-            updatedAnswers[updatedAnswers.length - 1].is_correct = true;
-            setAnswers(updatedAnswers);
-
-            setIsCorrect(true);
-            setScore(score + 1);
-            setEvaluationFeedback(
-              t("✓ Marked as correct by user", "✓ ユーザーが正解として記録しました")
-            );
-            setCanOverride(false);
-          },
-        },
-      ]
-    );
+    setOverrideType('correct');
+    setShowOverrideModal(true);
   };
 
   const handleOverrideIncorrect = () => {
-    Alert.alert(
-      t("Mark as Incorrect?", "不正解として記録しますか？"),
-      t("Save this answer as incorrect.", "この回答を不正解として保存します。"),
-      [
-        { text: t("Cancel", "キャンセル"), style: "cancel" },
-        {
-          text: t("Mark Incorrect", "不正解として記録"),
-          style: "destructive",
-          onPress: () => {
-            const updatedAnswers = [...answers];
-            updatedAnswers[updatedAnswers.length - 1].is_correct = false;
-            setAnswers(updatedAnswers);
+    setOverrideType('incorrect');
+    setShowOverrideModal(true);
+  };
 
-            setIsCorrect(false);
-            setScore(score - 1);
-            setEvaluationFeedback(
-              t("✗ Marked as incorrect by user", "✗ ユーザーが不正解として記録しました")
-            );
-            setCanOverride(false);
-          },
-        },
-      ]
-    );
+  const confirmOverride = () => {
+    const updatedAnswers = [...answers];
+    updatedAnswers[updatedAnswers.length - 1].is_correct = overrideType === 'correct';
+    setAnswers(updatedAnswers);
+
+    if (overrideType === 'correct') {
+      setIsCorrect(true);
+      setScore(score + 1);
+      const message = t("✓ Marked as correct by user", "✓ ユーザーが正解として記録しました");
+      setEvaluationFeedback(message);
+      setOverrideMessage(message);
+    } else {
+      setIsCorrect(false);
+      if (isCorrect) {
+        setScore(score - 1);
+      }
+      const message = t("✗ Marked as incorrect by user", "✗ ユーザーが不正解として記録しました");
+      setEvaluationFeedback(message);
+      setOverrideMessage(message);
+    }
+
+    setCanOverride(false);
+    setShowOverrideModal(false);
+
+    // 3秒後にメッセージを消す
+    setTimeout(() => {
+      setOverrideMessage("");
+    }, 3000);
   };
 
   const handleNextQuestion = () => {
@@ -299,6 +303,16 @@ export default function QuizEngine({
       const totalTime = answersRef.current.reduce((sum, answer) => sum + answer.answer_time_sec, 0);
       onComplete(answersRef.current, score, totalTime);
     }
+  };
+
+  const handleSubmitEarly = () => {
+    setShowSubmitModal(true);
+  };
+
+  const confirmSubmitEarly = () => {
+    setShowSubmitModal(false);
+    const totalTime = answersRef.current.reduce((sum, answer) => sum + answer.answer_time_sec, 0);
+    setShowResultModal(true);
   };
 
   const renderAnswerInput = () => {
@@ -502,7 +516,7 @@ export default function QuizEngine({
               {t("Correct Answer:", "正解:")}
             </Text>
             <Text style={styles.correctAnswerValue}>
-              {currentQuestion.correct_answer}
+              {currentQuestion.correct_answer.split('\n')[0]}
             </Text>
           </View>
 
@@ -547,28 +561,6 @@ export default function QuizEngine({
             </View>
           </View>
 
-          {canOverride && !isCorrect && (
-            <TouchableOpacity
-              style={styles.overrideButton}
-              onPress={handleOverrideCorrect}
-            >
-              <Text style={styles.overrideButtonText}>
-                💡 {t("Actually Correct", "実は正解だった")}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {canOverride && isCorrect && (
-            <TouchableOpacity
-              style={styles.overrideButtonIncorrect}
-              onPress={handleOverrideIncorrect}
-            >
-              <Text style={styles.overrideButtonText}>
-                ⚠️ {t("Actually Incorrect", "実は不正解だった")}
-              </Text>
-            </TouchableOpacity>
-          )}
-
           {currentQuestion.explanation && (
             <View style={styles.explanationContainer}>
               <Text style={styles.explanationLabel}>{t("Explanation:", "解説:")}</Text>
@@ -606,12 +598,156 @@ export default function QuizEngine({
           </TouchableOpacity>
         )}
 
+        {totalAnswered > 0 && !showResult && (
+          <TouchableOpacity
+            style={styles.submitEarlyButton}
+            onPress={handleSubmitEarly}
+          >
+            <Text style={styles.submitEarlyButtonText}>
+              📤 {t("Submit Now", "今すぐ送信")} ({totalAnswered}/{questions.length})
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {onQuit && (
           <TouchableOpacity style={styles.quitButton} onPress={onQuit}>
             <Text style={styles.quitButtonText}>{t("Quit Quiz", "終了")}</Text>
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Submit Confirmation Modal */}
+      <Modal
+        transparent={true}
+        visible={showSubmitModal}
+        animationType="fade"
+        onRequestClose={() => setShowSubmitModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              {t("Submit Early?", "途中で送信しますか？")}
+            </Text>
+            <Text style={styles.modalMessage}>
+              {t(
+                "You have answered {answered} out of {total} questions. Submit your answers now?",
+                "{total}問中{answered}問に回答しました。今すぐ送信しますか？"
+              ).replace("{answered}", totalAnswered.toString()).replace("{total}", questions.length.toString())}
+            </Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setShowSubmitModal(false)}
+              >
+                <Text style={styles.modalButtonTextCancel}>
+                  {t("Cancel", "キャンセル")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonConfirm]}
+                onPress={confirmSubmitEarly}
+              >
+                <Text style={styles.modalButtonTextConfirm}>
+                  {t("Submit", "送信")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Result Modal */}
+      <Modal
+        transparent={true}
+        visible={showResultModal}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowResultModal(false);
+          const totalTime = answersRef.current.reduce((sum, answer) => sum + answer.answer_time_sec, 0);
+          onComplete(answersRef.current, score, totalTime);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              {t("Quiz Results", "クイズ結果")}
+            </Text>
+            <View style={styles.resultStats}>
+              <Text style={styles.resultScore}>
+                {t("Score", "得点")}: {score}/{totalAnswered}
+              </Text>
+              <Text style={styles.resultAccuracy}>
+                {t("Accuracy", "正解率")}: {totalAnswered > 0 ? ((score / totalAnswered) * 100).toFixed(1) : 0}%
+              </Text>
+              <Text style={styles.resultAnswered}>
+                {t("Answered", "回答数")}: {totalAnswered}/{questions.length}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalButtonConfirm]}
+              onPress={() => {
+                setShowResultModal(false);
+                const totalTime = answersRef.current.reduce((sum, answer) => sum + answer.answer_time_sec, 0);
+                onComplete(answersRef.current, score, totalTime);
+              }}
+            >
+              <Text style={styles.modalButtonTextConfirm}>
+                {t("OK", "OK")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Override Confirmation Modal */}
+      <Modal
+        transparent={true}
+        visible={showOverrideModal}
+        animationType="fade"
+        onRequestClose={() => setShowOverrideModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              {overrideType === 'correct'
+                ? t("Mark as Correct?", "正解として記録しますか？")
+                : t("Mark as Incorrect?", "不正解として記録しますか？")}
+            </Text>
+            <Text style={styles.modalMessage}>
+              {overrideType === 'correct'
+                ? t("Save this answer as correct.", "この回答を正解として保存します。")
+                : t("Save this answer as incorrect.", "この回答を不正解として保存します。")}
+            </Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setShowOverrideModal(false)}
+              >
+                <Text style={styles.modalButtonTextCancel}>
+                  {t("Cancel", "キャンセル")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, overrideType === 'correct' ? styles.modalButtonConfirm : styles.modalButtonDanger]}
+                onPress={confirmOverride}
+              >
+                <Text style={styles.modalButtonTextConfirm}>
+                  {overrideType === 'correct'
+                    ? t("Mark Correct", "正解として記録")
+                    : t("Mark Incorrect", "不正解として記録")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Override Message */}
+      {overrideMessage && (
+        <View style={styles.overrideMessageContainer}>
+          <Text style={styles.overrideMessageText}>{overrideMessage}</Text>
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -889,6 +1025,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
+  submitEarlyButton: {
+    backgroundColor: "#FF9800",
+    borderRadius: 8,
+    padding: 16,
+    alignItems: "center",
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: "#F57C00",
+  },
+  submitEarlyButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
   quitButton: {
     backgroundColor: "#fff",
     borderRadius: 8,
@@ -980,5 +1130,109 @@ const styles = StyleSheet.create({
   manualButtonTextActive: {
     color: "#333",
     fontWeight: "700",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 24,
+    width: "85%",
+    maxWidth: 400,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 24,
+    textAlign: "center",
+    lineHeight: 24,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  modalButtonCancel: {
+    backgroundColor: "#f0f0f0",
+    borderWidth: 1,
+    borderColor: "#ccc",
+  },
+  modalButtonConfirm: {
+    backgroundColor: "#007AFF",
+  },
+  modalButtonTextCancel: {
+    color: "#666",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  modalButtonTextConfirm: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  resultStats: {
+    marginBottom: 24,
+    gap: 12,
+  },
+  resultScore: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#007AFF",
+    textAlign: "center",
+  },
+  resultAccuracy: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#34C759",
+    textAlign: "center",
+  },
+  resultAnswered: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+  },
+  modalButtonDanger: {
+    backgroundColor: "#F44336",
+  },
+  overrideMessageContainer: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    right: 20,
+    backgroundColor: "#333",
+    borderRadius: 8,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  overrideMessageText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
   },
 });

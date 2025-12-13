@@ -9,13 +9,14 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
 import { localStorageService, LocalQuestionSet } from "../../../src/services/localStorageService";
 import Header from "../../../src/components/Header";
 import QuizEngine, { QuizQuestion, QuizAnswer } from "../../../src/components/QuizEngine";
 
 export default function TrialQuizScreen() {
-  const { id } = useLocalSearchParams();
+  const { id, startIndex } = useLocalSearchParams<{ id: string; startIndex?: string }>();
   const [questionSet, setQuestionSet] = useState<LocalQuestionSet | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [finalScore, setFinalScore] = useState(0);
@@ -58,18 +59,35 @@ export default function TrialQuizScreen() {
 
     // 結果を保存
     try {
+      // サマリーを保存（回答数ベース）
       await localStorageService.saveTrialResult(questionSet.id, {
         score: score,
-        totalQuestions: questionSet.questions.length,
+        totalQuestions: answers.length, // 回答した問題数
         completedAt: new Date().toISOString(),
       });
+
+      // 詳細な回答データを保存（フラッシュカードと同じキーを使用）
+      const storageKey = `@flashcard_answers_${questionSet.id}`;
+      const existingData = await AsyncStorage.getItem(storageKey);
+      const existingAnswers = existingData ? JSON.parse(existingData) : [];
+
+      const newAnswerDataArray = answers.map((ans) => ({
+        question_id: ans.question_id,
+        question_set_id: questionSet.id,
+        is_correct: ans.is_correct,
+        answer_time_sec: ans.answer_time_sec,
+        answered_at: new Date().toISOString(),
+      }));
+
+      const combinedAnswers = [...existingAnswers, ...newAnswerDataArray];
+      await AsyncStorage.setItem(storageKey, JSON.stringify(combinedAnswers));
     } catch (error) {
       console.error("Error saving trial result:", error);
     }
 
-    // 結果画面を表示
+    // 結果画面を表示（回答数ベース）
     setFinalScore(score);
-    setFinalTotal(questionSet.questions.length);
+    setFinalTotal(answers.length); // 回答した問題数
     setShowResult(true);
   };
 
@@ -104,7 +122,7 @@ export default function TrialQuizScreen() {
 
     return (
       <View style={styles.container}>
-        <Header />
+        <Header title={t("Quiz Result", "クイズ結果")} />
         <ScrollView contentContainerStyle={styles.resultContainer}>
           <Text style={styles.resultTitle}>{t("Quiz Complete!", "クイズ完了！")}</Text>
           <Text style={styles.resultScore}>
@@ -118,7 +136,7 @@ export default function TrialQuizScreen() {
 
           <TouchableOpacity
             style={[styles.button, styles.buttonOutline]}
-            onPress={() => router.back()}
+            onPress={() => router.push(`/(trial)/set/${id}`)}
           >
             <Text style={[styles.buttonText, styles.buttonOutlineText]}>
               {t("Back to List", "一覧に戻る")}
@@ -131,7 +149,7 @@ export default function TrialQuizScreen() {
 
   // LocalQuestionをQuizQuestionに変換
   const quizQuestions: QuizQuestion[] = questionSet.questions.map((q, index) => ({
-    id: `${questionSet.id}_q${index}`,
+    id: q.id || `${questionSet.id}_q${index}`,
     question_text: q.question,
     correct_answer: q.answer,
     question_type: "text_input",
@@ -139,7 +157,7 @@ export default function TrialQuizScreen() {
 
   return (
     <View style={styles.container}>
-      <Header />
+      <Header title={questionSet.title} />
       <View style={styles.trialBadge}>
         <Text style={styles.trialBadgeText}>
           {t("Trial Mode", "お試しモード")}
@@ -148,10 +166,11 @@ export default function TrialQuizScreen() {
       <QuizEngine
         questions={quizQuestions}
         onComplete={handleQuizComplete}
-        onQuit={() => router.back()}
+        onQuit={() => router.push(`/(trial)/set/${id}`)}
         headerColor="#34C759"
         showAdvancedFeatures={true}
         initialRedSheetEnabled={questionSet.redSheetEnabled || false}
+        initialQuestionIndex={parseInt(startIndex || "0")}
       />
     </View>
   );

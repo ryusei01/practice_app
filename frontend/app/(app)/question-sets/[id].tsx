@@ -15,9 +15,18 @@ import * as FileSystem from "expo-file-system";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
 import { useTranslation } from "react-i18next";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { questionSetsApi, QuestionSet } from "../../../src/api/questionSets";
 import { questionsApi, Question } from "../../../src/api/questions";
 import Modal from "../../../src/components/Modal";
+
+// 問題ごとの回答統計
+interface QuestionStats {
+  totalAttempts: number;
+  correctCount: number;
+  accuracy: number;
+  lastAnsweredAt: string | null;
+}
 
 export default function QuestionSetDetailScreen() {
   const { id, mode } = useLocalSearchParams<{ id: string; mode?: string }>();
@@ -29,6 +38,7 @@ export default function QuestionSetDetailScreen() {
   const [setupMode, setSetupMode] = useState(mode === "setup");
   const [setupStep, setSetupStep] = useState(1);
   const router = useRouter();
+  const [questionStats, setQuestionStats] = useState<Map<string, QuestionStats>>(new Map());
 
   // 問題選択モーダル用のstate
   const [selectionModalVisible, setSelectionModalVisible] = useState(false);
@@ -78,12 +88,57 @@ export default function QuestionSetDetailScreen() {
       ]);
       setQuestionSet(setData);
       setQuestions(questionsData);
+
+      // 回答データを読み込み
+      await loadAnswerStats();
     } catch (error) {
       console.error("Failed to load data:", error);
       Alert.alert("Error", "Failed to load question set");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
+    }
+  };
+
+  const loadAnswerStats = async () => {
+    try {
+      const storageKey = `@flashcard_answers_${id}`;
+      const answersData = await AsyncStorage.getItem(storageKey);
+
+      if (!answersData) {
+        return;
+      }
+
+      const answers = JSON.parse(answersData);
+      const statsMap = new Map<string, QuestionStats>();
+
+      // 各問題の統計を計算
+      answers.forEach((answer: any) => {
+        const questionId = answer.question_id;
+        const existing = statsMap.get(questionId) || {
+          totalAttempts: 0,
+          correctCount: 0,
+          accuracy: 0,
+          lastAnsweredAt: null,
+        };
+
+        existing.totalAttempts += 1;
+        if (answer.is_correct) {
+          existing.correctCount += 1;
+        }
+        existing.accuracy = (existing.correctCount / existing.totalAttempts) * 100;
+
+        // 最新の回答日時を更新
+        if (!existing.lastAnsweredAt || answer.answered_at > existing.lastAnsweredAt) {
+          existing.lastAnsweredAt = answer.answered_at;
+        }
+
+        statsMap.set(questionId, existing);
+      });
+
+      setQuestionStats(statsMap);
+    } catch (error) {
+      console.error("Failed to load answer stats:", error);
     }
   };
 
@@ -355,23 +410,54 @@ ${t("csv.importantNotes")}:
   }: {
     item: Question;
     index: number;
-  }) => (
-    <View style={styles.questionCard}>
-      <View style={styles.questionHeader}>
-        <Text style={styles.questionNumber}>Q{index + 1}</Text>
-        <TouchableOpacity onPress={() => handleDeleteQuestion(item.id)}>
-          <Text style={styles.deleteText}>Delete</Text>
-        </TouchableOpacity>
+  }) => {
+    const stats = questionStats.get(item.id);
+
+    return (
+      <View style={styles.questionCard}>
+        <View style={styles.questionHeader}>
+          <Text style={styles.questionNumber}>Q{index + 1}</Text>
+          <TouchableOpacity onPress={() => handleDeleteQuestion(item.id)}>
+            <Text style={styles.deleteText}>Delete</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.questionText}>{item.question_text}</Text>
+        <View style={styles.questionFooter}>
+          <Text style={styles.questionType}>{item.question_type}</Text>
+          <Text style={styles.difficulty}>
+            Difficulty: {(item.difficulty * 100).toFixed(0)}%
+          </Text>
+        </View>
+
+        {/* 回答統計を表示 */}
+        {stats && (
+          <View style={styles.statsContainer}>
+            <View style={styles.statItem}>
+              <Text style={styles.statLabel}>{t("Accuracy", "正解率")}:</Text>
+              <Text
+                style={[
+                  styles.statValue,
+                  stats.accuracy >= 80
+                    ? styles.statGood
+                    : stats.accuracy >= 50
+                    ? styles.statMedium
+                    : styles.statPoor,
+                ]}
+              >
+                {stats.accuracy.toFixed(0)}%
+              </Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statLabel}>{t("Attempts", "回答数")}:</Text>
+              <Text style={styles.statValue}>
+                {stats.correctCount}/{stats.totalAttempts}
+              </Text>
+            </View>
+          </View>
+        )}
       </View>
-      <Text style={styles.questionText}>{item.question_text}</Text>
-      <View style={styles.questionFooter}>
-        <Text style={styles.questionType}>{item.question_type}</Text>
-        <Text style={styles.difficulty}>
-          Difficulty: {(item.difficulty * 100).toFixed(0)}%
-        </Text>
-      </View>
-    </View>
-  );
+    );
+  };
 
   if (isLoading) {
     return (
@@ -960,7 +1046,29 @@ const styles = StyleSheet.create({
   questionText: {
     fontSize: 16,
     color: "#333",
-    marginBottom: 12,
+    marginBottom: 8,
+  },
+  statsContainer: {
+    flexDirection: "row",
+    gap: 16,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#e0e0e0",
+  },
+  statItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  statGood: {
+    color: "#4CAF50",
+  },
+  statMedium: {
+    color: "#FF9800",
+  },
+  statPoor: {
+    color: "#F44336",
   },
   questionFooter: {
     flexDirection: "row",

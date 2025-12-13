@@ -99,7 +99,7 @@ export default function TrialCreateScreen() {
 
   return (
     <View style={styles.container}>
-      <Header />
+      <Header title={t("Create Question Set", "問題セットを作成")} />
       <ScrollView style={styles.content}>
         <Text style={styles.title}>
           {t("Create Question Set (Trial)", "問題セットを作成 (お試し)")}

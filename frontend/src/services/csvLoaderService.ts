@@ -1,5 +1,5 @@
 // CSVファイルを自動的に読み込むサービス
-import { localStorageService } from './localStorageService';
+import { localStorageService } from "./localStorageService";
 
 // CSVファイルのメタデータ
 interface CSVFile {
@@ -10,28 +10,29 @@ interface CSVFile {
 }
 
 // 全CSVファイルのコンテンツをここにインポート（自動生成）
-import { AiPractice_CSV } from '../data/ai_practiceCSV';
-import { BusinessEnglish_CSV } from '../data/business_englishCSV';
-import { JapaneseWordbook_CSV } from '../data/japanese_wordbookCSV';
+import { AiPractice_CSV } from "../data/ai_practiceCSV";
+import { BusinessEnglish_CSV } from "../data/business_englishCSV";
+import { JapaneseWordbook_CSV } from "../data/japanese_wordbookCSV";
 
 // CSVファイルのリスト
 const CSV_FILES: CSVFile[] = [
   {
-    fileName: 'ai_practice.csv',
-    title: 'AI Practice',
-    description: 'AI技術に関する問題集',
+    fileName: "ai_practice.csv",
+    title: "AI Practice",
+    description: "AI technology questions",
     csvContent: AiPractice_CSV,
   },
   {
-    fileName: 'business_english.csv',
-    title: 'ビジネス英単語',
-    description: 'ビジネスシーンで使われる基礎的な英単語集',
+    fileName: "business_english.csv",
+    title: "ビジネス英単語",
+    description: "ビジネスシーンで使われる基礎的な英単語集",
     csvContent: BusinessEnglish_CSV,
   },
   {
-    fileName: 'japanese_wordbook.csv',
-    title: '日本語単語帳 (N5-N1)',
-    description: 'JLPTレベル別の日本語単語集。N5からN1まで465単語を収録',
+    fileName: "japanese_wordbook.csv",
+    title: "Japanese Vocabulary Book (N5-N1)",
+    description:
+      "JLPT level-based Japanese vocabulary. 465 words from N5 to N1",
     csvContent: JapaneseWordbook_CSV,
   },
 ];
@@ -41,7 +42,7 @@ const CSV_FILES: CSVFile[] = [
  */
 export async function loadAllCSVFiles(): Promise<void> {
   try {
-    console.log('[CSVLoaderService] Loading CSV files...');
+    console.log("[CSVLoaderService] Loading CSV files...");
 
     const questionSets = CSV_FILES.map((csvFile) => {
       console.log(`[CSVLoaderService] Parsing ${csvFile.fileName}...`);
@@ -53,9 +54,11 @@ export async function loadAllCSVFiles(): Promise<void> {
     });
 
     await localStorageService.initializeDefaultQuestions(questionSets);
-    console.log(`[CSVLoaderService] Successfully loaded ${questionSets.length} CSV files`);
+    console.log(
+      `[CSVLoaderService] Successfully loaded ${questionSets.length} CSV files`
+    );
   } catch (error) {
-    console.error('[CSVLoaderService] Error loading CSV files:', error);
+    console.error("[CSVLoaderService] Error loading CSV files:", error);
     throw error;
   }
 }
@@ -81,7 +84,11 @@ export function registerCSVFile(
 /**
  * 登録されているCSVファイルの一覧を取得
  */
-export function getRegisteredCSVFiles(): Array<{ fileName: string; title: string; description: string }> {
+export function getRegisteredCSVFiles(): Array<{
+  fileName: string;
+  title: string;
+  description: string;
+}> {
   return CSV_FILES.map(({ fileName, title, description }) => ({
     fileName,
     title,

@@ -10,6 +10,7 @@ import {
   PanResponder,
   Animated,
   Platform,
+  Modal,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useTranslation } from "react-i18next";
@@ -39,12 +40,12 @@ interface UnifiedQuestion {
 }
 
 export default function FlashcardScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, startIndex } = useLocalSearchParams<{ id: string; startIndex?: string }>();
   const { t } = useTranslation();
   const router = useRouter();
   const [questionSet, setQuestionSet] = useState<QuestionSet | LocalQuestionSet | null>(null);
   const [questions, setQuestions] = useState<UnifiedQuestion[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(parseInt(startIndex || "0"));
   const [showAnswer, setShowAnswer] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [pan] = useState(new Animated.ValueXY());
@@ -60,6 +61,8 @@ export default function FlashcardScreen() {
   }>>([]);
   const { user } = useAuth();
   const [isTrial, setIsTrial] = useState(false);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [showResultModal, setShowResultModal] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -257,16 +260,25 @@ export default function FlashcardScreen() {
 
   const submitAllAnswers = async (finalAnswers: typeof answers) => {
     try {
-      // ローカルストレージに保存
+      // ローカルストレージに保存（既存データに追記）
       const storageKey = `@flashcard_answers_${id}`;
-      const answerDataArray = finalAnswers.map((ans) => ({
+
+      // 既存データを読み込み
+      const existingData = await AsyncStorage.getItem(storageKey);
+      const existingAnswers = existingData ? JSON.parse(existingData) : [];
+
+      // 新しい回答データを作成
+      const newAnswerDataArray = finalAnswers.map((ans) => ({
         question_id: ans.question_id,
         question_set_id: id,
         is_correct: ans.is_correct,
         answer_time_sec: ans.answer_time_sec,
         answered_at: new Date().toISOString(),
       }));
-      await AsyncStorage.setItem(storageKey, JSON.stringify(answerDataArray));
+
+      // 既存データと新しいデータを結合
+      const combinedAnswers = [...existingAnswers, ...newAnswerDataArray];
+      await AsyncStorage.setItem(storageKey, JSON.stringify(combinedAnswers));
 
       // 通常版でユーザーがログインしている場合はAPIにも送信
       if (!isTrial && user) {
@@ -327,6 +339,26 @@ export default function FlashcardScreen() {
   const handleRestart = () => {
     setCurrentIndex(0);
     setShowAnswer(false);
+  };
+
+  const handleSubmitEarly = () => {
+    if (answers.length === 0) {
+      return;
+    }
+    setShowSubmitModal(true);
+  };
+
+  const confirmSubmitEarly = async () => {
+    setShowSubmitModal(false);
+    await submitAllAnswers(answers);
+    setShowResultModal(true);
+  };
+
+  const calculateStats = () => {
+    const correctCount = answers.filter(a => a.is_correct).length;
+    const totalAnswered = answers.length;
+    const accuracy = totalAnswered > 0 ? (correctCount / totalAnswered) * 100 : 0;
+    return { correctCount, totalAnswered, accuracy };
   };
 
   if (isLoading) {
@@ -542,6 +574,17 @@ export default function FlashcardScreen() {
 
       {/* Controls */}
       <View style={styles.controls}>
+        {answers.length > 0 && (
+          <TouchableOpacity
+            style={styles.submitEarlyButton}
+            onPress={handleSubmitEarly}
+          >
+            <Text style={styles.submitEarlyButtonText}>
+              📤 {t("Submit Now", "今すぐ送信")} ({answers.length}/{questions.length})
+            </Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity
           style={styles.showAnswerButton}
           onPress={handleToggleAnswer}
@@ -590,6 +633,88 @@ export default function FlashcardScreen() {
           )}
         </View>
       </View>
+
+      {/* Submit Confirmation Modal */}
+      <Modal
+        transparent={true}
+        visible={showSubmitModal}
+        animationType="fade"
+        onRequestClose={() => setShowSubmitModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              {t("Submit Early?", "途中で送信しますか？")}
+            </Text>
+            <Text style={styles.modalMessage}>
+              {t(
+                "Submit {answered} answers now? You have {remaining} questions remaining.",
+                "{answered}件の回答を送信しますか？残り{remaining}問あります。"
+              ).replace("{answered}", answers.length.toString())
+               .replace("{remaining}", (questions.length - answers.length).toString())}
+            </Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setShowSubmitModal(false)}
+              >
+                <Text style={styles.modalButtonTextCancel}>
+                  {t("Cancel", "キャンセル")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonConfirm]}
+                onPress={confirmSubmitEarly}
+              >
+                <Text style={styles.modalButtonTextConfirm}>
+                  {t("Submit", "送信")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Result Modal */}
+      <Modal
+        transparent={true}
+        visible={showResultModal}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowResultModal(false);
+          router.back();
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              {t("Flashcard Results", "フラッシュカード結果")}
+            </Text>
+            <View style={styles.resultStats}>
+              <Text style={styles.resultScore}>
+                {t("Correct", "正解")}: {calculateStats().correctCount}/{calculateStats().totalAnswered}
+              </Text>
+              <Text style={styles.resultAccuracy}>
+                {t("Accuracy", "正解率")}: {calculateStats().accuracy.toFixed(1)}%
+              </Text>
+              <Text style={styles.resultAnswered}>
+                {t("Answered", "回答数")}: {calculateStats().totalAnswered}/{questions.length}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalButtonConfirm]}
+              onPress={() => {
+                setShowResultModal(false);
+                router.back();
+              }}
+            >
+              <Text style={styles.modalButtonTextConfirm}>
+                {t("OK", "OK")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -909,5 +1034,100 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  submitEarlyButton: {
+    backgroundColor: "#FF9800",
+    borderRadius: 8,
+    padding: 16,
+    alignItems: "center",
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: "#F57C00",
+  },
+  submitEarlyButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 24,
+    width: "85%",
+    maxWidth: 400,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 24,
+    textAlign: "center",
+    lineHeight: 24,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  modalButtonCancel: {
+    backgroundColor: "#f0f0f0",
+    borderWidth: 1,
+    borderColor: "#ccc",
+  },
+  modalButtonConfirm: {
+    backgroundColor: "#007AFF",
+  },
+  modalButtonTextCancel: {
+    color: "#666",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  modalButtonTextConfirm: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  resultStats: {
+    marginBottom: 24,
+    gap: 12,
+  },
+  resultScore: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#007AFF",
+    textAlign: "center",
+  },
+  resultAccuracy: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#34C759",
+    textAlign: "center",
+  },
+  resultAnswered: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
   },
 });

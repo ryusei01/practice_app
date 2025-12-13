@@ -6,6 +6,7 @@ import {
   FlatList,
   TouchableOpacity,
   Alert,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useLanguage } from "../../src/contexts/LanguageContext";
@@ -26,7 +27,7 @@ export default function TrialQuestionSetsScreen() {
     try {
       // TrialModeContextで既に初期化されているのでここでは不要
       const sets = await localStorageService.getTrialQuestionSets();
-      console.log('[TrialQuestionSets] Loaded', sets.length, 'question sets');
+      console.log("[TrialQuestionSets] Loaded", sets.length, "question sets");
       setQuestionSets(sets);
     } catch (error) {
       console.error("Error loading trial question sets:", error);
@@ -41,6 +42,48 @@ export default function TrialQuestionSetsScreen() {
 
   useEffect(() => {
     loadQuestionSets();
+
+    // Web版の場合、動的にメタタグを設定
+    if (Platform.OS === "web") {
+      document.title = "AI Practice Book Ver.β";
+
+      const setMetaTag = (name: string, content: string, property?: string) => {
+        const selector = property
+          ? `meta[property="${name}"]`
+          : `meta[name="${name}"]`;
+        let meta = document.querySelector(selector) as HTMLMetaElement;
+        if (!meta) {
+          meta = document.createElement("meta");
+          if (property) {
+            meta.setAttribute("property", name);
+          } else {
+            meta.setAttribute("name", name);
+          }
+          document.head.appendChild(meta);
+        }
+        meta.content = content;
+      };
+
+      setMetaTag(
+        "description",
+        "Create and practice with custom question sets without signing up. Try our AI-powered flashcard mode and quiz system for free. | 登録不要でカスタム問題セットを作成・練習。AI搭載の単語帳モードとクイズシステムを無料で試せます。"
+      );
+      setMetaTag(
+        "keywords",
+        "trial,free,no signup,flashcard,quiz,practice,demo,trial mode,無料,登録不要,お試し,単語帳,クイズ,練習"
+      );
+      setMetaTag(
+        "og:title",
+        "Try AI Practice Book Free - No Sign Up Required | AI Practice Book 無料お試し - 登録不要",
+        true
+      );
+      setMetaTag(
+        "og:description",
+        "Experience AI-powered learning for free. Create quizzes and practice with flashcards without creating an account. | AI学習を無料で体験。アカウント作成不要でクイズと単語帳を試せます。",
+        true
+      );
+      setMetaTag("robots", "index, follow");
+    }
   }, []);
 
   const handleDelete = async (id: string) => {
@@ -86,18 +129,19 @@ export default function TrialQuestionSetsScreen() {
     const isDefaultSet = item.id.startsWith("default_");
 
     return (
-      <View style={styles.card}>
+      <View style={styles.card} nativeID={`trial-card-${item.id}`}>
         <TouchableOpacity
           style={styles.cardContent}
           onPress={() => router.push(`/(trial)/set/${item.id}`)}
+          nativeID={`trial-card-button-${item.id}`}
         >
-          <Text style={styles.cardTitle}>{item.title}</Text>
-          <Text style={styles.cardDescription}>{item.description}</Text>
-          <Text style={styles.cardInfo}>
+          <Text style={styles.cardTitle} nativeID={`trial-title-${item.id}`}>{item.title}</Text>
+          <Text style={styles.cardDescription} nativeID={`trial-desc-${item.id}`}>{item.description}</Text>
+          <Text style={styles.cardInfo} nativeID={`trial-info-${item.id}`}>
             {t("Questions", "問題数")}: {item.questions.length}
           </Text>
-          <View style={styles.trialBadge}>
-            <Text style={styles.trialBadgeText}>
+          <View style={styles.trialBadge} nativeID={`trial-badge-${item.id}`}>
+            <Text style={styles.trialBadgeText} nativeID={`trial-badge-text-${item.id}`}>
               {t("Trial Mode", "お試しモード")}
             </Text>
           </View>
@@ -106,8 +150,9 @@ export default function TrialQuestionSetsScreen() {
           <TouchableOpacity
             style={styles.deleteButton}
             onPress={() => handleDelete(item.id)}
+            nativeID={`trial-delete-btn-${item.id}`}
           >
-            <Text style={styles.deleteButtonText}>{t("Delete", "削除")}</Text>
+            <Text style={styles.deleteButtonText} nativeID={`trial-delete-text-${item.id}`}>{t("Delete", "削除")}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -115,24 +160,13 @@ export default function TrialQuestionSetsScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Header />
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.title}>
-            {t("Trial Question Sets", "お試し問題セット")}
-          </Text>
-          <Text style={styles.subtitle}>
-            {t(
-              "Create and practice without signing up",
-              "登録なしで問題を作成・練習できます"
-            )}
-          </Text>
-        </View>
+    <View style={styles.container} nativeID="trial-sets-container">
+      <Header title={t("Trial Question Sets", "お試し問題セット")} />
+      <View style={styles.content} nativeID="trial-sets-content">
 
         {questionSets.length === 0 && !isLoading ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>
+          <View style={styles.emptyState} nativeID="trial-sets-empty">
+            <Text style={styles.emptyText} nativeID="trial-sets-empty-text">
               {t(
                 "No question sets yet. Create your first one!",
                 "まだ問題セットがありません。最初の問題セットを作成しましょう！"
@@ -147,24 +181,17 @@ export default function TrialQuestionSetsScreen() {
             contentContainerStyle={styles.list}
             refreshing={isLoading}
             onRefresh={loadQuestionSets}
+            nativeID="trial-sets-list"
           />
         )}
 
         <TouchableOpacity
           style={styles.createButton}
           onPress={() => router.push("/(trial)/create")}
+          nativeID="trial-btn-create"
         >
-          <Text style={styles.createButtonText}>
+          <Text style={styles.createButtonText} nativeID="trial-btn-create-text">
             {t("Create Question Set", "問題セットを作成")}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.backButtonText}>
-            {t("Back to Home", "ホームに戻る")}
           </Text>
         </TouchableOpacity>
       </View>
