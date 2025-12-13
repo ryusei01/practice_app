@@ -13,6 +13,16 @@ Google AdSense スクリプトは、ビルド後に自動的にすべての HTML
      crossorigin="anonymous"></script>
 ```
 
+### ads.txt ファイル
+
+Google AdSense の認証のため、`public/ads.txt` ファイルが含まれています：
+
+```
+google.com, pub-9679910712332333, DIRECT, f08c47fec0942fa0
+```
+
+このファイルは、ビルド時に自動的に `dist/ads.txt` にコピーされ、`https://yourdomain.com/ads.txt` でアクセス可能になります。
+
 ### ビルドコマンド
 
 ```bash
@@ -26,7 +36,8 @@ npm run export:web
 これらのコマンドは以下の処理を行います：
 
 1. Expo を使用して Web アプリをビルド
-2. `scripts/inject-adsense.js` スクリプトを実行して、すべての HTML ファイルに AdSense スクリプトを挿入
+2. `public/` ディレクトリの静的ファイル（ads.txt を含む）を `dist/` にコピー
+3. `scripts/inject-adsense.js` スクリプトを実行して、すべての HTML ファイルに AdSense スクリプトを挿入
 
 ### Cloudflare Pages デプロイ
 
@@ -42,18 +53,21 @@ cd frontend && npm install --legacy-peer-deps && npm run build:web
 - 挿入位置: `<head>` タグの直後
 - 対象ファイル: `dist/` ディレクトリ内のすべての `.html` ファイル
 - 重複チェック: スクリプトは既に挿入されている場合はスキップされます
+- ads.txt: `frontend/public/ads.txt` → `dist/ads.txt`
 
 ### ローカルでの確認
 
-ビルド後、以下のコマンドで AdSense スクリプトが挿入されていることを確認できます：
+ビルド後、以下のコマンドで AdSense スクリプトと ads.txt が正しく配置されていることを確認できます：
 
 ```bash
 cd frontend
 grep "adsbygoogle" dist/index.html
+cat dist/ads.txt
 ```
 
 ## 注意事項
 
 - `dist/` ディレクトリはビルド成果物であり、Git にコミットされません
 - AdSense スクリプトはビルド時に自動的に挿入されるため、手動で HTML ファイルを編集する必要はありません
+- ads.txt ファイルは `public/` ディレクトリに配置され、ビルド時に自動的にコピーされます
 - 本番環境では、Cloudflare Pages が自動的にビルドと挿入を行います
