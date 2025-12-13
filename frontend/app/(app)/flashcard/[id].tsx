@@ -13,7 +13,7 @@ import {
   Modal,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useTranslation } from "react-i18next";
+import { useLanguage } from "../../../src/contexts/LanguageContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { questionSetsApi, QuestionSet } from "../../../src/api/questionSets";
 import { questionsApi, Question } from "../../../src/api/questions";
@@ -41,7 +41,7 @@ interface UnifiedQuestion {
 
 export default function FlashcardScreen() {
   const { id, startIndex } = useLocalSearchParams<{ id: string; startIndex?: string }>();
-  const { t } = useTranslation();
+  const { t } = useLanguage();
   const router = useRouter();
   const [questionSet, setQuestionSet] = useState<QuestionSet | LocalQuestionSet | null>(null);
   const [questions, setQuestions] = useState<UnifiedQuestion[]>([]);
@@ -376,13 +376,13 @@ export default function FlashcardScreen() {
           {t("No questions available", "問題がありません")}
         </Text>
         <Text style={styles.debugText}>
-          Question Set ID: {id}
+          {t("Question Set ID", "問題セットID")}: {id}
         </Text>
         <Text style={styles.debugText}>
-          Question Set: {questionSet ? 'Loaded' : 'Not loaded'}
+          {t("Question Set", "問題セット")}: {questionSet ? t("Loaded", "読み込み済み") : t("Not loaded", "未読み込み")}
         </Text>
         <Text style={styles.debugText}>
-          Questions: {questions.length} items
+          {t("Questions", "問題")}: {questions.length} {t("items", "件")}
         </Text>
         <TouchableOpacity
           style={styles.backButton}
@@ -430,7 +430,7 @@ export default function FlashcardScreen() {
             <Text style={styles.autoPlayText}>
               {autoPlay ? "🔊 " : "🔇 "}
               {t("Auto-play", "自動再生")}
-              {autoPlay ? " ON" : " OFF"}
+              {autoPlay ? ` ${t("ON", "ON")}` : ` ${t("OFF", "OFF")}`}
             </Text>
           </TouchableOpacity>
         </View>
@@ -648,10 +648,9 @@ export default function FlashcardScreen() {
             </Text>
             <Text style={styles.modalMessage}>
               {t(
-                "Submit {answered} answers now? You have {remaining} questions remaining.",
-                "{answered}件の回答を送信しますか？残り{remaining}問あります。"
-              ).replace("{answered}", answers.length.toString())
-               .replace("{remaining}", (questions.length - answers.length).toString())}
+                `Submit ${answers.length} answers now? You have ${questions.length - answers.length} questions remaining.`,
+                `${answers.length}件の回答を送信しますか？残り${questions.length - answers.length}問あります。`
+              )}
             </Text>
             <View style={styles.modalButtons}>
               <TouchableOpacity
