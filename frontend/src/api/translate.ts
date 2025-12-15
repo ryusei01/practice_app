@@ -76,25 +76,63 @@ export interface QuestionTranslateResponse {
 export const translateQuestion = async (
   request: QuestionTranslateRequest
 ): Promise<QuestionTranslateResponse> => {
-  const texts = [request.question_text, request.correct_answer];
-  if (request.explanation) {
-    texts.push(request.explanation);
-  }
-
-  const result = await translateBatch({
-    texts,
+  const response = await axios.post(`${API_URL}/translate/translate/question`, {
+    question_text: request.question_text,
+    correct_answer: request.correct_answer,
+    explanation: request.explanation,
     target_lang: request.target_lang,
+    source_lang: request.source_lang || "auto",
   });
+  return response.data;
+};
 
-  return {
-    question_text: result.translations[0].translated,
-    correct_answer: result.translations[1].translated,
-    explanation: request.explanation ? result.translations[2].translated : undefined,
-  };
+export interface TextbookTranslateRequest {
+  markdown_text: string;
+  target_lang: string;
+  source_lang?: string;
+}
+
+export interface TextbookTranslateResponse {
+  original_text: string;
+  translated_text: string;
+  source_lang: string;
+  target_lang: string;
+}
+
+/**
+ * 教科書（Markdown）を翻訳する
+ */
+export const translateTextbook = async (
+  request: TextbookTranslateRequest
+): Promise<TextbookTranslateResponse> => {
+  const response = await axios.post(`${API_URL}/translate/translate/textbook`, {
+    markdown_text: request.markdown_text,
+    target_lang: request.target_lang,
+    source_lang: request.source_lang || "auto",
+  });
+  return response.data;
+};
+
+/**
+ * 翻訳サービスの状態を取得
+ */
+export interface TranslationStatus {
+  use_local: boolean;
+  available: boolean;
+  model?: string;
+  base_url?: string;
+  service?: string;
+}
+
+export const getTranslationStatus = async (): Promise<TranslationStatus> => {
+  const response = await axios.get(`${API_URL}/translate/translate/status`);
+  return response.data;
 };
 
 export default {
   translateText,
   translateBatch,
   translateQuestion,
+  translateTextbook,
+  getTranslationStatus,
 };

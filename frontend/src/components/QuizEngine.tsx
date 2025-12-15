@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { useLanguage } from "../contexts/LanguageContext";
 import { evaluateTextAnswer } from "../utils/aiEvaluator";
-import { translateText } from "../api/translate";
+import { translateText, translateQuestion } from "../api/translate";
 
 // Platform-specific import for expo-speech (not available on web)
 let Speech: any = null;
@@ -76,8 +76,11 @@ export default function QuizEngine({
   const [answers, setAnswers] = useState<QuizAnswer[]>([]);
   const [redSheetEnabled, setRedSheetEnabled] = useState(initialRedSheetEnabled);
   const [translatedQuestion, setTranslatedQuestion] = useState<string>("");
+  const [translatedAnswer, setTranslatedAnswer] = useState<string>("");
   const [isTranslating, setIsTranslating] = useState(false);
+  const [isTranslatingAnswer, setIsTranslatingAnswer] = useState(false);
   const [showTranslation, setShowTranslation] = useState(false);
+  const [showAnswerTranslation, setShowAnswerTranslation] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
   const [showOverrideModal, setShowOverrideModal] = useState(false);
@@ -144,6 +147,34 @@ export default function QuizEngine({
     }
   };
 
+  // 回答・正解を翻訳する関数
+  const handleTranslateAnswer = async () => {
+    if (isTranslatingAnswer) return;
+
+    const currentQuestion = questions[currentQuestionIndex];
+    setIsTranslatingAnswer(true);
+
+    try {
+      // 現在の言語に基づいて翻訳先を決定
+      const targetLang = language === "ja" ? "en" : "ja";
+
+      const result = await translateQuestion({
+        question_text: currentQuestion.question_text,
+        correct_answer: currentQuestion.correct_answer,
+        explanation: currentQuestion.explanation,
+        target_lang: targetLang,
+      });
+
+      setTranslatedAnswer(result.correct_answer);
+      setShowAnswerTranslation(true);
+    } catch (error) {
+      console.error("[QuizEngine] Answer translation error:", error);
+      // エラー時は何もしない（翻訳失敗を静かに処理）
+    } finally {
+      setIsTranslatingAnswer(false);
+    }
+  };
+
   // 問題が変わったら音声を停止し、翻訳をリセット、自動再生がONなら読み上げ
   useEffect(() => {
     if (Speech && showAdvancedFeatures) {
@@ -153,7 +184,9 @@ export default function QuizEngine({
 
     // 翻訳をリセット
     setTranslatedQuestion("");
+    setTranslatedAnswer("");
     setShowTranslation(false);
+    setShowAnswerTranslation(false);
 
     if (autoPlay && showAdvancedFeatures && questions.length > 0 && !showResult) {
       const timer = setTimeout(() => {
@@ -512,12 +545,37 @@ export default function QuizEngine({
           )}
 
           <View style={styles.correctAnswerContainer}>
-            <Text style={styles.correctAnswerLabel}>
-              {t("Correct Answer:", "正解:")}
-            </Text>
+            <View style={styles.correctAnswerHeader}>
+              <Text style={styles.correctAnswerLabel}>
+                {t("Correct Answer:", "正解:")}
+              </Text>
+              <TouchableOpacity
+                onPress={handleTranslateAnswer}
+                style={styles.translateAnswerButton}
+                disabled={isTranslatingAnswer}
+              >
+                {isTranslatingAnswer ? (
+                  <ActivityIndicator color="#007AFF" size="small" />
+                ) : (
+                  <Text style={styles.translateAnswerIcon}>
+                    {showAnswerTranslation ? "🔤" : "🌐"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
             <Text style={styles.correctAnswerValue}>
-              {currentQuestion.correct_answer.split('\n')[0]}
+              {showAnswerTranslation && translatedAnswer
+                ? translatedAnswer.split('\n')[0]
+                : currentQuestion.correct_answer.split('\n')[0]}
             </Text>
+            {showAnswerTranslation && translatedAnswer && (
+              <View style={styles.translationContainer}>
+                <Text style={styles.translationLabel}>
+                  {language === "ja" ? "🇺🇸 English:" : "🇯🇵 日本語:"}
+                </Text>
+                <Text style={styles.translationText}>{translatedAnswer}</Text>
+              </View>
+            )}
           </View>
 
           {/* 正誤を手動で記録するボタン */}
@@ -677,7 +735,7 @@ export default function QuizEngine({
                 {t("Score", "得点")}: {score}/{totalAnswered}
               </Text>
               <Text style={styles.resultAccuracy}>
-                {t("Accuracy", "正解率")}: {totalAnswered > 0 ? ((score / totalAnswered) * 100).toFixed(1) : 0}%
+                {t("Accuracy", "正解率")}: {totalAnswered > 0 ? `${((score / totalAnswered) * 100).toFixed(1)}%` : "0%"}
               </Text>
               <Text style={styles.resultAnswered}>
                 {t("Answered", "回答数")}: {totalAnswered}/{questions.length}

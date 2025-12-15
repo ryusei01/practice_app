@@ -23,6 +23,10 @@ class QuestionSet(Base):
     total_purchases = Column(Integer, default=0)
     average_rating = Column(Float, default=0.0)
 
+    # 教科書情報
+    textbook_path = Column(String, nullable=True)  # 教科書ファイルのパス（MarkdownまたはPDF）
+    textbook_type = Column(String, nullable=True)  # "markdown" または "pdf"
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

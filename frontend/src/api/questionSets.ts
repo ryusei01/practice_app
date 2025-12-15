@@ -13,6 +13,8 @@ export interface QuestionSet {
   average_difficulty: number;
   total_purchases: number;
   average_rating: number;
+  textbook_path: string | null;
+  textbook_type: string | null;
 }
 
 export interface QuestionSetCreate {
@@ -22,6 +24,8 @@ export interface QuestionSetCreate {
   tags?: string[];
   price?: number;
   is_published?: boolean;
+  textbook_path?: string;
+  textbook_type?: string;
 }
 
 export interface QuestionSetUpdate {
@@ -31,6 +35,8 @@ export interface QuestionSetUpdate {
   tags?: string[];
   price?: number;
   is_published?: boolean;
+  textbook_path?: string;
+  textbook_type?: string;
 }
 
 export interface Question {

@@ -846,6 +846,18 @@ question_text,correct_answer,category,difficulty`;
             </Text>
           </TouchableOpacity>
         </View>
+        {questionSet?.textbook_path && (
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={styles.textbookButton}
+              onPress={() => router.push(`/(app)/question-sets/${id}/textbook`)}
+            >
+              <Text style={styles.textbookButtonText}>
+                📚 {t("View Textbook", "教科書を見る")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
         <View style={styles.buttonRow}>
           <TouchableOpacity
             style={styles.helpButton}
@@ -984,6 +996,8 @@ question_text,correct_answer,category,difficulty`;
                   }}
                   keyboardType="numeric"
                   placeholder="10"
+                  onStartShouldSetResponder={() => true}
+                  onResponderTerminationRequest={() => false}
                 />
               </View>
             )}
@@ -1110,6 +1124,8 @@ question_text,correct_answer,category,difficulty`;
                     }}
                     keyboardType="numeric"
                     placeholder="0"
+                    onStartShouldSetResponder={() => true}
+                    onResponderTerminationRequest={() => false}
                   />
                 </View>
                 <View style={styles.inputRow}>
@@ -1130,6 +1146,8 @@ question_text,correct_answer,category,difficulty`;
                     }}
                     keyboardType="numeric"
                     placeholder="10"
+                    onStartShouldSetResponder={() => true}
+                    onResponderTerminationRequest={() => false}
                   />
                 </View>
               </View>

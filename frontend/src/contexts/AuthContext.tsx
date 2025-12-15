@@ -83,7 +83,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           // 何もしない
         } else if (currentPath.includes('(trial)')) {
           // お試しページにいる場合はお試しページに戻す
-          router.replace('/(trial)/question-sets');
+          router.replace('/(trial)/trial-question-sets');
         } else {
           // それ以外はログイン画面へ
           router.replace('/(auth)/login');

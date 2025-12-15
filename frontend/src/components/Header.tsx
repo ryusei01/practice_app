@@ -1,12 +1,13 @@
-import React from "react";
+import React, { ReactNode } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useRouter, usePathname } from "expo-router";
 
 interface HeaderProps {
   title?: string;
+  rightComponent?: ReactNode;
 }
 
-export default function Header({ title }: HeaderProps) {
+export default function Header({ title, rightComponent }: HeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -41,6 +42,11 @@ export default function Header({ title }: HeaderProps) {
             </Text>
           )}
         </View>
+        {rightComponent && (
+          <View style={styles.rightComponent}>
+            {rightComponent}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -93,5 +99,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#E0E0E0",
     marginTop: 4,
+  },
+  rightComponent: {
+    position: "absolute",
+    right: 0,
+    padding: 8,
+    zIndex: 1,
   },
 });

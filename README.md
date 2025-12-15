@@ -18,6 +18,9 @@
 - AI による苦手分野の分析
 - 最適な問題選定
 - 予想スコアの算出
+- **コールドスタート問題の解決**: 新規ユーザー（回答履歴 30 問以下）に対して、類似ユーザーの学習パターンから問題を推薦
+  - 協調フィルタリング: 類似ユーザーが間違えた問題を優先的に推薦
+  - フォールバック: 類似ユーザーが見つからない場合は、中程度の難易度（0.4-0.6）の問題を推薦
 
 ### 3. AI 意味評価機能（記述式問題）
 
@@ -58,8 +61,17 @@
 - **scikit-learn** - 機械学習モデル
 - **LightGBM** - 問題推薦システム
 - **pandas** - データ処理
+- **numpy** - 数値計算（コサイン類似度計算など）
 - **difflib** (Python 標準) - 文字列類似度計算（レーベンシュタイン距離）
 - **unicodedata** (Python 標準) - テキスト正規化（全角半角統一）
+- **協調フィルタリング** - コールドスタート問題の解決
+  - 類似ユーザーの学習パターンから問題を推薦
+  - カテゴリ別正答率ベクトルによる類似度計算
+  - 新規ユーザー（回答履歴 30 問以下）向けに最適化
+- **Ollama** (オプション) - ローカル LLM 翻訳機能
+  - 問題文・回答・正解・教科書の翻訳に対応
+  - プライバシー保護（データが外部に送信されない）
+  - フォールバック機能（Ollama が利用できない場合は GoogleTranslator に自動切り替え）
 
 ### 決済
 
@@ -121,6 +133,26 @@ pip install -r requirements.txt
 # .env を編集して環境変数を設定
 uvicorn app.main:app --reload --port 8003
 ```
+
+### ローカル AI 翻訳機能（オプション）
+
+問題文・回答・正解・教科書の翻訳にローカル LLM（Ollama）を使用できます。
+
+```bash
+# 1. Ollamaのインストール
+# macOS/Linux: curl -fsSL https://ollama.ai/install.sh | sh
+# Windows: https://ollama.ai/download からダウンロード
+
+# 2. 翻訳用モデルのダウンロード（軽量モデル推奨）
+ollama pull llama3.2:1b
+
+# 3. .envファイルに設定を追加
+USE_LOCAL_TRANSLATION=true
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_TRANSLATION_MODEL=llama3.2:1b
+```
+
+詳細は [docs/TRANSLATION_SETUP.md](docs/TRANSLATION_SETUP.md) を参照
 
 ### フロントエンド
 

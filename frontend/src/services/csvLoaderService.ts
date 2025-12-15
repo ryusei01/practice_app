@@ -59,11 +59,16 @@ export async function loadAllCSVFiles(): Promise<void> {
 
     const questionSets = CSV_FILES.map((csvFile) => {
       console.log(`[CSVLoaderService] Parsing ${csvFile.fileName}...`);
-      return localStorageService.parseCSVToQuestionSet(
+      const questionSet = localStorageService.parseCSVToQuestionSet(
         csvFile.csvContent,
         csvFile.title,
         csvFile.description
       );
+
+      // 教科書は独立したリソースなので、CSVファイルからは設定しない
+      // 教科書は問題セットとは別に管理され、手動で割り当てる必要がある
+
+      return questionSet;
     });
 
     await localStorageService.initializeDefaultQuestions(questionSets);
@@ -78,6 +83,8 @@ export async function loadAllCSVFiles(): Promise<void> {
 
 /**
  * 新しいCSVファイルを追加
+ * 注意: この関数は動的にCSVファイルを追加するためのものです
+ * 実際の使用時は、loadAllCSVFiles()を呼び出して問題セットを初期化してください
  */
 export function registerCSVFile(
   fileName: string,
@@ -92,6 +99,9 @@ export function registerCSVFile(
     csvContent,
   });
   console.log(`[CSVLoaderService] Registered new CSV file: ${fileName}`);
+  console.log(
+    `[CSVLoaderService] Note: Call loadAllCSVFiles() to initialize question sets`
+  );
 }
 
 /**

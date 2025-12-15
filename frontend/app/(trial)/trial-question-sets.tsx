@@ -1,24 +1,23 @@
-import React, { useEffect, useState, useCallback } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Platform,
-} from "react-native";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useLanguage } from "../../src/contexts/LanguageContext";
 import {
   localStorageService,
   LocalQuestionSet,
 } from "../../src/services/localStorageService";
+import {
+  getAvailableTextbooks,
+  Textbook,
+} from "../../src/services/textbookService";
 import Header from "../../src/components/Header";
 import Modal from "../../src/components/Modal";
 
 export default function TrialQuestionSetsScreen() {
   const [questionSets, setQuestionSets] = useState<LocalQuestionSet[]>([]);
+  const [availableTextbooks, setAvailableTextbooks] = useState<Textbook[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const isLoadingRef = useRef(false); // 重複読み込み防止用
   const { t } = useLanguage();
   const router = useRouter();
   const [modalVisible, setModalVisible] = useState(false);
@@ -49,13 +48,17 @@ export default function TrialQuestionSetsScreen() {
     setModalVisible(true);
   };
 
-  const loadQuestionSets = async () => {
+  const loadQuestionSets = useCallback(async () => {
+    if (isLoadingRef.current) return;
+
+    isLoadingRef.current = true;
     setIsLoading(true);
     try {
-      // TrialModeContextで既に初期化されているのでここでは不要
       const sets = await localStorageService.getTrialQuestionSets();
-      console.log("[TrialQuestionSets] Loaded", sets.length, "question sets");
       setQuestionSets(sets);
+
+      const textbooks = await getAvailableTextbooks();
+      setAvailableTextbooks(textbooks);
     } catch (error) {
       console.error("Error loading trial question sets:", error);
       showModal(
@@ -65,14 +68,15 @@ export default function TrialQuestionSetsScreen() {
       );
     } finally {
       setIsLoading(false);
+      isLoadingRef.current = false;
     }
-  };
+  }, [t]);
 
   // 画面がフォーカスされたときに問題セット一覧を再読み込み
   useFocusEffect(
     useCallback(() => {
       loadQuestionSets();
-    }, [])
+    }, [loadQuestionSets])
   );
 
   useEffect(() => {
@@ -108,12 +112,12 @@ export default function TrialQuestionSetsScreen() {
       setMetaTag(
         "og:title",
         "Try AI Practice Book Free - No Sign Up Required | AI Practice Book 無料お試し - 登録不要",
-        true
+        "property"
       );
       setMetaTag(
         "og:description",
         "Experience AI-powered learning for free. Create quizzes and practice with flashcards without creating an account. | AI学習を無料で体験。アカウント作成不要でクイズと単語帳を試せます。",
-        true
+        "property"
       );
       setMetaTag("robots", "index, follow");
     }
@@ -170,15 +174,25 @@ export default function TrialQuestionSetsScreen() {
         <TouchableOpacity
           style={styles.cardContent}
           onPress={() => router.push(`/(trial)/set/${item.id}`)}
-          nativeID={`trial-card-button-${item.id}`}
+          testID={`trial-card-button-${item.id}`}
         >
-          <Text style={styles.cardTitle} nativeID={`trial-title-${item.id}`}>{item.title}</Text>
-          <Text style={styles.cardDescription} nativeID={`trial-desc-${item.id}`}>{item.description}</Text>
+          <Text style={styles.cardTitle} nativeID={`trial-title-${item.id}`}>
+            {item.title}
+          </Text>
+          <Text
+            style={styles.cardDescription}
+            nativeID={`trial-desc-${item.id}`}
+          >
+            {item.description}
+          </Text>
           <Text style={styles.cardInfo} nativeID={`trial-info-${item.id}`}>
             {t("Questions", "問題数")}: {item.questions.length}
           </Text>
           <View style={styles.trialBadge} nativeID={`trial-badge-${item.id}`}>
-            <Text style={styles.trialBadgeText} nativeID={`trial-badge-text-${item.id}`}>
+            <Text
+              style={styles.trialBadgeText}
+              nativeID={`trial-badge-text-${item.id}`}
+            >
               {t("Trial Mode", "お試しモード")}
             </Text>
           </View>
@@ -187,20 +201,48 @@ export default function TrialQuestionSetsScreen() {
           <TouchableOpacity
             style={styles.deleteButton}
             onPress={() => handleDelete(item.id)}
-            nativeID={`trial-delete-btn-${item.id}`}
+            testID={`trial-delete-btn-${item.id}`}
           >
-            <Text style={styles.deleteButtonText} nativeID={`trial-delete-text-${item.id}`}>{t("Delete", "削除")}</Text>
+            <Text
+              style={styles.deleteButtonText}
+              nativeID={`trial-delete-text-${item.id}`}
+            >
+              {t("Delete", "削除")}
+            </Text>
           </TouchableOpacity>
         )}
       </View>
     );
   };
 
+  const handleTextbookPress = (textbook: Textbook) => {
+    const encodedPath = encodeURIComponent(textbook.path);
+    router.push(`/(trial)/textbook/${encodedPath}?type=${textbook.type}`);
+  };
+
+  const renderTextbookItem = ({ item }: { item: Textbook }) => (
+    <TouchableOpacity
+      style={styles.textbookCard}
+      onPress={() => handleTextbookPress(item)}
+    >
+      <View style={styles.textbookCardHeader}>
+        <Text style={styles.textbookCardIcon}>📚</Text>
+        <Text style={styles.textbookCardName}>{item.name}</Text>
+      </View>
+      <Text style={styles.textbookCardType}>
+        {item.type === "markdown" ? "📄 Markdown" : "📕 PDF"}
+      </Text>
+    </TouchableOpacity>
+  );
+
   return (
     <View style={styles.container} nativeID="trial-sets-container">
       <Header title={t("Trial Question Sets", "お試し問題セット")} />
-      <View style={styles.content} nativeID="trial-sets-content">
-
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        nativeID="trial-sets-content"
+      >
         {questionSets.length === 0 && !isLoading ? (
           <View style={styles.emptyState} nativeID="trial-sets-empty">
             <Text style={styles.emptyText} nativeID="trial-sets-empty-text">
@@ -211,27 +253,41 @@ export default function TrialQuestionSetsScreen() {
             </Text>
           </View>
         ) : (
-          <FlatList
-            data={questionSets}
-            renderItem={renderQuestionSet}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.list}
-            refreshing={isLoading}
-            onRefresh={loadQuestionSets}
-            nativeID="trial-sets-list"
-          />
+          questionSets.map((item) => (
+            <View key={item.id}>{renderQuestionSet({ item })}</View>
+          ))
+        )}
+
+        {/* 教科書セクション */}
+        {availableTextbooks.length > 0 && (
+          <View style={styles.textbookSection}>
+            <Text style={styles.sectionTitle}>
+              {t("Available Textbooks", "利用可能な教科書")}
+            </Text>
+            {availableTextbooks.map((item) => (
+              <View key={item.path}>{renderTextbookItem({ item })}</View>
+            ))}
+          </View>
         )}
 
         <TouchableOpacity
           style={styles.createButton}
           onPress={() => router.push("/(trial)/create")}
-          nativeID="trial-btn-create"
+          testID="trial-btn-create"
         >
           <Text style={styles.createButtonText} nativeID="trial-btn-create-text">
             {t("Create Question Set", "問題セットを作成")}
           </Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
+
+      <Modal
+        visible={modalVisible}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        buttons={modalConfig.buttons}
+        onClose={() => setModalVisible(false)}
+      />
     </View>
   );
 }
@@ -243,7 +299,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
     padding: 20,
+    paddingBottom: 100,
   },
   header: {
     marginBottom: 20,
@@ -252,20 +311,14 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     color: "#333",
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#666",
-  },
-  list: {
-    paddingBottom: 20,
+    marginBottom: 20,
+    textAlign: "center",
   },
   card: {
     backgroundColor: "#fff",
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    padding: 15,
+    marginBottom: 15,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -273,82 +326,111 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   cardContent: {
-    marginBottom: 12,
+    flex: 1,
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#333",
-    marginBottom: 8,
+    marginBottom: 5,
   },
   cardDescription: {
     fontSize: 14,
     color: "#666",
-    marginBottom: 8,
+    marginBottom: 10,
   },
   cardInfo: {
     fontSize: 12,
-    color: "#999",
+    color: "#888",
+    marginBottom: 10,
   },
   trialBadge: {
     backgroundColor: "#34C759",
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
     alignSelf: "flex-start",
-    marginTop: 8,
   },
   trialBadgeText: {
     color: "#fff",
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "bold",
   },
   deleteButton: {
     backgroundColor: "#FF3B30",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 8,
-    padding: 12,
-    alignItems: "center",
+    alignSelf: "flex-end",
+    marginTop: 10,
   },
   deleteButtonText: {
     color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  emptyState: {
+    padding: 30,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyText: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
   },
   createButton: {
     backgroundColor: "#007AFF",
-    borderRadius: 8,
-    padding: 16,
+    borderRadius: 12,
+    padding: 15,
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 20,
   },
   createButtonText: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "bold",
   },
-  backButton: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 16,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#007AFF",
-  },
-  backButtonText: {
-    color: "#007AFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 40,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: "#999",
-    textAlign: "center",
+  textbookSection: {
+    marginTop: 30,
     marginBottom: 20,
   },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 15,
+    color: "#333",
+  },
+  textbookCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  textbookCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+  textbookCardIcon: {
+    fontSize: 20,
+    marginRight: 10,
+  },
+  textbookCardName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    flex: 1,
+  },
+  textbookCardType: {
+    fontSize: 12,
+    color: "#888",
+  },
 });
+
+

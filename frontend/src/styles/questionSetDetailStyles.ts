@@ -152,6 +152,18 @@ export const commonStyles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
+  textbookButton: {
+    flex: 1,
+    backgroundColor: "#007AFF",
+    borderRadius: 8,
+    padding: 14,
+    alignItems: "center",
+  },
+  textbookButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
   buttonDisabled: {
     backgroundColor: "#B0B0B0",
   },
@@ -317,4 +329,3 @@ export const commonStyles = StyleSheet.create({
     fontWeight: "600",
   },
 });
-

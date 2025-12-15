@@ -9,13 +9,18 @@ import {
   RefreshControl,
   Alert,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, usePathname } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 import {
   questionSetsApi,
   QuestionSet,
   QuestionSetWithQuestions,
 } from "../../../src/api/questionSets";
+import {
+  getAvailableTextbooks,
+  Textbook,
+} from "../../../src/services/textbookService";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
 
@@ -24,31 +29,66 @@ export default function QuestionSetsScreen() {
   const [purchasedQuestionSets, setPurchasedQuestionSets] = useState<
     QuestionSet[]
   >([]);
+  const [availableTextbooks, setAvailableTextbooks] = useState<Textbook[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const router = useRouter();
-  const { user } = useAuth();
+  const pathname = usePathname();
+  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { t, language, setLanguage } = useLanguage();
 
+  const [hasRedirected, setHasRedirected] = useState(false);
+
   useEffect(() => {
-    loadQuestionSets();
-  }, []);
+    // Web版でリロード時に未認証の場合はお試し版にリダイレクト（1回のみ）
+    if (Platform.OS === "web" && !hasRedirected && !isAuthLoading && !user) {
+      // ルーティングが準備できるまで少し待つ
+      const timer = setTimeout(() => {
+        // URLパスが /question-sets の場合、trial 版へリダイレクト
+        if (
+          pathname === "/question-sets" ||
+          pathname === "/(app)/question-sets" ||
+          pathname === "/(app)/question-sets/"
+        ) {
+          try {
+            setHasRedirected(true);
+            router.replace("/(trial)/trial-question-sets");
+          } catch (error) {
+            console.error("[QuestionSets] Navigation error:", error);
+          }
+        }
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [pathname, router, user, hasRedirected, isAuthLoading]);
+
+  useEffect(() => {
+    // 認証済みの場合のみ問題セットを読み込む
+    if (user) {
+      loadQuestionSets();
+    }
+  }, [user]);
 
   const loadQuestionSets = async () => {
     try {
-      console.log('[QuestionSets] Loading question sets...');
-      console.log('[QuestionSets] User:', user?.id);
+      console.log("[QuestionSets] Loading question sets...");
+      console.log("[QuestionSets] User:", user?.id);
 
       const [myData, purchasedData] = await Promise.all([
         questionSetsApi.getMy(),
         questionSetsApi.getPurchased(),
       ]);
 
-      console.log('[QuestionSets] My sets:', myData?.length || 0);
-      console.log('[QuestionSets] Purchased sets:', purchasedData?.length || 0);
+      // 教科書はバックエンドAPIから動的に取得
+      const textbooksData = await getAvailableTextbooks();
+
+      console.log("[QuestionSets] My sets:", myData?.length || 0);
+      console.log("[QuestionSets] Purchased sets:", purchasedData?.length || 0);
 
       setMyQuestionSets(myData);
       setPurchasedQuestionSets(purchasedData);
+      setAvailableTextbooks(textbooksData);
     } catch (error: any) {
       console.error("Failed to load question sets:", error);
       console.error("Error response:", error.response?.data);
@@ -200,6 +240,18 @@ export default function QuestionSetsScreen() {
     </View>
   );
 
+  const renderTextbookItem = ({ item }: { item: Textbook }) => (
+    <View style={styles.textbookCard}>
+      <View style={styles.textbookCardHeader}>
+        <Text style={styles.textbookCardIcon}>📚</Text>
+        <Text style={styles.textbookCardName}>{item.name}</Text>
+      </View>
+      <Text style={styles.textbookCardType}>
+        {item.type === "markdown" ? "📄 Markdown" : "📕 PDF"}
+      </Text>
+    </View>
+  );
+
   if (isLoading) {
     return (
       <View style={styles.centerContainer}>
@@ -269,9 +321,30 @@ export default function QuestionSetsScreen() {
             ))}
           </View>
         )}
+
+        {/* Available Textbooks Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            {t("Available Textbooks", "利用可能な教科書")}
+          </Text>
+          {availableTextbooks.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>
+                {t("No textbooks available", "利用可能な教科書がありません")}
+              </Text>
+            </View>
+          ) : (
+            availableTextbooks.map((item) => (
+              <View key={item.path}>{renderTextbookItem({ item })}</View>
+            ))
+          )}
+        </View>
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={navigateToCreateQuestionSet}>
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={navigateToCreateQuestionSet}
+      >
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
     </View>
@@ -409,6 +482,36 @@ const styles = StyleSheet.create({
     color: "#FF9500",
     fontWeight: "600",
     marginLeft: "auto",
+  },
+  textbookCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  textbookCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  textbookCardIcon: {
+    fontSize: 20,
+  },
+  textbookCardName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    flex: 1,
+  },
+  textbookCardType: {
+    fontSize: 14,
+    color: "#666",
   },
   emptyContainer: {
     alignItems: "center",

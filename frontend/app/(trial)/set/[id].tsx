@@ -17,9 +17,14 @@ import {
   LocalQuestionSet,
   LocalQuestion,
 } from "../../../src/services/localStorageService";
+import {
+  getAvailableTextbooks,
+  Textbook,
+} from "../../../src/services/textbookService";
 import Header from "../../../src/components/Header";
 import Modal from "../../../src/components/Modal";
 import { commonStyles } from "../../../src/styles/questionSetDetailStyles";
+import aiService from "../../../src/services/aiService";
 
 // 問題ごとの回答統計
 interface QuestionStats {
@@ -45,6 +50,7 @@ export default function TrialSetDetailScreen() {
     "all" | "ai" | "count" | "category"
   >("all");
   const [questionCount, setQuestionCount] = useState(10); // 初期値10問
+  const [questionCountInput, setQuestionCountInput] = useState("10"); // 入力中の値を保持
   const [questionGroups, setQuestionGroups] = useState<
     Array<{ category: string | null; questions: LocalQuestion[] }>
   >([]);
@@ -61,6 +67,11 @@ export default function TrialSetDetailScreen() {
     message: "",
   });
 
+  // 教科書選択モーダル用のstate
+  const [textbookModalVisible, setTextbookModalVisible] = useState(false);
+  const [availableTextbooks, setAvailableTextbooks] = useState<Textbook[]>([]);
+  const [loadingTextbooks, setLoadingTextbooks] = useState(false);
+
   // 画面がフォーカスされるたびにデータをリロード
   useFocusEffect(
     useCallback(() => {
@@ -71,6 +82,55 @@ export default function TrialSetDetailScreen() {
   const showErrorModal = (title: string, message: string) => {
     setErrorModalConfig({ title, message });
     setErrorModalVisible(true);
+  };
+
+  const loadAvailableTextbooks = async () => {
+    try {
+      setLoadingTextbooks(true);
+      const textbooks = await getAvailableTextbooks();
+      setAvailableTextbooks(textbooks);
+    } catch (error) {
+      console.error("Failed to load textbooks:", error);
+      showErrorModal(
+        t("Error", "エラー"),
+        t("Failed to load textbooks", "教科書の読み込みに失敗しました")
+      );
+    } finally {
+      setLoadingTextbooks(false);
+    }
+  };
+
+  const handleSelectTextbook = async (textbook: Textbook) => {
+    try {
+      await localStorageService.updateTrialQuestionSet(id, {
+        textbook_path: textbook.path,
+        textbook_type: textbook.type,
+      });
+      await loadData();
+      setTextbookModalVisible(false);
+    } catch (error) {
+      console.error("Failed to update textbook:", error);
+      showErrorModal(
+        t("Error", "エラー"),
+        t("Failed to assign textbook", "教科書の割り当てに失敗しました")
+      );
+    }
+  };
+
+  const handleRemoveTextbook = async () => {
+    try {
+      await localStorageService.updateTrialQuestionSet(id, {
+        textbook_path: undefined,
+        textbook_type: undefined,
+      });
+      await loadData();
+    } catch (error) {
+      console.error("Failed to remove textbook:", error);
+      showErrorModal(
+        t("Error", "エラー"),
+        t("Failed to remove textbook", "教科書の削除に失敗しました")
+      );
+    }
   };
 
   const loadData = async () => {
@@ -162,6 +222,37 @@ export default function TrialSetDetailScreen() {
   ): Promise<LocalQuestion[]> => {
     if (!questionSet) return [];
 
+    // trialモード用の一時的なuser_idを生成（問題セットIDをベースに）
+    const trialUserId = `trial_${id}`;
+
+    try {
+      // バックエンドのAI推薦APIを呼び出す（コールドスタート対応あり）
+      const recommendedQuestionIds = await aiService.getRecommendations({
+        user_id: trialUserId,
+        question_set_id: id,
+        count: count,
+      });
+
+      // 推薦された問題IDに対応する問題を取得
+      const recommendedQuestions = questionSet.questions.filter((q) =>
+        recommendedQuestionIds.includes(q.id)
+      );
+
+      // 推薦された問題が十分な場合は返す
+      if (recommendedQuestions.length >= count) {
+        return recommendedQuestions.slice(0, count);
+      }
+
+      // 推薦された問題が不足している場合は、ローカルフォールバックを使用
+      console.log(
+        `AI recommendation returned ${recommendedQuestions.length} questions, using fallback`
+      );
+    } catch (error) {
+      // エラーが発生した場合は、ローカルフォールバックを使用
+      console.error("AI recommendation failed, using local fallback:", error);
+    }
+
+    // ローカルフォールバック: 既存のロジックを使用
     const storageKey = `@flashcard_answers_${id}`;
     const answersData = await AsyncStorage.getItem(storageKey);
     const answers = answersData ? JSON.parse(answersData) : [];
@@ -416,22 +507,24 @@ export default function TrialSetDetailScreen() {
       <Header title={questionSet.title} />
 
       <View style={styles.header} nativeID="question-set-header">
-        <Text style={styles.title} nativeID="question-set-title">
-          {questionSet.title}
-          {questionSet.description && (
-            <Text
-              style={styles.description}
-              nativeID="question-set-description"
-            >
-              {questionSet.description}
-            </Text>
-          )}
+        <View style={styles.titleContainer}>
+          <Text style={styles.title} nativeID="question-set-title">
+            {questionSet.title}
+            {questionSet.description && (
+              <Text
+                style={styles.description}
+                nativeID="question-set-description"
+              >
+                {questionSet.description}
+              </Text>
+            )}
+          </Text>
           <View style={styles.trialBadge} nativeID="trial-badge">
             <Text style={styles.trialBadgeText} nativeID="trial-badge-text">
               {t("Trial Mode", "お試しモード")}
             </Text>
           </View>
-        </Text>
+        </View>
 
         <View style={styles.descriptionRow} nativeID="description-row">
           {/* カテゴリリンク */}
@@ -598,6 +691,38 @@ export default function TrialSetDetailScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+        {questionSet?.textbook_path ? (
+          <View style={styles.textbookButtonRow}>
+            <TouchableOpacity
+              style={styles.textbookButton}
+              onPress={() => router.push(`/(trial)/set/${id}/textbook`)}
+            >
+              <Text style={styles.textbookButtonText}>
+                📚 {t("View Textbook", "教科書を見る")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.removeTextbookButton}
+              onPress={handleRemoveTextbook}
+            >
+              <Text style={styles.removeTextbookButtonText}>
+                {t("Remove", "削除")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.textbookButton}
+            onPress={() => {
+              loadAvailableTextbooks();
+              setTextbookModalVisible(true);
+            }}
+          >
+            <Text style={styles.textbookButtonText}>
+              📚 {t("Assign Textbook", "教科書を割り当て")}
+            </Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={styles.backToListButton}
           onPress={() => router.back()}
@@ -652,37 +777,41 @@ export default function TrialSetDetailScreen() {
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
+          <View
             style={[
               styles.selectionOption,
               selectionMode === "ai" && styles.selectionOptionActive,
             ]}
-            onPress={() => {
-              if (selectionMode === "ai") {
-                // 既に選択されている場合はクイズを開始
-                handleStartQuizWithSelection();
-              } else {
-                // 初回選択時はモードを設定
-                setSelectionMode("ai");
-              }
-            }}
           >
-            <View style={styles.selectionOptionHeader}>
-              <Text
-                style={[
-                  styles.selectionOptionTitle,
-                  selectionMode === "ai" && styles.selectionOptionTitleActive,
-                ]}
-              >
-                🤖 {t("AI Selection", "AI選出")}
+            <TouchableOpacity
+              onPress={() => {
+                if (selectionMode === "ai") {
+                  // 既に選択されている場合はクイズを開始
+                  handleStartQuizWithSelection();
+                } else {
+                  // 初回選択時はモードを設定
+                  setSelectionMode("ai");
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.selectionOptionHeader}>
+                <Text
+                  style={[
+                    styles.selectionOptionTitle,
+                    selectionMode === "ai" && styles.selectionOptionTitleActive,
+                  ]}
+                >
+                  🤖 {t("AI Selection", "AI選出")}
+                </Text>
+              </View>
+              <Text style={styles.selectionOptionDesc}>
+                {t(
+                  "AI selects questions based on wrong answers, attempt count, and answer time (default: 10 questions)",
+                  "AIが間違えた数、出題回数、回答時間から問題を選出（初期値：10問）"
+                )}
               </Text>
-            </View>
-            <Text style={styles.selectionOptionDesc}>
-              {t(
-                "AI selects questions based on wrong answers, attempt count, and answer time (default: 10 questions)",
-                "AIが間違えた数、出題回数、回答時間から問題を選出（初期値：10問）"
-              )}
-            </Text>
+            </TouchableOpacity>
             {selectionMode === "ai" && (
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>
@@ -690,19 +819,35 @@ export default function TrialSetDetailScreen() {
                 </Text>
                 <TextInput
                   style={styles.input}
-                  value={questionCount.toString()}
+                  value={questionCountInput}
                   onChangeText={(text) => {
-                    const num = parseInt(text) || 10;
-                    setQuestionCount(
-                      Math.min(Math.max(num, 1), questionSet.questions.length)
-                    );
+                    // 入力中は完全に自由に入力できるようにする（制限なし）
+                    setQuestionCountInput(text);
+                  }}
+                  onBlur={() => {
+                    // フォーカスが外れた時に検証・制限を適用
+                    const num = parseInt(questionCountInput);
+                    if (isNaN(num) || num < 1) {
+                      setQuestionCount(1);
+                      setQuestionCountInput("1");
+                    } else if (num > questionSet.questions.length) {
+                      setQuestionCount(questionSet.questions.length);
+                      setQuestionCountInput(
+                        questionSet.questions.length.toString()
+                      );
+                    } else {
+                      setQuestionCount(num);
+                      setQuestionCountInput(num.toString());
+                    }
                   }}
                   keyboardType="numeric"
                   placeholder="10"
+                  placeholderTextColor="#999"
+                  editable={true}
                 />
               </View>
             )}
-          </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={[
@@ -776,38 +921,42 @@ export default function TrialSetDetailScreen() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity
+          <View
             style={[
               styles.selectionOption,
               selectionMode === "count" && styles.selectionOptionActive,
             ]}
-            onPress={() => {
-              if (selectionMode === "count") {
-                // 既に選択されている場合はクイズを開始
-                handleStartQuizWithSelection();
-              } else {
-                // 初回選択時はモードを設定
-                setSelectionMode("count");
-              }
-            }}
           >
-            <View style={styles.selectionOptionHeader}>
-              <Text
-                style={[
-                  styles.selectionOptionTitle,
-                  selectionMode === "count" &&
-                    styles.selectionOptionTitleActive,
-                ]}
-              >
-                📊 {t("Random Selection", "ランダム選出")}
+            <TouchableOpacity
+              onPress={() => {
+                if (selectionMode === "count") {
+                  // 既に選択されている場合はクイズを開始
+                  handleStartQuizWithSelection();
+                } else {
+                  // 初回選択時はモードを設定
+                  setSelectionMode("count");
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.selectionOptionHeader}>
+                <Text
+                  style={[
+                    styles.selectionOptionTitle,
+                    selectionMode === "count" &&
+                      styles.selectionOptionTitleActive,
+                  ]}
+                >
+                  📊 {t("Random Selection", "ランダム選出")}
+                </Text>
+              </View>
+              <Text style={styles.selectionOptionDesc}>
+                {t(
+                  "Select a specified number of questions randomly",
+                  "指定した問題数をランダムに選出"
+                )}
               </Text>
-            </View>
-            <Text style={styles.selectionOptionDesc}>
-              {t(
-                "Select a specified number of questions randomly",
-                "指定した問題数をランダムに選出"
-              )}
-            </Text>
+            </TouchableOpacity>
             {selectionMode === "count" && (
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>
@@ -815,19 +964,35 @@ export default function TrialSetDetailScreen() {
                 </Text>
                 <TextInput
                   style={styles.input}
-                  value={questionCount.toString()}
+                  value={questionCountInput}
                   onChangeText={(text) => {
-                    const num = parseInt(text) || 10;
-                    setQuestionCount(
-                      Math.min(Math.max(num, 1), questionSet.questions.length)
-                    );
+                    // 入力中は完全に自由に入力できるようにする（制限なし）
+                    setQuestionCountInput(text);
+                  }}
+                  onBlur={() => {
+                    // フォーカスが外れた時に検証・制限を適用
+                    const num = parseInt(questionCountInput);
+                    if (isNaN(num) || num < 1) {
+                      setQuestionCount(1);
+                      setQuestionCountInput("1");
+                    } else if (num > questionSet.questions.length) {
+                      setQuestionCount(questionSet.questions.length);
+                      setQuestionCountInput(
+                        questionSet.questions.length.toString()
+                      );
+                    } else {
+                      setQuestionCount(num);
+                      setQuestionCountInput(num.toString());
+                    }
                   }}
                   keyboardType="numeric"
                   placeholder="10"
+                  placeholderTextColor="#999"
+                  editable={true}
                 />
               </View>
             )}
-          </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={styles.startButton}
@@ -837,6 +1002,38 @@ export default function TrialSetDetailScreen() {
               {t("Start Quiz", "クイズ開始")}
             </Text>
           </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* 教科書選択モーダル */}
+      <Modal
+        visible={textbookModalVisible}
+        title={t("Select Textbook", "教科書を選択")}
+        onClose={() => setTextbookModalVisible(false)}
+      >
+        <View style={styles.textbookModalContent}>
+          {loadingTextbooks ? (
+            <ActivityIndicator size="large" color="#007AFF" />
+          ) : availableTextbooks.length === 0 ? (
+            <Text style={styles.emptyText}>
+              {t("No textbooks available", "利用可能な教科書がありません")}
+            </Text>
+          ) : (
+            <ScrollView>
+              {availableTextbooks.map((textbook) => (
+                <TouchableOpacity
+                  key={textbook.path}
+                  style={styles.textbookOption}
+                  onPress={() => handleSelectTextbook(textbook)}
+                >
+                  <Text style={styles.textbookOptionName}>{textbook.name}</Text>
+                  <Text style={styles.textbookOptionType}>
+                    {textbook.type === "markdown" ? "📄 Markdown" : "📕 PDF"}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
         </View>
       </Modal>
 
@@ -856,6 +1053,12 @@ export default function TrialSetDetailScreen() {
 
 const styles = StyleSheet.create({
   ...commonStyles,
+  titleContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+  },
   trialBadge: {
     backgroundColor: "#34C759",
     borderRadius: 4,
@@ -1002,5 +1205,62 @@ const styles = StyleSheet.create({
   categoryOptionTextActive: {
     ...commonStyles.categoryOptionTextActive,
     color: "#34C759",
+  },
+  textbookButtonRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
+  textbookButton: {
+    backgroundColor: "#007AFF",
+    borderRadius: 8,
+    padding: 14,
+    alignItems: "center",
+    flex: 1,
+  },
+  textbookButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  removeTextbookButton: {
+    backgroundColor: "#FF3B30",
+    borderRadius: 8,
+    padding: 14,
+    alignItems: "center",
+    flex: 1,
+  },
+  removeTextbookButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  textbookModalContent: {
+    maxHeight: 400,
+    padding: 16,
+  },
+  textbookOption: {
+    backgroundColor: "#f5f5f5",
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  textbookOptionName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 4,
+  },
+  textbookOptionType: {
+    fontSize: 14,
+    color: "#666",
+  },
+  emptyText: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    padding: 20,
   },
 });

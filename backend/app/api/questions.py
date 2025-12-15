@@ -561,14 +561,10 @@ async def select_questions_by_ai(
     db: Session = Depends(get_db)
 ):
     """
-    AIベースの問題選出
+    AIベースの問題選出（コールドスタート対応）
 
-    優先順位:
-    1. 回答履歴がない問題を優先（まだ解いていない問題）
-    2. 回答履歴がある問題の中で：
-       - 間違えた回数が多い問題
-       - 解いた回数が少ない問題
-       - 平均回答時間が長い問題
+    QuestionRecommenderを使用して問題を推薦します。
+    新規ユーザー（回答数30問以下）の場合は、類似ユーザーが間違えた問題を推薦します。
 
     Args:
         question_set_id: 問題集ID
@@ -579,6 +575,8 @@ async def select_questions_by_ai(
     Returns:
         選出された問題のリスト
     """
+    from ..ai import QuestionRecommender
+
     # 問題集の存在確認
     question_set = db.query(QuestionSet).filter(
         QuestionSet.id == question_set_id
@@ -590,43 +588,72 @@ async def select_questions_by_ai(
             detail="問題集が見つかりません"
         )
 
-    # ユーザーの回答履歴をサブクエリで取得
-    user_answers_subquery = (
-        db.query(
-            Answer.question_id,
-            func.count(Answer.id).label('attempt_count'),
-            func.sum(case((Answer.is_correct == False, 1), else_=0)).label('error_count'),
-            func.avg(Answer.answer_time_sec).label('avg_time')
+    # AI推薦システムを使用
+    try:
+        recommender = QuestionRecommender(db)
+        recommended_question_ids = recommender.recommend_questions(
+            user_id=current_user.id,
+            question_set_id=question_set_id,
+            count=count
         )
-        .filter(Answer.user_id == current_user.id)
-        .group_by(Answer.question_id)
-        .subquery()
-    )
 
-    # 問題を取得してスコアリング
-    questions = (
-        db.query(Question)
-        .outerjoin(user_answers_subquery, Question.id == user_answers_subquery.c.question_id)
-        .filter(Question.question_set_id == question_set_id)
-        .order_by(
-            # 1. 回答履歴がない問題を優先（attempt_countがNULLまたは0の問題）
-            case(
-                (user_answers_subquery.c.attempt_count == None, 0),  # 履歴なし = 0 (優先)
-                else_=1  # 履歴あり = 1
-            ),
-            # 2. 回答履歴がある問題の中での優先順位
-            # 2-1. 間違えた回数が多い順（降順）
-            func.coalesce(user_answers_subquery.c.error_count, 0).desc(),
-            # 2-2. 解いた回数が少ない順（昇順）
-            func.coalesce(user_answers_subquery.c.attempt_count, 0).asc(),
-            # 2-3. 平均回答時間が長い順（降順）
-            func.coalesce(user_answers_subquery.c.avg_time, 0).desc(),
-            # 3. 問題の順序
-            Question.order
+        # 推薦された問題IDから問題を取得
+        questions = (
+            db.query(Question)
+            .filter(
+                Question.question_set_id == question_set_id,
+                Question.id.in_(recommended_question_ids)
+            )
+            .all()
         )
-        .limit(count)
-        .all()
-    )
+
+        # IDの順序を保持
+        question_dict = {q.id: q for q in questions}
+        questions = [question_dict[qid] for qid in recommended_question_ids if qid in question_dict]
+
+    except Exception as e:
+        # エラー時はフォールバック（従来のルールベース）
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"AI recommendation failed, using fallback: {str(e)}")
+
+        # ユーザーの回答履歴をサブクエリで取得
+        user_answers_subquery = (
+            db.query(
+                Answer.question_id,
+                func.count(Answer.id).label('attempt_count'),
+                func.sum(case((Answer.is_correct == False, 1), else_=0)).label('error_count'),
+                func.avg(Answer.answer_time_sec).label('avg_time')
+            )
+            .filter(Answer.user_id == current_user.id)
+            .group_by(Answer.question_id)
+            .subquery()
+        )
+
+        # 問題を取得してスコアリング
+        questions = (
+            db.query(Question)
+            .outerjoin(user_answers_subquery, Question.id == user_answers_subquery.c.question_id)
+            .filter(Question.question_set_id == question_set_id)
+            .order_by(
+                # 1. 回答履歴がない問題を優先（attempt_countがNULLまたは0の問題）
+                case(
+                    (user_answers_subquery.c.attempt_count == None, 0),  # 履歴なし = 0 (優先)
+                    else_=1  # 履歴あり = 1
+                ),
+                # 2. 回答履歴がある問題の中での優先順位
+                # 2-1. 間違えた回数が多い順（降順）
+                func.coalesce(user_answers_subquery.c.error_count, 0).desc(),
+                # 2-2. 解いた回数が少ない順（昇順）
+                func.coalesce(user_answers_subquery.c.attempt_count, 0).asc(),
+                # 2-3. 平均回答時間が長い順（降順）
+                func.coalesce(user_answers_subquery.c.avg_time, 0).desc(),
+                # 3. 問題の順序
+                Question.order
+            )
+            .limit(count)
+            .all()
+        )
 
     if not questions:
         raise HTTPException(
@@ -647,6 +674,8 @@ async def select_questions_by_ai(
             "explanation": q.explanation,
             "difficulty": q.difficulty,
             "category": q.category,
+            "subcategory1": q.subcategory1,
+            "subcategory2": q.subcategory2,
             "order": q.order if q.order is not None else 0,
             "total_attempts": q.total_attempts if q.total_attempts is not None else 0,
             "correct_count": q.correct_count if q.correct_count is not None else 0,

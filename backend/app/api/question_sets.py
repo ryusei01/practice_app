@@ -21,6 +21,8 @@ class QuestionSetCreate(BaseModel):
     tags: Optional[List[str]] = None
     price: int = 0
     is_published: bool = False
+    textbook_path: Optional[str] = None
+    textbook_type: Optional[str] = None
 
 
 class QuestionSetUpdate(BaseModel):
@@ -30,6 +32,8 @@ class QuestionSetUpdate(BaseModel):
     tags: Optional[List[str]] = None
     price: Optional[int] = None
     is_published: Optional[bool] = None
+    textbook_path: Optional[str] = None
+    textbook_type: Optional[str] = None
 
 
 class QuestionSetResponse(BaseModel):
@@ -45,6 +49,8 @@ class QuestionSetResponse(BaseModel):
     average_difficulty: float = 0.5
     total_purchases: int = 0
     average_rating: float = 0.0
+    textbook_path: Optional[str] = None
+    textbook_type: Optional[str] = None
 
     @model_validator(mode='before')
     @classmethod
@@ -55,7 +61,8 @@ class QuestionSetResponse(BaseModel):
         if hasattr(data, '__dict__'):
             result = {}
             for key in ['id', 'title', 'description', 'category', 'tags', 'price', 'is_published', 'creator_id',
-                       'total_questions', 'average_difficulty', 'total_purchases', 'average_rating']:
+                       'total_questions', 'average_difficulty', 'total_purchases', 'average_rating',
+                       'textbook_path', 'textbook_type']:
                 val = getattr(data, key, None)
                 if key in ['total_questions', 'total_purchases'] and val is None:
                     result[key] = 0
@@ -97,7 +104,9 @@ async def create_question_set(
         tags=request.tags,
         price=request.price,
         is_published=request.is_published,
-        creator_id=current_user.id
+        creator_id=current_user.id,
+        textbook_path=request.textbook_path,
+        textbook_type=request.textbook_type
     )
 
     db.add(new_question_set)
@@ -198,7 +207,9 @@ async def get_my_question_sets(
             "total_questions": qs.total_questions if qs.total_questions is not None else 0,
             "average_difficulty": qs.average_difficulty if qs.average_difficulty is not None else 0.5,
             "total_purchases": qs.total_purchases if qs.total_purchases is not None else 0,
-            "average_rating": qs.average_rating if qs.average_rating is not None else 0.0
+            "average_rating": qs.average_rating if qs.average_rating is not None else 0.0,
+            "textbook_path": qs.textbook_path,
+            "textbook_type": qs.textbook_type
         })
 
     return result
@@ -251,7 +262,9 @@ async def get_purchased_question_sets(
             "total_questions": qs.total_questions if qs.total_questions is not None else 0,
             "average_difficulty": qs.average_difficulty if qs.average_difficulty is not None else 0.5,
             "total_purchases": qs.total_purchases if qs.total_purchases is not None else 0,
-            "average_rating": qs.average_rating if qs.average_rating is not None else 0.0
+            "average_rating": qs.average_rating if qs.average_rating is not None else 0.0,
+            "textbook_path": qs.textbook_path,
+            "textbook_type": qs.textbook_type
         })
 
     return result
@@ -336,6 +349,10 @@ async def update_question_set(
         question_set.price = request.price
     if request.is_published is not None:
         question_set.is_published = request.is_published
+    if request.textbook_path is not None:
+        question_set.textbook_path = request.textbook_path
+    if request.textbook_type is not None:
+        question_set.textbook_type = request.textbook_type
 
     db.commit()
     db.refresh(question_set)

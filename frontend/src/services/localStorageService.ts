@@ -8,6 +8,8 @@ export interface LocalQuestionSet {
   createdAt: string;
   isTrial: boolean; // お試し版フラグ
   redSheetEnabled?: boolean; // 赤シート機能の有効/無効
+  textbook_path?: string; // 教科書ファイルのパス
+  textbook_type?: string; // "markdown" または "pdf"
 }
 
 export interface LocalQuestion {
@@ -28,13 +30,10 @@ export const localStorageService = {
   // 問題セット一覧を取得
   async getTrialQuestionSets(): Promise<LocalQuestionSet[]> {
     try {
-      console.log(
-        "[LocalStorage] Getting trial question sets from key:",
-        TRIAL_QUESTION_SETS_KEY
-      );
+      console.log('[LocalStorage] Getting trial question sets from key:', TRIAL_QUESTION_SETS_KEY);
       const data = await AsyncStorage.getItem(TRIAL_QUESTION_SETS_KEY);
       const sets = data ? JSON.parse(data) : [];
-      console.log("[LocalStorage] Found", sets.length, "question sets");
+      console.log('[LocalStorage] Found', sets.length, 'question sets');
       return sets;
     } catch (error) {
       console.error("Error getting trial question sets:", error);
@@ -53,21 +52,15 @@ export const localStorageService = {
         id: `trial_${Date.now()}`,
         createdAt: new Date().toISOString(),
         isTrial: true,
+        // 教科書は自動割り当てしない（明示的に設定されていない場合は未設定）
+        textbook_path: questionSet.textbook_path,
+        textbook_type: questionSet.textbook_type,
       };
       sets.push(newSet);
       await AsyncStorage.setItem(TRIAL_QUESTION_SETS_KEY, JSON.stringify(sets));
       return newSet;
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error saving trial question set:", error);
-      // 容量超過エラーの場合
-      if (
-        error?.name === "QuotaExceededError" ||
-        error?.message?.includes("quota")
-      ) {
-        throw new Error(
-          "Storage quota exceeded. Please delete some question sets or clear old data."
-        );
-      }
       throw error;
     }
   },
@@ -136,80 +129,9 @@ export const localStorageService = {
 
       results[questionSetId].push(result);
       await AsyncStorage.setItem(TRIAL_RESULTS_KEY, JSON.stringify(results));
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error saving trial result:", error);
-      // 容量超過エラーの場合
-      if (
-        error?.name === "QuotaExceededError" ||
-        error?.message?.includes("quota")
-      ) {
-        throw new Error(
-          "Storage quota exceeded. Please clear old quiz results."
-        );
-      }
       throw error;
-    }
-  },
-
-  // 古い回答履歴を削除（最新のN件のみ保持）
-  async cleanupOldAnswers(
-    questionSetId: string,
-    keepCount: number = 1000
-  ): Promise<void> {
-    try {
-      const storageKey = `@flashcard_answers_${questionSetId}`;
-      const answersData = await AsyncStorage.getItem(storageKey);
-      if (!answersData) return;
-
-      const answers = JSON.parse(answersData);
-      if (answers.length <= keepCount) return;
-
-      // 最新のN件のみ保持（answered_atでソート）
-      const sortedAnswers = answers.sort((a: any, b: any) => {
-        const dateA = new Date(a.answered_at || 0).getTime();
-        const dateB = new Date(b.answered_at || 0).getTime();
-        return dateB - dateA; // 降順（新しい順）
-      });
-
-      const keptAnswers = sortedAnswers.slice(0, keepCount);
-      await AsyncStorage.setItem(storageKey, JSON.stringify(keptAnswers));
-      console.log(
-        `[LocalStorage] Cleaned up answers for ${questionSetId}: kept ${keptAnswers.length} of ${answers.length}`
-      );
-    } catch (error) {
-      console.error("Error cleaning up old answers:", error);
-    }
-  },
-
-  // ストレージ使用量を確認（概算）
-  async getStorageUsage(): Promise<{ approximate: number; unit: string }> {
-    try {
-      let totalSize = 0;
-      const keys = await AsyncStorage.getAllKeys();
-
-      for (const key of keys) {
-        if (
-          key.startsWith("@trial_") ||
-          key.startsWith("@flashcard_answers_")
-        ) {
-          const value = await AsyncStorage.getItem(key);
-          if (value) {
-            totalSize += value.length * 2; // UTF-16文字列として概算（バイト数）
-          }
-        }
-      }
-
-      // MBに変換
-      const mb = totalSize / (1024 * 1024);
-      if (mb >= 1) {
-        return { approximate: Math.round(mb * 10) / 10, unit: "MB" };
-      } else {
-        const kb = totalSize / 1024;
-        return { approximate: Math.round(kb * 10) / 10, unit: "KB" };
-      }
-    } catch (error) {
-      console.error("Error getting storage usage:", error);
-      return { approximate: 0, unit: "KB" };
     }
   },
 
@@ -231,112 +153,70 @@ export const localStorageService = {
     defaultSets: Omit<LocalQuestionSet, "id" | "createdAt" | "isTrial">[]
   ): Promise<void> {
     try {
-      console.log(
-        "[LocalStorage] initializeDefaultQuestions called with",
-        defaultSets.length,
-        "sets"
-      );
-
+      console.log('[LocalStorage] initializeDefaultQuestions called with', defaultSets.length, 'sets');
+      
       const existingSets = await this.getTrialQuestionSets();
-      console.log("[LocalStorage] Existing sets:", existingSets.length);
+      console.log('[LocalStorage] Existing sets:', existingSets.length);
 
-      // 現在のCSVファイルのタイトルセットを作成
-      const currentTitles = new Set(defaultSets.map((set) => set.title));
+      // 既存のdefault_セットを取得
+      const existingDefaultSets = existingSets.filter(set => set.id.startsWith('default_'));
+      const existingDefaultTitles = new Set(existingDefaultSets.map(set => set.title));
 
-      // 既存の問題セットを分類
-      const defaultSetsInStorage = existingSets.filter((set) =>
-        set.id.startsWith("default_")
-      );
-      const userCreatedSets = existingSets.filter(
-        (set) => !set.id.startsWith("default_")
-      );
-
-      // 既存のdefault_問題セットのうち、現在のCSVファイルに存在しないものを削除
-      const defaultSetsToKeep = defaultSetsInStorage.filter((set) =>
-        currentTitles.has(set.title)
-      );
-      const removedCount =
-        defaultSetsInStorage.length - defaultSetsToKeep.length;
-
-      if (removedCount > 0) {
-        console.log(
-          `[LocalStorage] Removing ${removedCount} default set(s) that no longer exist in CSV files`
-        );
-        defaultSetsToKeep.forEach((set) => {
-          console.log(`[LocalStorage] Keeping default set: ${set.title}`);
-        });
-        defaultSetsInStorage
-          .filter((set) => !currentTitles.has(set.title))
-          .forEach((set) => {
-            console.log(`[LocalStorage] Removing default set: ${set.title}`);
-          });
-      }
-
-      // 既存のdefault_問題セットのタイトルをセットに変換（重複チェック用）
-      const existingDefaultTitles = new Set(
-        defaultSetsToKeep.map((set) => set.title)
-      );
-
-      // 新しい問題セットを追加
-      let addedCount = 0;
+      // 新しいセットを追加または更新
       for (const defaultSet of defaultSets) {
-        // 既に存在するタイトルの場合はスキップ
-        if (existingDefaultTitles.has(defaultSet.title)) {
-          console.log(
-            "[LocalStorage] Skipping existing set:",
-            defaultSet.title
-          );
-          continue;
+        const existingSet = existingDefaultSets.find(set => set.title === defaultSet.title);
+        
+        if (existingSet) {
+          // 既存セットを更新
+          console.log('[LocalStorage] Updating existing set:', defaultSet.title);
+          
+          // 既存のプロパティを保持しつつ、新しいプロパティを追加
+          existingSet.title = defaultSet.title;
+          existingSet.description = defaultSet.description;
+          existingSet.questions = defaultSet.questions;
+          existingSet.isTrial = true;
+          // 教科書は自動割り当てしない - 既存の教科書情報は保持するが、新規作成時は設定しない
+          // 誤って設定された英語名のパスを削除
+          if (existingSet.textbook_path === "Decision Trees and Random Forests Textbook.md" || 
+              existingSet.textbook_path === "Machine Learning and Deep Learning Textbook.md") {
+            console.log('[LocalStorage] Removing auto-assigned textbook path:', existingSet.textbook_path);
+            existingSet.textbook_path = undefined;
+            existingSet.textbook_type = undefined;
+          }
+        } else {
+          // 新しいセットを追加（教科書は自動割り当てしない）
+          console.log('[LocalStorage] Adding new default set:', defaultSet.title);
+          const newSet: LocalQuestionSet = {
+            ...defaultSet,
+            id: `default_${Date.now()}_${Math.random()
+              .toString(36)
+              .substr(2, 9)}`,
+            createdAt: new Date().toISOString(),
+            isTrial: true,
+            // 教科書は自動割り当てしない（明示的に設定されていない場合は未設定）
+            textbook_path: undefined,
+            textbook_type: undefined,
+          };
+          existingSets.push(newSet);
         }
-
-        console.log("[LocalStorage] Adding new default set:", defaultSet.title);
-        const newSet: LocalQuestionSet = {
-          ...defaultSet,
-          id: `default_${Date.now()}_${Math.random()
-            .toString(36)
-            .substr(2, 9)}`,
-          createdAt: new Date().toISOString(),
-          isTrial: true,
-        };
-        defaultSetsToKeep.push(newSet);
-        addedCount++;
       }
 
-      // ユーザー作成の問題セットとdefault_問題セットを結合
-      const finalSets = [...userCreatedSets, ...defaultSetsToKeep];
-
-      if (addedCount > 0 || removedCount > 0) {
-        console.log(
-          "[LocalStorage] Total sets after sync:",
-          finalSets.length,
-          `(added: ${addedCount}, removed: ${removedCount}, user-created: ${userCreatedSets.length})`
-        );
-        await AsyncStorage.setItem(
-          TRIAL_QUESTION_SETS_KEY,
-          JSON.stringify(finalSets)
-        );
-        if (addedCount > 0) {
-          console.log(
-            `[LocalStorage] Added ${addedCount} new default question set(s)`
-          );
+      // 存在しないdefault_セットを削除
+      const currentDefaultTitles = new Set(defaultSets.map(set => set.title));
+      const setsToKeep = existingSets.filter(set => {
+        if (set.id.startsWith('default_')) {
+          return currentDefaultTitles.has(set.title);
         }
-        if (removedCount > 0) {
-          console.log(
-            `[LocalStorage] Removed ${removedCount} obsolete default question set(s)`
-          );
-        }
-      } else {
-        console.log(
-          "[LocalStorage] No changes needed - all default sets are up to date"
-        );
-      }
+        return true; // ユーザー作成のセットは保持
+      });
 
-      // 初期化済みフラグを設定（初回のみ）
-      const initialized = await AsyncStorage.getItem(DEFAULT_INITIALIZED_KEY);
-      if (initialized !== "true") {
-        await AsyncStorage.setItem(DEFAULT_INITIALIZED_KEY, "true");
-        console.log("[LocalStorage] Default questions initialization flag set");
-      }
+      console.log('[LocalStorage] Total sets after update:', setsToKeep.length);
+      await AsyncStorage.setItem(
+        TRIAL_QUESTION_SETS_KEY,
+        JSON.stringify(setsToKeep)
+      );
+      await AsyncStorage.setItem(DEFAULT_INITIALIZED_KEY, "true");
+      console.log("[LocalStorage] Default questions initialized successfully");
     } catch (error) {
       console.error("Error initializing default questions:", error);
       throw error;

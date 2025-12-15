@@ -37,6 +37,16 @@ class QuestionRecommender:
         Returns:
             推薦問題のIDリスト
         """
+        # コールドスタート判定（回答数30問以下）
+        if self._is_cold_start(user_id, question_set_id):
+            logger.info(f"Cold start mode for user {user_id}")
+            return self._recommend_for_cold_start(
+                user_id=user_id,
+                question_set_id=question_set_id,
+                count=count
+            )
+
+        # 通常の推薦システム
         # 1. ユーザーの苦手カテゴリを取得
         weak_categories = self._get_weak_categories(user_id)
 
@@ -202,3 +212,265 @@ class QuestionRecommender:
         else:
             # 適切な範囲 → 現在の難易度を維持
             return category_stat.difficulty_mean
+
+    def _is_cold_start(self, user_id: str, question_set_id: str, threshold: int = 30) -> bool:
+        """
+        コールドスタート（新規ユーザー）かどうかを判定
+
+        Args:
+            user_id: ユーザーID
+            question_set_id: 問題集ID
+            threshold: コールドスタート判定の閾値（回答数）
+
+        Returns:
+            True: コールドスタート、False: 通常ユーザー
+        """
+        # 同じ問題セットでの回答数をカウント
+        answer_count = self.db.query(Answer).join(Question).filter(
+            and_(
+                Answer.user_id == user_id,
+                Question.question_set_id == question_set_id
+            )
+        ).count()
+
+        return answer_count <= threshold
+
+    def _find_similar_users(
+        self,
+        user_id: str,
+        question_set_id: str,
+        top_k: int = 10
+    ) -> List[tuple[str, float]]:
+        """
+        類似ユーザーを検索（同じ問題セットを解いたユーザーから）
+
+        Args:
+            user_id: ユーザーID
+            question_set_id: 問題集ID
+            top_k: 上位k人の類似ユーザーを返す
+
+        Returns:
+            [(user_id, similarity_score), ...] のリスト（類似度の高い順）
+        """
+        # 1. 現在のユーザーのカテゴリ別スコアを取得
+        user_category_stats = self.db.query(UserCategoryStats).filter(
+            UserCategoryStats.user_id == user_id
+        ).all()
+
+        if not user_category_stats:
+            return []
+
+        # ユーザーのカテゴリ別正答率ベクトルを作成
+        user_categories = {stat.category: stat.correct_rate for stat in user_category_stats}
+        user_vector = np.array([user_categories.get(cat, 0.5) for cat in sorted(user_categories.keys())])
+
+        # 2. 同じ問題セットを解いた他のユーザーを取得
+        other_users = self.db.query(Answer.user_id).join(Question).filter(
+            and_(
+                Answer.user_id != user_id,
+                Question.question_set_id == question_set_id
+            )
+        ).distinct().all()
+
+        if not other_users:
+            return []
+
+        # 3. 各ユーザーとの類似度を計算
+        similar_users = []
+        for (other_user_id,) in other_users:
+            # 他のユーザーのカテゴリ別スコアを取得
+            other_category_stats = self.db.query(UserCategoryStats).filter(
+                UserCategoryStats.user_id == other_user_id
+            ).all()
+
+            if not other_category_stats:
+                continue
+
+            # 同じカテゴリで比較
+            other_categories = {stat.category: stat.correct_rate for stat in other_category_stats}
+            
+            # 共通カテゴリのみで比較
+            common_categories = set(user_categories.keys()) & set(other_categories.keys())
+            if len(common_categories) < 2:  # 最低2カテゴリ以上で比較
+                continue
+
+            # ベクトルを作成（共通カテゴリのみ）
+            common_cats_sorted = sorted(common_categories)
+            user_vec = np.array([user_categories[cat] for cat in common_cats_sorted])
+            other_vec = np.array([other_categories[cat] for cat in common_cats_sorted])
+
+            # コサイン類似度を計算（無料のnumpyのみ使用）
+            similarity = self._cosine_similarity(user_vec, other_vec)
+            similar_users.append((other_user_id, similarity))
+
+        # 4. 類似度でソートして上位k人を返す
+        similar_users.sort(key=lambda x: x[1], reverse=True)
+        return similar_users[:top_k]
+
+    def _cosine_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
+        """
+        コサイン類似度を計算（無料のnumpyのみ使用）
+
+        Args:
+            vec1: ベクトル1
+            vec2: ベクトル2
+
+        Returns:
+            コサイン類似度（0.0-1.0）
+        """
+        dot_product = np.dot(vec1, vec2)
+        norm1 = np.linalg.norm(vec1)
+        norm2 = np.linalg.norm(vec2)
+
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+
+        return dot_product / (norm1 * norm2)
+
+    def _recommend_for_cold_start(
+        self,
+        user_id: str,
+        question_set_id: str,
+        count: int = 10
+    ) -> List[str]:
+        """
+        コールドスタート（新規ユーザー）向けの問題推薦
+
+        類似ユーザーが間違えた問題を優先的に推薦
+
+        Args:
+            user_id: ユーザーID
+            question_set_id: 問題集ID
+            count: 推薦する問題数
+
+        Returns:
+            推薦問題のIDリスト
+        """
+        # 1. 類似ユーザーを検索
+        similar_users = self._find_similar_users(user_id, question_set_id, top_k=10)
+
+        # 2. 問題集内の全問題を取得
+        questions = self.db.query(Question).filter(
+            Question.question_set_id == question_set_id
+        ).all()
+
+        if not questions:
+            return []
+
+        # 3. 類似ユーザーが間違えた問題を集計
+        question_scores = {}  # {question_id: score}
+
+        if similar_users:
+            # 類似ユーザーが間違えた問題にスコアを付与
+            for similar_user_id, similarity in similar_users:
+                # このユーザーが間違えた問題を取得
+                wrong_answers = self.db.query(Answer).join(Question).filter(
+                    and_(
+                        Answer.user_id == similar_user_id,
+                        Answer.is_correct == False,
+                        Question.question_set_id == question_set_id
+                    )
+                ).all()
+
+                for answer in wrong_answers:
+                    question_id = answer.question_id
+                    if question_id not in question_scores:
+                        question_scores[question_id] = 0.0
+                    # 類似度に応じてスコアを加算
+                    question_scores[question_id] += similarity
+
+            # 現在のユーザーが既に解いた問題は除外
+            answered_question_ids = set(
+                self.db.query(Answer.question_id).join(Question).filter(
+                    and_(
+                        Answer.user_id == user_id,
+                        Question.question_set_id == question_set_id
+                    )
+                ).distinct().all()
+            )
+            answered_question_ids = {qid for (qid,) in answered_question_ids}
+
+            # スコアでソート
+            scored_questions = [
+                (qid, score) for qid, score in question_scores.items()
+                if qid not in answered_question_ids
+            ]
+            scored_questions.sort(key=lambda x: x[1], reverse=True)
+            recommended_ids = [qid for qid, _ in scored_questions[:count]]
+
+            if len(recommended_ids) >= count:
+                logger.info(f"Recommended {len(recommended_ids)} questions from similar users for cold start user {user_id}")
+                return recommended_ids
+
+        # 4. フォールバック: 中程度の難易度（0.4-0.6）の問題を推薦
+        logger.info(f"Using fallback recommendation for cold start user {user_id}")
+        return self._recommend_by_difficulty_fallback(
+            question_set_id=question_set_id,
+            user_id=user_id,
+            count=count,
+            min_difficulty=0.4,
+            max_difficulty=0.6
+        )
+
+    def _recommend_by_difficulty_fallback(
+        self,
+        question_set_id: str,
+        user_id: str,
+        count: int,
+        min_difficulty: float = 0.4,
+        max_difficulty: float = 0.6
+    ) -> List[str]:
+        """
+        難易度に基づくフォールバック推薦（中程度の難易度）
+
+        Args:
+            question_set_id: 問題集ID
+            user_id: ユーザーID
+            count: 推薦する問題数
+            min_difficulty: 最小難易度
+            max_difficulty: 最大難易度
+
+        Returns:
+            推薦問題のIDリスト
+        """
+        # 中程度の難易度の問題を取得
+        questions = self.db.query(Question).filter(
+            and_(
+                Question.question_set_id == question_set_id,
+                Question.difficulty >= min_difficulty,
+                Question.difficulty <= max_difficulty
+            )
+        ).all()
+
+        if not questions:
+            # 該当する問題がない場合は、難易度範囲を広げる
+            questions = self.db.query(Question).filter(
+                Question.question_set_id == question_set_id
+            ).all()
+
+        # 既に解いた問題を除外
+        answered_question_ids = set(
+            self.db.query(Answer.question_id).join(Question).filter(
+                and_(
+                    Answer.user_id == user_id,
+                    Question.question_set_id == question_set_id
+                )
+            ).distinct().all()
+        )
+        answered_question_ids = {qid for (qid,) in answered_question_ids}
+
+        # 未回答の問題を優先
+        unanswered_questions = [q for q in questions if q.id not in answered_question_ids]
+        answered_questions = [q for q in questions if q.id in answered_question_ids]
+
+        # 未回答の問題を優先的に推薦
+        recommended = []
+        for q in unanswered_questions[:count]:
+            recommended.append(q.id)
+
+        # まだ足りない場合は、既に解いた問題から追加
+        if len(recommended) < count:
+            for q in answered_questions[:count - len(recommended)]:
+                recommended.append(q.id)
+
+        return recommended[:count]

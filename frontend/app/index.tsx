@@ -304,7 +304,7 @@ export default function Home() {
 
             <TouchableOpacity
               style={[styles.button, styles.trialButton]}
-              onPress={() => router.push("/(trial)/question-sets")}
+              onPress={() => router.push("/(trial)/trial-question-sets")}
               nativeID="btn-trial"
             >
               <Text style={styles.buttonText} nativeID="btn-trial-text">
