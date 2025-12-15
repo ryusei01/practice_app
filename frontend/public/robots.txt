@@ -1,0 +1,21 @@
+User-agent: *
+Allow: /
+Allow: /question-sets
+
+# 認証が必要なページや個人情報を含むページはインデックスしない
+Disallow: /login
+Disallow: /register
+Disallow: /verify-otp
+Disallow: /question-sets/
+Disallow: /quiz/
+Disallow: /flashcard/
+Disallow: /set/
+Disallow: /ai-dashboard
+Disallow: /seller-dashboard
+Disallow: /settings
+Disallow: /premium-upgrade
+Disallow: /stats
+
+# Sitemap
+Sitemap: https://ai-practice-book.com/sitemap.xml
+

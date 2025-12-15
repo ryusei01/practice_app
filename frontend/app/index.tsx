@@ -21,11 +21,6 @@ export default function Home() {
   // Web版の場合、動的にメタタグを設定
   useEffect(() => {
     if (Platform.OS === "web") {
-      // タイトル設定
-      document.title = isAuthenticated
-        ? "AI Practice Book Ver.β"
-        : "AI Practice Book Ver.β";
-
       // メタタグを設定する関数
       const setMetaTag = (name: string, content: string, property?: string) => {
         const selector = property
@@ -44,40 +39,96 @@ export default function Home() {
         meta.content = content;
       };
 
+      // Linkタグを設定する関数
+      const setLinkTag = (rel: string, href: string, type?: string) => {
+        const selector = type
+          ? `link[rel="${rel}"][type="${type}"]`
+          : `link[rel="${rel}"]`;
+        let link = document.querySelector(selector) as HTMLLinkElement;
+        if (!link) {
+          link = document.createElement("link");
+          link.setAttribute("rel", rel);
+          if (type) {
+            link.setAttribute("type", type);
+          }
+          document.head.appendChild(link);
+        }
+        link.href = href;
+      };
+
       if (!isAuthenticated) {
         // 未ログイン時: SEO最適化
-        setMetaTag(
-          "description",
-          "AI-powered learning platform that prioritizes your weak areas and recommends optimal questions to boost your scores. Smart adaptive learning tailored to your needs. | AIが苦手分野を優先的に出題し、最適な問題を推薦してスコアアップをサポート。あなたに合わせた適応型学習。"
-        );
+        const baseUrl = "https://ai-practice-book.com";
+        const currentLang = language === "ja" ? "ja" : "en";
+
+        // タイトル設定（言語に応じて）
+        const pageTitle =
+          currentLang === "ja"
+            ? "AI Practice Book - AIが苦手分野を優先的に出題する学習プラットフォーム"
+            : "AI Practice Book - AI-Powered Learning Platform for Personalized Study";
+        document.title = pageTitle;
+
+        // Description（160文字以内、言語に応じて）
+        const description =
+          currentLang === "ja"
+            ? "AIが苦手分野を優先的に出題し、最適な問題を推薦してスコアアップをサポート。あなたに合わせた適応型学習プラットフォーム。登録不要でお試し可能。"
+            : "AI-powered learning platform that prioritizes your weak areas and recommends optimal questions to boost your scores. Smart adaptive learning tailored to your needs. Try free without registration.";
+
+        // メタタグ設定
+        setMetaTag("description", description);
         setMetaTag(
           "keywords",
           "AI,learning,quiz,adaptive learning,weak areas,score improvement,personalized study,AI,学習,クイズ,適応型学習,苦手分野,スコアアップ,個別学習"
         );
-        setMetaTag(
-          "og:title",
-          "AI Practice Book - Your Personal Study Assistant | AI Practice Book - あなた専用の学習アシスタント",
-          true
-        );
-        setMetaTag(
-          "og:description",
-          "AI prioritizes your weak areas and recommends optimal questions to improve your scores. Adaptive learning personalized for you. | AIが苦手分野を優先し、最適な問題を推薦してスコアを改善。あなた専用の適応型学習。",
-          true
-        );
+
+        // Open Graph
+        const ogTitle =
+          currentLang === "ja"
+            ? "AI Practice Book - あなた専用のAI学習アシスタント"
+            : "AI Practice Book - Your Personal AI Study Assistant";
+        const ogDescription =
+          currentLang === "ja"
+            ? "AIが苦手分野を優先し、最適な問題を推薦してスコアを改善。あなた専用の適応型学習。"
+            : "AI prioritizes your weak areas and recommends optimal questions to improve your scores. Adaptive learning personalized for you.";
+
+        setMetaTag("og:title", ogTitle, true);
+        setMetaTag("og:description", ogDescription, true);
         setMetaTag("og:type", "website", true);
+        setMetaTag("og:url", baseUrl, true);
+        setMetaTag("og:site_name", "AI Practice Book", true);
+        setMetaTag("og:locale", currentLang === "ja" ? "ja_JP" : "en_US", true);
+        if (currentLang === "ja") {
+          setMetaTag("og:locale:alternate", "en_US", true);
+        } else {
+          setMetaTag("og:locale:alternate", "ja_JP", true);
+        }
+
+        // Twitter Card
         setMetaTag("twitter:card", "summary_large_image");
-        setMetaTag(
-          "twitter:title",
-          "AI Practice Book - Your Personal Study Assistant | AI Practice Book - あなた専用の学習アシスタント"
-        );
-        setMetaTag(
-          "twitter:description",
-          "AI identifies your weaknesses and recommends the best questions to boost your scores efficiently | AIが弱点を特定し、効率的にスコアを上げる最適な問題を推薦"
-        );
+        setMetaTag("twitter:title", ogTitle);
+        setMetaTag("twitter:description", ogDescription);
+
+        // その他のSEOタグ
         setMetaTag("robots", "index, follow");
-        setMetaTag("language", "English, Japanese");
+        setMetaTag("language", currentLang === "ja" ? "Japanese" : "English");
+        setMetaTag("author", "AI Practice Book");
+
+        // Canonical URL
+        setLinkTag("canonical", baseUrl);
+
+        // Alternate language links
+        setLinkTag("alternate", `${baseUrl}?lang=ja`, "x-default");
+        setLinkTag("alternate", `${baseUrl}?lang=ja`, "ja");
+        setLinkTag("alternate", `${baseUrl}?lang=en`, "en");
+
+        // Google Search Console 検証用メタタグ
+        setMetaTag(
+          "google-site-verification",
+          "14RFhI0FXY1YDiIG4D-RC3U27kBT-VYNdOeYDPyncC8"
+        );
       } else {
         // ログイン時: プライバシー保護
+        document.title = "AI Practice Book Ver.β";
         setMetaTag(
           "description",
           "Manage your question sets, view AI analytics, and track your learning progress. | 問題集を管理し、AI分析を表示し、学習の進捗を追跡します。"
@@ -85,7 +136,7 @@ export default function Home() {
         setMetaTag("robots", "noindex, nofollow");
       }
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, language]);
 
   if (isLoading) {
     return (

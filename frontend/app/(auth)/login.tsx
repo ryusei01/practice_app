@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -19,6 +20,61 @@ export default function LoginScreen() {
   const { login } = useAuth();
   const { t, language, setLanguage } = useLanguage();
   const router = useRouter();
+
+  // Web版の場合、動的にメタタグを設定
+  useEffect(() => {
+    if (Platform.OS === "web") {
+      // タイトル設定
+      const pageTitle =
+        language === "ja"
+          ? "ログイン - AI Practice Book"
+          : "Sign In - AI Practice Book";
+      document.title = pageTitle;
+
+      // メタタグを設定する関数
+      const setMetaTag = (name: string, content: string, property?: string) => {
+        const selector = property
+          ? `meta[property="${name}"]`
+          : `meta[name="${name}"]`;
+        let meta = document.querySelector(selector) as HTMLMetaElement;
+        if (!meta) {
+          meta = document.createElement("meta");
+          if (property) {
+            meta.setAttribute("property", name);
+          } else {
+            meta.setAttribute("name", name);
+          }
+          document.head.appendChild(meta);
+        }
+        meta.content = content;
+      };
+
+      const description =
+        language === "ja"
+          ? "AI Practice Bookにログインして、パーソナライズされた学習、AI推奨問題、進捗管理にアクセス。"
+          : "Sign in to AI Practice Book to access personalized learning, AI-powered question recommendations, and track your progress.";
+
+      const ogTitle =
+        language === "ja"
+          ? "ログイン - AI Practice Book"
+          : "Sign In - AI Practice Book";
+
+      const ogDescription =
+        language === "ja"
+          ? "パーソナライズされたAI学習にアクセスして進捗を管理。"
+          : "Sign in to access personalized AI-powered learning and track your progress.";
+
+      setMetaTag("description", description);
+      setMetaTag(
+        "keywords",
+        "login,sign in,AI Practice Book,learning platform,account,ログイン,サインイン,AI学習,アカウント"
+      );
+      setMetaTag("og:title", ogTitle, true);
+      setMetaTag("og:description", ogDescription, true);
+      setMetaTag("og:type", "website", true);
+      setMetaTag("robots", "noindex, nofollow"); // ログインページは検索エンジンにインデックスしない
+    }
+  }, [language]);
 
   const handleLogin = async () => {
     setErrorMessage(""); // エラーメッセージをクリア

@@ -8,22 +8,33 @@ const path = require('path');
 const ADSENSE_SCRIPT = `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9679910712332333"
      crossorigin="anonymous"></script>`;
 const ADSENSE_META = `<meta name="google-adsense-account" content="ca-pub-9679910712332333">`;
+const GOOGLE_SITE_VERIFICATION = `<meta name="google-site-verification" content="14RFhI0FXY1YDiIG4D-RC3U27kBT-VYNdOeYDPyncC8" />`;
 
 function injectAdSenseScript(htmlPath) {
   try {
     let html = fs.readFileSync(htmlPath, 'utf-8');
+    let modified = false;
     
-    // Check if the AdSense script with this specific client ID is already injected
-    if (html.includes('ca-pub-9679910712332333')) {
-      console.log(`✓ AdSense already present in: ${htmlPath}`);
-      return;
+    // Check and inject AdSense script
+    if (!html.includes('ca-pub-9679910712332333')) {
+      // Inject the meta tag and script right after <head> tag (case-insensitive)
+      html = html.replace(/(<head[^>]*>)/i, `$1\n${ADSENSE_META}\n${ADSENSE_SCRIPT}`);
+      modified = true;
     }
     
-    // Inject the meta tag and script right after <head> tag (case-insensitive)
-    html = html.replace(/(<head[^>]*>)/i, `$1\n${ADSENSE_META}\n${ADSENSE_SCRIPT}`);
+    // Check and inject Google Site Verification
+    if (!html.includes('14RFhI0FXY1YDiIG4D-RC3U27kBT-VYNdOeYDPyncC8')) {
+      // Inject the verification meta tag right after <head> tag (case-insensitive)
+      html = html.replace(/(<head[^>]*>)/i, `$1\n${GOOGLE_SITE_VERIFICATION}`);
+      modified = true;
+    }
     
-    fs.writeFileSync(htmlPath, html, 'utf-8');
-    console.log(`✓ Injected AdSense into: ${htmlPath}`);
+    if (modified) {
+      fs.writeFileSync(htmlPath, html, 'utf-8');
+      console.log(`✓ Injected meta tags into: ${htmlPath}`);
+    } else {
+      console.log(`✓ All meta tags already present in: ${htmlPath}`);
+    }
   } catch (error) {
     console.error(`✗ Error processing ${htmlPath}:`, error.message);
   }
@@ -59,6 +70,6 @@ if (!fs.existsSync(distDir)) {
   process.exit(1);
 }
 
-console.log('Injecting Google AdSense script into HTML files...');
+console.log('Injecting Google AdSense and Site Verification meta tags into HTML files...');
 findHtmlFiles(distDir);
 console.log('Done!');

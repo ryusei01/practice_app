@@ -317,3 +317,4 @@ export const commonStyles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+

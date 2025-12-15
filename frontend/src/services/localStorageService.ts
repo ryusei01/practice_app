@@ -240,17 +240,48 @@ export const localStorageService = {
       const existingSets = await this.getTrialQuestionSets();
       console.log("[LocalStorage] Existing sets:", existingSets.length);
 
-      // 既存の問題セットのタイトルをセットに変換（重複チェック用）
-      const existingTitles = new Set(
-        existingSets
-          .filter((set) => set.id.startsWith("default_"))
-          .map((set) => set.title)
+      // 現在のCSVファイルのタイトルセットを作成
+      const currentTitles = new Set(defaultSets.map((set) => set.title));
+
+      // 既存の問題セットを分類
+      const defaultSetsInStorage = existingSets.filter((set) =>
+        set.id.startsWith("default_")
+      );
+      const userCreatedSets = existingSets.filter(
+        (set) => !set.id.startsWith("default_")
       );
 
+      // 既存のdefault_問題セットのうち、現在のCSVファイルに存在しないものを削除
+      const defaultSetsToKeep = defaultSetsInStorage.filter((set) =>
+        currentTitles.has(set.title)
+      );
+      const removedCount =
+        defaultSetsInStorage.length - defaultSetsToKeep.length;
+
+      if (removedCount > 0) {
+        console.log(
+          `[LocalStorage] Removing ${removedCount} default set(s) that no longer exist in CSV files`
+        );
+        defaultSetsToKeep.forEach((set) => {
+          console.log(`[LocalStorage] Keeping default set: ${set.title}`);
+        });
+        defaultSetsInStorage
+          .filter((set) => !currentTitles.has(set.title))
+          .forEach((set) => {
+            console.log(`[LocalStorage] Removing default set: ${set.title}`);
+          });
+      }
+
+      // 既存のdefault_問題セットのタイトルをセットに変換（重複チェック用）
+      const existingDefaultTitles = new Set(
+        defaultSetsToKeep.map((set) => set.title)
+      );
+
+      // 新しい問題セットを追加
       let addedCount = 0;
       for (const defaultSet of defaultSets) {
         // 既に存在するタイトルの場合はスキップ
-        if (existingTitles.has(defaultSet.title)) {
+        if (existingDefaultTitles.has(defaultSet.title)) {
           console.log(
             "[LocalStorage] Skipping existing set:",
             defaultSet.title
@@ -267,24 +298,37 @@ export const localStorageService = {
           createdAt: new Date().toISOString(),
           isTrial: true,
         };
-        existingSets.push(newSet);
+        defaultSetsToKeep.push(newSet);
         addedCount++;
       }
 
-      if (addedCount > 0) {
+      // ユーザー作成の問題セットとdefault_問題セットを結合
+      const finalSets = [...userCreatedSets, ...defaultSetsToKeep];
+
+      if (addedCount > 0 || removedCount > 0) {
         console.log(
-          "[LocalStorage] Total sets after adding defaults:",
-          existingSets.length
+          "[LocalStorage] Total sets after sync:",
+          finalSets.length,
+          `(added: ${addedCount}, removed: ${removedCount}, user-created: ${userCreatedSets.length})`
         );
         await AsyncStorage.setItem(
           TRIAL_QUESTION_SETS_KEY,
-          JSON.stringify(existingSets)
+          JSON.stringify(finalSets)
         );
-        console.log(
-          `[LocalStorage] Added ${addedCount} new default question set(s)`
-        );
+        if (addedCount > 0) {
+          console.log(
+            `[LocalStorage] Added ${addedCount} new default question set(s)`
+          );
+        }
+        if (removedCount > 0) {
+          console.log(
+            `[LocalStorage] Removed ${removedCount} obsolete default question set(s)`
+          );
+        }
       } else {
-        console.log("[LocalStorage] No new default question sets to add");
+        console.log(
+          "[LocalStorage] No changes needed - all default sets are up to date"
+        );
       }
 
       // 初期化済みフラグを設定（初回のみ）

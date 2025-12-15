@@ -130,10 +130,10 @@ export default function TrialQuizScreen() {
     return (
       <View style={styles.container}>
         <Header title={t("Error", "エラー")} />
-        <View style={styles.loadingContainer}>
-          <Text style={styles.errorText}>
-            {t("Question set not found", "問題セットが見つかりません")}
-          </Text>
+      <View style={styles.loadingContainer}>
+        <Text style={styles.errorText}>
+          {t("Question set not found", "問題セットが見つかりません")}
+        </Text>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}

@@ -27,3 +27,4 @@ python scripts/convert_csv_to_ts.py
 - CSVファイルはUTF-8エンコーディングである必要があります
 - ファイル名に日本語が含まれる場合、適切に変換されます
 
+

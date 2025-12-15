@@ -44,10 +44,10 @@ const CSV_FILES: CSVFile[] = [
   },
   {
     fileName: "japanese_wordbook.csv",
-    title: "japanese wordbook",
+    title: "Japanese Vocabulary Book (N5-N1)",
     description: "japanese wordbook",
     csvContent: JapaneseWordbook_CSV,
-  }
+  },
 ];
 
 /**
