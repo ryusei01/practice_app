@@ -19,7 +19,7 @@ import { TouchableOpacity } from "react-native";
 
 export default function TrialTextbookScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [content, setContent] = useState<string>("");
@@ -315,16 +315,17 @@ export default function TrialTextbookScreen() {
     <View style={styles.container}>
       <Header
         rightComponent={
-          textbookType === "markdown" && originalContent ? (
+          textbookType === "markdown" && content ? (
             <TouchableOpacity
               onPress={handleTranslate}
               style={styles.translateButton}
               disabled={isTranslating}
+              testID="translate-button"
             >
               {isTranslating ? (
-                <ActivityIndicator color="#007AFF" size="small" />
+                <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <Text style={styles.translateIcon}>
+                <Text style={styles.translateIcon} nativeID="translate-button">
                   {isTranslated ? "🔤" : "🌐"}
                 </Text>
               )}
@@ -419,6 +420,6 @@ const styles = StyleSheet.create({
   },
   translateIcon: {
     fontSize: 24,
-    color: "#007AFF",
+    color: "#fff",
   },
 });

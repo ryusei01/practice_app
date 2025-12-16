@@ -43,7 +43,11 @@ export default function Header({ title, rightComponent }: HeaderProps) {
           )}
         </View>
         {rightComponent && (
-          <View style={styles.rightComponent}>
+          <View
+            style={styles.rightComponent}
+            testID="header-right-component"
+            nativeID="header-right-component"
+          >
             {rightComponent}
           </View>
         )}
