@@ -179,7 +179,11 @@ class TextbookTranslator:
                     source=source_lang or "auto",
                     target=target_lang
                 )
-                translated_texts = [translator.translate(text) for text in texts_to_translate]
+                translated_texts = []
+                for text in texts_to_translate:
+                    translated = translator.translate(text)
+                    # Noneの場合は元のテキストを使用
+                    translated_texts.append(translated if translated is not None else text)
 
             # 翻訳結果を元の構造に戻す
             translated_parts = parts.copy()
