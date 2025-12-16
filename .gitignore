@@ -87,5 +87,15 @@ test_*.html
 memo.txt
 tuunel
 
+# Claude / generated docs (do not track)
+.claude/component-reference.md
+
+# Local-only / keep out of git
+backend/migrations/add_textbook_fields.sql
+docs/AI_FEATURES_DESIGN.md
+docs/AI_IMPLEMENTATION_EXAMPLE.md
+docs/TRANSLATION_SETUP.md
+frontend/public/README_GOOGLE_VERIFICATION.md
+
 # Production env (contains secrets)
 frontend/.env.production

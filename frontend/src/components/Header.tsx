@@ -72,6 +72,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    width: "100%",
+    position: "relative",
   },
   backButton: {
     position: "absolute",
@@ -107,7 +109,10 @@ const styles = StyleSheet.create({
   rightComponent: {
     position: "absolute",
     right: 0,
+    top: 0,
+    bottom: 0,
     padding: 8,
     zIndex: 1,
+    justifyContent: "center",
   },
 });
