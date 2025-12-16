@@ -126,6 +126,10 @@ class TextbookTranslator:
         Returns:
             翻訳されたMarkdownテキスト
         """
+        # #region agent log
+        with open(r'h:\document\program\project\practice_app\.cursor\debug.log', 'a', encoding='utf-8') as f:
+            f.write(f'{{"timestamp":{int(__import__("time").time()*1000)},"location":"textbook_translator.py:112","message":"translate_markdown called","data":{{"target_lang":"{target_lang}","source_lang":"{source_lang}","text_length":{len(markdown_text)},"text_preview":"{markdown_text[:100].replace(chr(34),chr(92)+chr(34))}"}},"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}}\n')
+        # #endregion
         # Markdownを分割
         parts = self._split_markdown(markdown_text)
 
@@ -164,7 +168,11 @@ class TextbookTranslator:
                         source=source_lang or "auto",
                         target=target_lang
                     )
-                    translated_texts = [translator.translate(text) for text in texts_to_translate]
+                    translated_texts = []
+                    for text in texts_to_translate:
+                        translated = translator.translate(text)
+                        # Noneの場合は元のテキストを使用
+                        translated_texts.append(translated if translated is not None else text)
             else:
                 # GoogleTranslatorを使用
                 translator = GoogleTranslator(
@@ -178,11 +186,13 @@ class TextbookTranslator:
             for idx, text_idx in enumerate(text_indices):
                 part = translated_parts[text_idx]
                 if part["type"] == "text":
-                    part["content"] = translated_texts[idx]
+                    if idx < len(translated_texts):
+                        part["content"] = translated_texts[idx]
+                    # idxが範囲外の場合は元のcontentをそのまま使用
                 elif part["type"] == "link" and "link_text" in part:
                     # リンクテキストを置き換え
                     original_link = part["content"]
-                    translated_link_text = translated_texts[idx]
+                    translated_link_text = translated_texts[idx] if idx < len(translated_texts) else part["link_text"]
                     # [元のテキスト](URL) -> [翻訳テキスト](URL)
                     part["content"] = re.sub(
                         r'\[([^\]]+)\]',
@@ -190,11 +200,20 @@ class TextbookTranslator:
                         original_link
                     )
 
-            # 結合して返す
-            return "".join([part["content"] for part in translated_parts])
+            # 結合して返す（すべてのcontentを文字列として結合）
+            result = "".join([str(part.get("content", "")) for part in translated_parts])
+            # #region agent log
+            with open(r'h:\document\program\project\practice_app\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                f.write(f'{{"timestamp":{int(__import__("time").time()*1000)},"location":"textbook_translator.py:194","message":"Translation completed","data":{{"result_length":{len(result)},"result_preview":"{result[:200].replace(chr(34),chr(92)+chr(34))}"}},"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}}\n')
+            # #endregion
+            return result
 
         except Exception as e:
             logger.error(f"Markdown translation error: {str(e)}")
+            # #region agent log
+            with open(r'h:\document\program\project\practice_app\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                f.write(f'{{"timestamp":{int(__import__("time").time()*1000)},"location":"textbook_translator.py:196","message":"Translation error occurred","data":{{"error":"{str(e).replace(chr(34),chr(92)+chr(34))}","error_type":"{type(e).__name__}"}},"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}}\n')
+            # #endregion
             # エラー時は元のテキストを返す
             return markdown_text
 

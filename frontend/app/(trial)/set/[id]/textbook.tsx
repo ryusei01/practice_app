@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,12 +13,17 @@ import { WebView } from "react-native-webview";
 import * as FileSystem from "expo-file-system";
 import { localStorageService } from "../../../../src/services/localStorageService";
 import Header from "../../../../src/components/Header";
-import { normalizeTextbookPath } from "../../../../src/services/textbookService";
+import {
+  normalizeTextbookPath,
+  normalizeTextbookType,
+} from "../../../../src/services/textbookService";
 import { translateTextbook } from "../../../../src/api/translate";
 import { TouchableOpacity } from "react-native";
 
 export default function TrialTextbookScreen() {
+  console.log("[Textbook] Component rendering");
   const { id } = useLocalSearchParams<{ id: string }>();
+  console.log("[Textbook] useLocalSearchParams id:", id);
   const { t, language } = useLanguage();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -28,36 +33,80 @@ export default function TrialTextbookScreen() {
   const [error, setError] = useState<string | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
   const [isTranslated, setIsTranslated] = useState(false);
+  const isMarkdown =
+    normalizeTextbookType(textbookType, "markdown") === "markdown";
 
   useEffect(() => {
-    loadTextbook();
+    console.log(
+      "[Textbook] useEffect triggered, loading textbook with id:",
+      id
+    );
+    console.log(
+      "[Textbook] loadTextbook function exists:",
+      typeof loadTextbook
+    );
+    const load = async () => {
+      try {
+        console.log("[Textbook] About to call loadTextbook");
+        await loadTextbook();
+        console.log("[Textbook] loadTextbook call completed");
+      } catch (err) {
+        console.error("[Textbook] Error in useEffect loadTextbook:", err);
+      }
+    };
+    load();
   }, [id]);
 
   const loadTextbook = async () => {
+    console.log("[Textbook] loadTextbook called with id:", id);
     try {
       setLoading(true);
       setError(null);
 
+      console.log("[Textbook] Fetching question set from localStorage...");
       const questionSet = await localStorageService.getTrialQuestionSet(
         id || ""
       );
+      console.log("[Textbook] Question set fetched:", {
+        exists: !!questionSet,
+        textbook_path: questionSet?.textbook_path,
+        textbook_type: questionSet?.textbook_type,
+      });
 
       if (!questionSet || !questionSet.textbook_path) {
+        console.log("[Textbook] No textbook available");
         setError(t("No textbook available", "教科書が設定されていません"));
         setLoading(false);
         return;
       }
 
-      setTextbookType(questionSet.textbook_type || "markdown");
+      const resolvedType = normalizeTextbookType(
+        questionSet.textbook_type,
+        "markdown"
+      );
+      console.log("[Textbook] Resolved type:", {
+        originalType: questionSet.textbook_type,
+        resolvedType,
+      });
+      setTextbookType(resolvedType);
 
       // パスを正規化（英語名を日本語名に変換）
       const normalizedPath = normalizeTextbookPath(questionSet.textbook_path);
+      console.log("[Textbook] Normalized path:", {
+        originalPath: questionSet.textbook_path,
+        normalizedPath,
+      });
 
-      if (questionSet.textbook_type === "markdown") {
+      if (resolvedType === "markdown") {
         // Markdownファイルを読み込む
+        console.log("[Textbook] Loading markdown file...");
         await loadMarkdown(normalizedPath);
-      } else if (questionSet.textbook_type === "pdf") {
+      } else if (resolvedType === "pdf") {
         // PDFファイルのパスを設定
+        console.log("[Textbook] Setting PDF path:", {
+          path: normalizedPath,
+          length: normalizedPath.length,
+        });
         setContent(normalizedPath);
         setOriginalContent(normalizedPath);
       } else {
@@ -65,19 +114,26 @@ export default function TrialTextbookScreen() {
         await loadMarkdown(normalizedPath);
       }
     } catch (err) {
-      console.error("Failed to load textbook:", err);
+      console.error("[Textbook] Failed to load textbook:", err);
       setError(t("Failed to load textbook", "教科書の読み込みに失敗しました"));
     } finally {
+      console.log("[Textbook] loadTextbook finished, setting loading to false");
       setLoading(false);
     }
   };
 
   const loadMarkdown = async (path: string) => {
+    console.log("[Textbook] loadMarkdown called with path:", path);
     try {
       // パスがURLの場合
       if (path.startsWith("http://") || path.startsWith("https://")) {
         const response = await fetch(path);
         const text = await response.text();
+        console.log("[Textbook] Loaded from HTTP/HTTPS URL:", {
+          path,
+          textLength: text.length,
+          textPreview: text.substring(0, 100),
+        });
         setContent(text);
         setOriginalContent(text);
         return;
@@ -107,6 +163,11 @@ export default function TrialTextbookScreen() {
         const response = await fetch(fileUrl);
         if (response.ok) {
           const text = await response.text();
+          console.log("[Textbook] Loaded from API:", {
+            fileUrl,
+            textLength: text.length,
+            textPreview: text.substring(0, 100),
+          });
           setContent(text);
           setOriginalContent(text);
           return;
@@ -125,9 +186,13 @@ export default function TrialTextbookScreen() {
           const response = await fetch(fallbackPath);
           if (response.ok) {
             const text = await response.text();
+            console.log("[Textbook] Successfully loaded from fallback:", {
+              fallbackPath,
+              textLength: text.length,
+              textPreview: text.substring(0, 100),
+            });
             setContent(text);
             setOriginalContent(text);
-            console.log("[Textbook] Successfully loaded from fallback");
             return;
           } else {
             console.log(
@@ -152,7 +217,7 @@ export default function TrialTextbookScreen() {
         )
       );
     } catch (err) {
-      console.error("Failed to load markdown:", err);
+      console.error("[Textbook] Failed to load markdown:", err);
       setError(
         t(
           "Failed to load markdown file",
@@ -162,9 +227,8 @@ export default function TrialTextbookScreen() {
     }
   };
 
-  const handleTranslate = async () => {
-    if (isTranslating || textbookType !== "markdown" || !originalContent)
-      return;
+  const handleTranslate = useCallback(async () => {
+    if (isTranslating || !isMarkdown || !originalContent.trim()) return;
 
     setIsTranslating(true);
     try {
@@ -175,6 +239,12 @@ export default function TrialTextbookScreen() {
         target_lang: targetLang,
       });
 
+      console.log("[Textbook] Translation completed:", {
+        targetLang,
+        translatedLength: result.translated_text.length,
+        translatedPreview: result.translated_text.substring(0, 100),
+        isTranslated: !isTranslated,
+      });
       setContent(result.translated_text);
       setIsTranslated(!isTranslated);
     } catch (error) {
@@ -182,7 +252,14 @@ export default function TrialTextbookScreen() {
     } finally {
       setIsTranslating(false);
     }
-  };
+  }, [
+    isTranslating,
+    isMarkdown,
+    originalContent,
+    language,
+    isTranslated,
+    content,
+  ]);
 
   const renderMarkdown = () => {
     // 簡易的なMarkdownレンダリング
@@ -311,28 +388,49 @@ export default function TrialTextbookScreen() {
     );
   }
 
+  const rightComponent = useMemo(() => {
+    // Markdownファイルで、コンテンツが読み込まれている場合のみ表示
+    const hasContent =
+      content.trim().length > 0 || originalContent.trim().length > 0;
+
+    // textbookTypeがnullの場合は、デフォルトでmarkdownとして扱う
+    const shouldShow =
+      (isMarkdown || textbookType === null) && hasContent && !loading && !error;
+
+    if (shouldShow) {
+      return (
+        <TouchableOpacity
+          onPress={handleTranslate}
+          style={styles.translateButton}
+          disabled={isTranslating}
+          testID="translate-button"
+        >
+          {isTranslating ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.translateIcon} nativeID="translate-button">
+              {isTranslated ? "🔤" : "🌐"}
+            </Text>
+          )}
+        </TouchableOpacity>
+      );
+    }
+    return null;
+  }, [
+    isMarkdown,
+    content,
+    originalContent,
+    isTranslating,
+    isTranslated,
+    handleTranslate,
+    textbookType,
+    loading,
+    error,
+  ]);
+
   return (
     <View style={styles.container}>
-      <Header
-        rightComponent={
-          textbookType === "markdown" && content ? (
-            <TouchableOpacity
-              onPress={handleTranslate}
-              style={styles.translateButton}
-              disabled={isTranslating}
-              testID="translate-button"
-            >
-              {isTranslating ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={styles.translateIcon} nativeID="translate-button">
-                  {isTranslated ? "🔤" : "🌐"}
-                </Text>
-              )}
-            </TouchableOpacity>
-          ) : null
-        }
-      />
+      <Header rightComponent={rightComponent} />
       {textbookType === "markdown" ? renderMarkdown() : renderPDF()}
     </View>
   );

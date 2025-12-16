@@ -5,10 +5,28 @@
 
 import { textbooksApi } from "../api/textbooks";
 
+export type TextbookType = "markdown" | "pdf";
+
+/**
+ * 教科書タイプを正規化
+ * - API/URL パラメータ等から来る表記揺れ（"Markdown", " md " 等）を吸収する
+ */
+export function normalizeTextbookType(
+  type: unknown,
+  fallback: TextbookType = "markdown"
+): TextbookType {
+  const v = String(type ?? "")
+    .trim()
+    .toLowerCase();
+  if (v === "markdown" || v === "md") return "markdown";
+  if (v === "pdf") return "pdf";
+  return fallback;
+}
+
 export interface Textbook {
   path: string;
   name: string;
-  type: "markdown" | "pdf";
+  type: TextbookType;
 }
 
 /**
@@ -48,7 +66,7 @@ export async function getAvailableTextbooks(): Promise<Textbook[]> {
     cachedTextbooks = apiTextbooks.map((tb) => ({
       path: tb.path,
       name: tb.name,
-      type: tb.type as "markdown" | "pdf",
+      type: normalizeTextbookType(tb.type),
     }));
     lastFetchTime = now;
     console.log(

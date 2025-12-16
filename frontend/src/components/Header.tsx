@@ -21,14 +21,13 @@ export default function Header({ title, rightComponent }: HeaderProps) {
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
-            nativeID="header-back-btn"
+            testID="header-back-btn"
           >
             <Text style={styles.backButtonText} nativeID="header-back-text">
               ←
             </Text>
           </TouchableOpacity>
         )}
-
         <View style={styles.titleContainer}>
           <Text style={styles.appName} nativeID="app-name">
             AI Practice Book{" "}
@@ -42,7 +41,7 @@ export default function Header({ title, rightComponent }: HeaderProps) {
             </Text>
           )}
         </View>
-        {rightComponent && (
+        {rightComponent != null && (
           <View
             style={styles.rightComponent}
             testID="header-right-component"
@@ -62,11 +61,15 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 20,
     paddingTop: 10, // ステータスバー分のスペース
+    // React Native用のshadowプロパティ（iOS/Android用）
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    // React Native Web用のboxShadow（非推奨警告を解消）
+    // @ts-ignore - React Native WebでboxShadowをサポート
+    boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
   },
   headerContent: {
     flexDirection: "row",

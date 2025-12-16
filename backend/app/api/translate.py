@@ -342,13 +342,20 @@ async def translate_textbook(request: TextbookTranslateRequest):
                 detail="教科書テキストが空です"
             )
 
+        # #region agent log
+        with open(r'h:\document\program\project\practice_app\.cursor\debug.log', 'a', encoding='utf-8') as f:
+            f.write(f'{{"timestamp":{int(__import__("time").time()*1000)},"location":"translate.py:345","message":"translate_textbook API called","data":{{"source_lang":"{request.source_lang}","target_lang":"{request.target_lang}","text_length":{len(request.markdown_text)},"source_lang_will_be":"{request.source_lang if request.source_lang != "auto" else "None"}"}},"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}}\n')
+        # #endregion
         translator = TextbookTranslator()
         translated = await translator.translate_markdown(
             markdown_text=request.markdown_text,
             target_lang=request.target_lang,
             source_lang=request.source_lang if request.source_lang != "auto" else None
         )
-
+        # #region agent log
+        with open(r'h:\document\program\project\practice_app\.cursor\debug.log', 'a', encoding='utf-8') as f:
+            f.write(f'{{"timestamp":{int(__import__("time").time()*1000)},"location":"translate.py:352","message":"translate_markdown returned","data":{{"translated_length":{len(translated)},"translated_preview":"{translated[:200].replace(chr(34),chr(92)+chr(34))}"}},"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}}\n')
+        # #endregion
         logger.info(f"Textbook translation: {request.source_lang} -> {request.target_lang}")
 
         return TextbookTranslateResponse(
