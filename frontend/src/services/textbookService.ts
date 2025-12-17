@@ -39,7 +39,8 @@ const FALLBACK_TEXTBOOKS: Textbook[] = [
     type: "markdown",
   },
   {
-    path: "機械学習・深層学習 教科書（基礎〜実装）.md",
+    // docs/textbook 配下の実ファイル名に合わせる（表示名は日本語のままでもOK）
+    path: "Machine Learning & Deep Learning for Practical Engineers.md",
     name: "機械学習・深層学習 教科書（基礎〜実装）",
     type: "markdown",
   },
@@ -92,15 +93,20 @@ export function getAvailableTextbooksSync(): Textbook[] {
 }
 
 /**
- * 英語名から日本語名へのマッピング（旧ファイル名の互換性のため）
- * 注意: 新しいファイルは実際のファイル名で管理されるため、このマッピングは不要になる可能性があります
+ * 旧ファイル名/表示名 → 実ファイル名 へのマッピング（互換性のため）
+ * - DB/ローカルストレージに残っている古いパスや、日本語表示名を受け取っても
+ *   docs/textbook 配下の実ファイルへ解決できるようにする
  */
 const PATH_MAPPING: Record<string, string> = {
+  // Decision tree: 旧名 → 新名
   "Decision Trees and Random Forests Textbook.md":
-    "決定木・ランダムフォレスト超入門教科書.md",
+    "Decision Trees and Random Forests.md",
+
+  // Machine learning: 旧名/日本語名 → 実ファイル名
   "Machine Learning and Deep Learning Textbook.md":
-    "機械学習・深層学習 教科書（基礎〜実装）.md",
-  // 新しいファイル "Decision Trees and Random Forests.md" はそのまま使用
+    "Machine Learning & Deep Learning for Practical Engineers.md",
+  "機械学習・深層学習 教科書（基礎〜実装）.md":
+    "Machine Learning & Deep Learning for Practical Engineers.md",
 };
 
 /**

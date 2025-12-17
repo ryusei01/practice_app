@@ -77,7 +77,9 @@ async def get_textbook(file_path: str):
         HTTPException: ファイルが見つからない場合
     """
     # パストラバーサル攻撃を防ぐ
-    safe_path = Path(file_path).name
+    # - Windows の "\" 区切りや "docs/textbook/xxx.md" などが来ても安全にファイル名だけ抽出する
+    normalized = (file_path or "").replace("\\", "/")
+    safe_path = Path(normalized).name
     
     # ファイルパスを構築
     file_full_path = TEXTBOOK_BASE_DIR / safe_path
