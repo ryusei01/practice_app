@@ -26,8 +26,8 @@ const CSV_FILES: CSVFile[] = [
   },
   {
     fileName: "business_english.csv",
-    title: "business english",
-    description: "business english",
+    title: "ビジネス英単語",
+    description: "ビジネス英単語",
     csvContent: BusinessEnglish_CSV,
   },
   {

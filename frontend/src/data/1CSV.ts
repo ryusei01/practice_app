@@ -1,2 +1,2 @@
-export const 1_CSV = `
+export const CSV_1 = `
 `;

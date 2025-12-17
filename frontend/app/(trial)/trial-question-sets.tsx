@@ -1,5 +1,13 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Platform,
+  ScrollView,
+  useWindowDimensions,
+} from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useLanguage } from "../../src/contexts/LanguageContext";
 import {
@@ -20,6 +28,10 @@ export default function TrialQuestionSetsScreen() {
   const isLoadingRef = useRef(false); // 重複読み込み防止用
   const { t } = useLanguage();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isSmallScreen = width < 600;
+  const scrollViewRef = useRef<ScrollView>(null);
+  const textbookSectionYRef = useRef<number | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalConfig, setModalConfig] = useState<{
     title: string;
@@ -170,22 +182,40 @@ export default function TrialQuestionSetsScreen() {
     const isDefaultSet = item.id.startsWith("default_");
 
     return (
-      <View style={styles.card} nativeID={`trial-card-${item.id}`}>
+      <View
+        style={[
+          styles.card,
+          {
+            padding: isSmallScreen ? 12 : 15,
+            marginBottom: isSmallScreen ? 12 : 15,
+          },
+        ]}
+        nativeID={`trial-card-${item.id}`}
+      >
         <TouchableOpacity
           style={styles.cardContent}
           onPress={() => router.push(`/(trial)/set/${item.id}`)}
           testID={`trial-card-button-${item.id}`}
         >
-          <Text style={styles.cardTitle} nativeID={`trial-title-${item.id}`}>
+          <Text
+            style={[styles.cardTitle, { fontSize: isSmallScreen ? 16 : 18 }]}
+            nativeID={`trial-title-${item.id}`}
+          >
             {item.title}
           </Text>
           <Text
-            style={styles.cardDescription}
+            style={[
+              styles.cardDescription,
+              { fontSize: isSmallScreen ? 13 : 14 },
+            ]}
             nativeID={`trial-desc-${item.id}`}
           >
             {item.description}
           </Text>
-          <Text style={styles.cardInfo} nativeID={`trial-info-${item.id}`}>
+          <Text
+            style={[styles.cardInfo, { fontSize: isSmallScreen ? 11 : 12 }]}
+            nativeID={`trial-info-${item.id}`}
+          >
             {t("Questions", "問題数")}: {item.questions.length}
           </Text>
           <View style={styles.trialBadge} nativeID={`trial-badge-${item.id}`}>
@@ -235,17 +265,66 @@ export default function TrialQuestionSetsScreen() {
     </TouchableOpacity>
   );
 
+  const scrollToTextbooks = () => {
+    const y = textbookSectionYRef.current;
+    if (y == null) return;
+    scrollViewRef.current?.scrollTo({ y, animated: true });
+  };
+
   return (
     <View style={styles.container} nativeID="trial-sets-container">
-      <Header title={t("Trial Question Sets", "お試し問題セット")} />
+      <Header
+        title={t("Trial Question Sets", "お試し問題セット")}
+        showLanguageSwitcher
+      />
       <ScrollView
+        ref={scrollViewRef}
         style={styles.content}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            padding: isSmallScreen ? 16 : 20,
+            paddingBottom: 100,
+          },
+        ]}
         nativeID="trial-sets-content"
       >
+        {/* ジャンプボタン（教科書セクションへ） */}
+        {availableTextbooks.length > 0 && (
+          <View
+            style={styles.jumpButtonContainer}
+            nativeID="trial-jump-buttons"
+          >
+            <TouchableOpacity
+              style={[
+                styles.jumpButton,
+                { paddingVertical: isSmallScreen ? 10 : 12 },
+              ]}
+              onPress={scrollToTextbooks}
+              testID="trial-jump-to-textbooks"
+            >
+              <Text
+                style={[
+                  styles.jumpButtonText,
+                  { fontSize: isSmallScreen ? 13 : 14 },
+                ]}
+                nativeID="trial-jump-to-textbooks-text"
+              >
+                {t("Go to Textbooks", "教科書へ")}
+              </Text>
+              <Text style={styles.jumpButtonIcon} aria-label="down">
+                ↓
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {questionSets.length === 0 && !isLoading ? (
           <View style={styles.emptyState} nativeID="trial-sets-empty">
-            <Text style={styles.emptyText} nativeID="trial-sets-empty-text">
+            <Text
+              style={[styles.emptyText, { fontSize: isSmallScreen ? 14 : 16 }]}
+              nativeID="trial-sets-empty-text"
+            >
               {t(
                 "No question sets yet. Create your first one!",
                 "まだ問題セットがありません。最初の問題セットを作成しましょう！"
@@ -260,8 +339,19 @@ export default function TrialQuestionSetsScreen() {
 
         {/* 教科書セクション */}
         {availableTextbooks.length > 0 && (
-          <View style={styles.textbookSection}>
-            <Text style={styles.sectionTitle}>
+          <View
+            style={styles.textbookSection}
+            nativeID="trial-textbook-section"
+            onLayout={(e) => {
+              textbookSectionYRef.current = e.nativeEvent.layout.y;
+            }}
+          >
+            <Text
+              style={[
+                styles.sectionTitle,
+                { fontSize: isSmallScreen ? 18 : 20 },
+              ]}
+            >
               {t("Available Textbooks", "利用可能な教科書")}
             </Text>
             {availableTextbooks.map((item) => (
@@ -271,11 +361,22 @@ export default function TrialQuestionSetsScreen() {
         )}
 
         <TouchableOpacity
-          style={styles.createButton}
+          style={[
+            styles.createButton,
+            {
+              padding: isSmallScreen ? 12 : 15,
+            },
+          ]}
           onPress={() => router.push("/(trial)/create")}
           testID="trial-btn-create"
         >
-          <Text style={styles.createButtonText} nativeID="trial-btn-create-text">
+          <Text
+            style={[
+              styles.createButtonText,
+              { fontSize: isSmallScreen ? 14 : 16 },
+            ]}
+            nativeID="trial-btn-create-text"
+          >
             {t("Create Question Set", "問題セットを作成")}
           </Text>
         </TouchableOpacity>
@@ -303,6 +404,34 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 20,
     paddingBottom: 100,
+  },
+  jumpButtonContainer: {
+    width: "100%",
+    marginBottom: 16,
+    alignItems: "center",
+  },
+  jumpButton: {
+    width: "100%",
+    maxWidth: 320,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "rgba(0, 122, 255, 0.25)",
+  },
+  jumpButtonText: {
+    color: "#007AFF",
+    fontWeight: "700",
+  },
+  jumpButtonIcon: {
+    color: "#007AFF",
+    fontSize: 16,
+    fontWeight: "700",
+    marginTop: -1,
   },
   header: {
     marginBottom: 20,
@@ -432,8 +561,3 @@ const styles = StyleSheet.create({
     color: "#888",
   },
 });
-
-
-
-
-

@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import {
@@ -27,6 +28,8 @@ export default function SettingsScreen() {
   const [password, setPassword] = useState("");
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [showBackupCodesModal, setShowBackupCodesModal] = useState(false);
+  const { width } = useWindowDimensions();
+  const isSmallScreen = width < 600;
 
   useEffect(() => {
     loadTwoFactorStatus();
@@ -111,14 +114,28 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>セキュリティ設定</Text>
+      <View style={[styles.header, { padding: isSmallScreen ? 16 : 20 }]}>
+        <Text style={[styles.title, { fontSize: isSmallScreen ? 20 : 24 }]}>
+          セキュリティ設定
+        </Text>
       </View>
 
       {/* 2段階認証セクション */}
-      <View style={styles.section}>
+      <View
+        style={[
+          styles.section,
+          {
+            margin: isSmallScreen ? 12 : 15,
+            padding: isSmallScreen ? 16 : 20,
+          },
+        ]}
+      >
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>2段階認証</Text>
+          <Text
+            style={[styles.sectionTitle, { fontSize: isSmallScreen ? 18 : 20 }]}
+          >
+            2段階認証
+          </Text>
           <View
             style={[
               styles.badge,
@@ -164,9 +181,27 @@ export default function SettingsScreen() {
         onRequestClose={() => setShowBackupCodesModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>バックアップコード</Text>
-            <Text style={styles.modalDescription}>
+          <View
+            style={[
+              styles.modalContent,
+              {
+                width: isSmallScreen ? "95%" : "90%",
+                maxWidth: isSmallScreen ? 400 : 500,
+                padding: isSmallScreen ? 20 : 25,
+              },
+            ]}
+          >
+            <Text
+              style={[styles.modalTitle, { fontSize: isSmallScreen ? 20 : 22 }]}
+            >
+              バックアップコード
+            </Text>
+            <Text
+              style={[
+                styles.modalDescription,
+                { fontSize: isSmallScreen ? 13 : 14 },
+              ]}
+            >
               以下のバックアップコードを安全な場所に保管してください。
               メールにアクセスできない場合に使用できます。
             </Text>
@@ -184,10 +219,21 @@ export default function SettingsScreen() {
             </Text>
 
             <TouchableOpacity
-              style={[styles.button, styles.buttonPrimary]}
+              style={[
+                styles.button,
+                styles.buttonPrimary,
+                { padding: isSmallScreen ? 12 : 15 },
+              ]}
               onPress={() => setShowBackupCodesModal(false)}
             >
-              <Text style={styles.buttonText}>閉じる</Text>
+              <Text
+                style={[
+                  styles.buttonText,
+                  { fontSize: isSmallScreen ? 14 : 16 },
+                ]}
+              >
+                閉じる
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -201,14 +247,38 @@ export default function SettingsScreen() {
         onRequestClose={() => setShowDisableModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>2段階認証を無効化</Text>
-            <Text style={styles.modalDescription}>
+          <View
+            style={[
+              styles.modalContent,
+              {
+                width: isSmallScreen ? "95%" : "90%",
+                maxWidth: isSmallScreen ? 400 : 500,
+                padding: isSmallScreen ? 20 : 25,
+              },
+            ]}
+          >
+            <Text
+              style={[styles.modalTitle, { fontSize: isSmallScreen ? 20 : 22 }]}
+            >
+              2段階認証を無効化
+            </Text>
+            <Text
+              style={[
+                styles.modalDescription,
+                { fontSize: isSmallScreen ? 13 : 14 },
+              ]}
+            >
               パスワードを入力して確認してください
             </Text>
 
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input,
+                {
+                  padding: isSmallScreen ? 10 : 12,
+                  fontSize: isSmallScreen ? 15 : 16,
+                },
+              ]}
               placeholder="パスワード"
               secureTextEntry
               value={password}
@@ -348,6 +418,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 25,
     width: "90%",
+    maxWidth: 500,
     maxHeight: "80%",
   },
   modalTitle: {

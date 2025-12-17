@@ -305,14 +305,23 @@ export const commonStyles = StyleSheet.create({
     fontWeight: "600",
   },
   categoryLinksContainer: {
-    flexShrink: 0,
-    minWidth: 200,
+    // 画面幅いっぱいを使い、はみ出した分は横スクロールで閲覧
+    width: "100%",
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
   categoryLinksScroll: {
+    width: "100%",
     maxHeight: 50,
+    // RN Web で横スクロール可能にする
+    overflow: "scroll",
   },
   categoryLinksContent: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingRight: 16,
+    paddingVertical: 4,
   },
   categoryLink: {
     backgroundColor: "#E3F2FD",

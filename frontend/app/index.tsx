@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "../src/contexts/AuthContext";
@@ -17,12 +18,19 @@ export default function Home() {
   const { user, isLoading, isAuthenticated, logout } = useAuth();
   const { t, language, setLanguage } = useLanguage();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isSmallScreen = width < 600;
+  const isMediumScreen = width >= 600 && width < 1024;
 
   // Web版の場合、動的にメタタグを設定
   useEffect(() => {
     if (Platform.OS === "web") {
       // メタタグを設定する関数
-      const setMetaTag = (name: string, content: string, property?: string) => {
+      const setMetaTag = (
+        name: string,
+        content: string,
+        property?: boolean
+      ) => {
         const selector = property
           ? `meta[property="${name}"]`
           : `meta[name="${name}"]`;
@@ -147,58 +155,78 @@ export default function Home() {
   }
 
   if (!isAuthenticated) {
+    // 言語切り替えボタンコンポーネント
+    const languageSwitcher = (
+      <View style={styles.languageSwitcherHeader} nativeID="language-switcher">
+        <TouchableOpacity
+          style={[
+            styles.langButtonHeader,
+            language === "en" && styles.langButtonActiveHeader,
+          ]}
+          onPress={() => setLanguage("en")}
+          nativeID="lang-btn-en"
+        >
+          <Text
+            style={[
+              styles.langButtonTextHeader,
+              language === "en" && styles.langButtonTextActiveHeader,
+            ]}
+            nativeID="lang-text-en"
+          >
+            EN
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.langButtonHeader,
+            language === "ja" && styles.langButtonActiveHeader,
+          ]}
+          onPress={() => setLanguage("ja")}
+          nativeID="lang-btn-ja"
+        >
+          <Text
+            style={[
+              styles.langButtonTextHeader,
+              language === "ja" && styles.langButtonTextActiveHeader,
+            ]}
+            nativeID="lang-text-ja"
+          >
+            日本語
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+
     return (
       <View style={styles.wrapper} nativeID="home-wrapper-guest">
-        <Header />
+        <Header rightComponent={languageSwitcher} />
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           nativeID="home-scroll-guest"
         >
           <View style={styles.container} nativeID="home-container-guest">
-            {/* Language Switcher */}
-            <View style={styles.languageSwitcher} nativeID="language-switcher">
-              <TouchableOpacity
-                style={[
-                  styles.langButton,
-                  language === "en" && styles.langButtonActive,
-                ]}
-                onPress={() => setLanguage("en")}
-                nativeID="lang-btn-en"
-              >
-                <Text
-                  style={[
-                    styles.langButtonText,
-                    language === "en" && styles.langButtonTextActive,
-                  ]}
-                  nativeID="lang-text-en"
-                >
-                  EN
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.langButton,
-                  language === "ja" && styles.langButtonActive,
-                ]}
-                onPress={() => setLanguage("ja")}
-                nativeID="lang-btn-ja"
-              >
-                <Text
-                  style={[
-                    styles.langButtonText,
-                    language === "ja" && styles.langButtonTextActive,
-                  ]}
-                  nativeID="lang-text-ja"
-                >
-                  日本語
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.title} nativeID="home-title">
+            <Text
+              style={[
+                styles.title,
+                {
+                  fontSize: isSmallScreen ? 24 : isMediumScreen ? 28 : 32,
+                  marginBottom: isSmallScreen ? 6 : 8,
+                },
+              ]}
+              nativeID="home-title"
+            >
               {t("AI Practice Book", "AI Practice Book")}
             </Text>
-            <Text style={styles.subtitle} nativeID="home-subtitle">
+            <Text
+              style={[
+                styles.subtitle,
+                {
+                  fontSize: isSmallScreen ? 16 : 18,
+                  marginBottom: isSmallScreen ? 32 : 48,
+                },
+              ]}
+              nativeID="home-subtitle"
+            >
               {t(
                 "Your Personal Study Assistant",
                 "あなた専用の学習アシスタント"
@@ -206,7 +234,13 @@ export default function Home() {
             </Text>
 
             <View
-              style={styles.featuresContainer}
+              style={[
+                styles.featuresContainer,
+                {
+                  maxWidth: isSmallScreen ? "100%" : isMediumScreen ? 400 : 600,
+                  marginBottom: isSmallScreen ? 24 : 32,
+                },
+              ]}
               nativeID="features-container"
             >
               <View style={styles.featureItem} nativeID="feature-question-sets">
@@ -262,17 +296,55 @@ export default function Home() {
             </View>
 
             <TouchableOpacity
-              style={styles.button}
+              style={[
+                styles.button,
+                styles.trialButton,
+                {
+                  maxWidth: isSmallScreen ? "100%" : isMediumScreen ? 350 : 400,
+                  padding: isSmallScreen ? 14 : 16,
+                },
+              ]}
+              onPress={() => router.push("/(trial)/trial-question-sets")}
+              nativeID="btn-trial"
+            >
+              <Text
+                style={[
+                  styles.buttonText,
+                  { fontSize: isSmallScreen ? 14 : 16 },
+                ]}
+                nativeID="btn-trial-text"
+              >
+                {t("Try Without Sign Up", "登録なしで試す")}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.button,
+                {
+                  maxWidth: isSmallScreen ? "100%" : isMediumScreen ? 350 : 400,
+                  padding: isSmallScreen ? 14 : 16,
+                },
+              ]}
               onPress={() => router.push("/(auth)/register")}
               disabled={true}
               nativeID="btn-register"
             >
-              <Text style={styles.buttonText} nativeID="btn-register-text">
+              <Text
+                style={[
+                  styles.buttonText,
+                  { fontSize: isSmallScreen ? 14 : 16 },
+                ]}
+                nativeID="btn-register-text"
+              >
                 {t("Get Started", "今すぐ始める")}
               </Text>
               <View style={styles.overlay} nativeID="btn-register-overlay">
                 <Text
-                  style={styles.overlayText}
+                  style={[
+                    styles.overlayText,
+                    { fontSize: isSmallScreen ? 16 : 18 },
+                  ]}
                   nativeID="btn-register-overlay-text"
                 >
                   {t("Under Preparation", "準備中")}
@@ -281,34 +353,38 @@ export default function Home() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.button, styles.buttonOutline]}
+              style={[
+                styles.button,
+                styles.buttonOutline,
+                {
+                  maxWidth: isSmallScreen ? "100%" : isMediumScreen ? 350 : 400,
+                  padding: isSmallScreen ? 14 : 16,
+                },
+              ]}
               onPress={() => router.push("/(auth)/login")}
               disabled={true}
               nativeID="btn-login"
             >
               <View style={styles.overlay} nativeID="btn-login-overlay">
                 <Text
-                  style={styles.overlayText}
+                  style={[
+                    styles.overlayText,
+                    { fontSize: isSmallScreen ? 16 : 18 },
+                  ]}
                   nativeID="btn-login-overlay-text"
                 >
                   {t("Under Preparation", "準備中")}
                 </Text>
               </View>
               <Text
-                style={[styles.buttonText, styles.buttonOutlineText]}
+                style={[
+                  styles.buttonText,
+                  styles.buttonOutlineText,
+                  { fontSize: isSmallScreen ? 14 : 16 },
+                ]}
                 nativeID="btn-login-text"
               >
                 {t("Sign In", "ログイン")}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.button, styles.trialButton]}
-              onPress={() => router.push("/(trial)/trial-question-sets")}
-              nativeID="btn-trial"
-            >
-              <Text style={styles.buttonText} nativeID="btn-trial-text">
-                {t("Try Without Sign Up", "登録なしで試す")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -317,57 +393,62 @@ export default function Home() {
     );
   }
 
+  // 言語切り替えボタンコンポーネント（ログイン済み）
+  const languageSwitcherAuth = (
+    <View
+      style={styles.languageSwitcherHeader}
+      nativeID="language-switcher-auth"
+    >
+      <TouchableOpacity
+        style={[
+          styles.langButtonHeader,
+          language === "en" && styles.langButtonActiveHeader,
+        ]}
+        onPress={() => setLanguage("en")}
+        nativeID="lang-btn-en-auth"
+      >
+        <Text
+          style={[
+            styles.langButtonTextHeader,
+            language === "en" && styles.langButtonTextActiveHeader,
+          ]}
+          nativeID="lang-text-en-auth"
+        >
+          EN
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[
+          styles.langButtonHeader,
+          language === "ja" && styles.langButtonActiveHeader,
+        ]}
+        onPress={() => setLanguage("ja")}
+        nativeID="lang-btn-ja-auth"
+      >
+        <Text
+          style={[
+            styles.langButtonTextHeader,
+            language === "ja" && styles.langButtonTextActiveHeader,
+          ]}
+          nativeID="lang-text-ja-auth"
+        >
+          日本語
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <View style={styles.wrapper} nativeID="home-wrapper-authenticated">
-      <Header />
+      <Header rightComponent={languageSwitcherAuth} />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         nativeID="home-scroll-authenticated"
       >
-        <View style={styles.container} nativeID="home-container-authenticated">
-          {/* Language Switcher */}
-          <View
-            style={styles.languageSwitcher}
-            nativeID="language-switcher-auth"
-          >
-            <TouchableOpacity
-              style={[
-                styles.langButton,
-                language === "en" && styles.langButtonActive,
-              ]}
-              onPress={() => setLanguage("en")}
-              nativeID="lang-btn-en-auth"
-            >
-              <Text
-                style={[
-                  styles.langButtonText,
-                  language === "en" && styles.langButtonTextActive,
-                ]}
-                nativeID="lang-text-en-auth"
-              >
-                EN
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.langButton,
-                language === "ja" && styles.langButtonActive,
-              ]}
-              onPress={() => setLanguage("ja")}
-              nativeID="lang-btn-ja-auth"
-            >
-              <Text
-                style={[
-                  styles.langButtonText,
-                  language === "ja" && styles.langButtonTextActive,
-                ]}
-                nativeID="lang-text-ja-auth"
-              >
-                日本語
-              </Text>
-            </TouchableOpacity>
-          </View>
-
+        <View
+          style={[styles.container, { padding: isSmallScreen ? 16 : 20 }]}
+          nativeID="home-container-authenticated"
+        >
           <Text style={styles.title} nativeID="welcome-title">
             {t("Welcome", "ようこそ")}, {user?.full_name}!
           </Text>
@@ -453,11 +534,21 @@ export default function Home() {
           </View>
 
           <TouchableOpacity
-            style={[styles.button, styles.logoutButton]}
+            style={[
+              styles.button,
+              styles.logoutButton,
+              {
+                maxWidth: isSmallScreen ? "100%" : isMediumScreen ? 350 : 400,
+                padding: isSmallScreen ? 14 : 16,
+              },
+            ]}
             onPress={logout}
             nativeID="btn-logout"
           >
-            <Text style={styles.buttonText} nativeID="btn-logout-text">
+            <Text
+              style={[styles.buttonText, { fontSize: isSmallScreen ? 14 : 16 }]}
+              nativeID="btn-logout-text"
+            >
               {t("Logout", "ログアウト")}
             </Text>
           </TouchableOpacity>
@@ -489,6 +580,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
+  languageSwitcherHeader: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center",
+  },
   langButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -497,16 +593,36 @@ const styles = StyleSheet.create({
     borderColor: "#007AFF",
     backgroundColor: "transparent",
   },
+  langButtonHeader: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#fff",
+    backgroundColor: "transparent",
+  },
   langButtonActive: {
     backgroundColor: "#007AFF",
+  },
+  langButtonActiveHeader: {
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
   },
   langButtonText: {
     color: "#007AFF",
     fontSize: 14,
     fontWeight: "600",
   },
+  langButtonTextHeader: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
   langButtonTextActive: {
     color: "#fff",
+  },
+  langButtonTextActiveHeader: {
+    color: "#fff",
+    fontWeight: "700",
   },
   title: {
     fontSize: 32,

@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Modal,
   ScrollView,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -28,6 +29,9 @@ export default function RegisterScreen() {
   const { register } = useAuth();
   const { t } = useLanguage();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isSmallScreen = width < 600;
+  const isMediumScreen = width >= 600 && width < 1024;
 
   // パスワード要件のチェック
   const passwordRequirements = {
@@ -125,7 +129,9 @@ export default function RegisterScreen() {
     setIsLoading(true);
     try {
       const response = await register(email, password, fullName);
-      console.log("[Register] Registration successful, redirecting to OTP verification");
+      console.log(
+        "[Register] Registration successful, redirecting to OTP verification"
+      );
 
       // OTP入力画面に遷移
       router.push({
@@ -181,11 +187,20 @@ export default function RegisterScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.formContainer}>
-        <Text style={styles.title}>
+      <View
+        style={[
+          styles.formContainer,
+          {
+            width: isSmallScreen ? "100%" : isMediumScreen ? "85%" : 500,
+            maxWidth: 600,
+            padding: isSmallScreen ? 20 : 24,
+          },
+        ]}
+      >
+        <Text style={[styles.title, { fontSize: isSmallScreen ? 24 : 28 }]}>
           {t("Create Account", "アカウント作成")}
         </Text>
-        <Text style={styles.subtitle}>
+        <Text style={[styles.subtitle, { fontSize: isSmallScreen ? 14 : 16 }]}>
           {t("Sign up to get started", "登録して始めましょう")}
         </Text>
 
@@ -318,7 +333,13 @@ export default function RegisterScreen() {
         )}
 
         <TextInput
-          style={styles.input}
+          style={[
+            styles.input,
+            {
+              padding: isSmallScreen ? 14 : 16,
+              fontSize: isSmallScreen ? 15 : 16,
+            },
+          ]}
           placeholder={t("Confirm Password", "パスワード確認")}
           placeholderTextColor="#999"
           value={confirmPassword}
@@ -604,25 +625,39 @@ export default function RegisterScreen() {
               !isPasswordValid ||
               (confirmPassword.length > 0 && password !== confirmPassword)) &&
               styles.buttonDisabled,
+            { padding: isSmallScreen ? 14 : 16 },
           ]}
           onPress={handleRegister}
           disabled={
-            isLoading || !isPasswordValid || (confirmPassword.length > 0 && password !== confirmPassword) || !agreedToTerms
+            isLoading ||
+            !isPasswordValid ||
+            (confirmPassword.length > 0 && password !== confirmPassword) ||
+            !agreedToTerms
           }
         >
           {isLoading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>{t("Sign Up", "新規登録")}</Text>
+            <Text
+              style={[styles.buttonText, { fontSize: isSmallScreen ? 15 : 16 }]}
+            >
+              {t("Sign Up", "新規登録")}
+            </Text>
           )}
         </TouchableOpacity>
 
         <View style={styles.loginContainer}>
-          <Text style={styles.loginText}>
+          <Text
+            style={[styles.loginText, { fontSize: isSmallScreen ? 13 : 14 }]}
+          >
             {t("Already have an account? ", "既にアカウントをお持ちの方 ")}
           </Text>
           <TouchableOpacity onPress={navigateToLogin} disabled={isLoading}>
-            <Text style={styles.loginLink}>{t("Sign In", "ログイン")}</Text>
+            <Text
+              style={[styles.loginLink, { fontSize: isSmallScreen ? 13 : 14 }]}
+            >
+              {t("Sign In", "ログイン")}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -636,6 +671,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f5f5f5",
     justifyContent: "center",
     padding: 20,
+    alignItems: "center",
   },
   formContainer: {
     backgroundColor: "#fff",
@@ -646,6 +682,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
+    width: "100%",
+    maxWidth: 600,
   },
   title: {
     fontSize: 28,

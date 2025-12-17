@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Platform,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -20,6 +21,9 @@ export default function LoginScreen() {
   const { login } = useAuth();
   const { t, language, setLanguage } = useLanguage();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isSmallScreen = width < 600;
+  const isMediumScreen = width >= 600 && width < 1024;
 
   // Web版の場合、動的にメタタグを設定
   useEffect(() => {
@@ -32,7 +36,11 @@ export default function LoginScreen() {
       document.title = pageTitle;
 
       // メタタグを設定する関数
-      const setMetaTag = (name: string, content: string, property?: string) => {
+      const setMetaTag = (
+        name: string,
+        content: string,
+        property?: boolean
+      ) => {
         const selector = property
           ? `meta[property="${name}"]`
           : `meta[name="${name}"]`;
@@ -92,9 +100,13 @@ export default function LoginScreen() {
       router.replace("/");
     } catch (error: any) {
       console.error("[Login] Error:", error);
-      const message = error.response?.data?.detail ||
+      const message =
+        error.response?.data?.detail ||
         error.message ||
-        t("Invalid email or password", "メールアドレスまたはパスワードが無効です");
+        t(
+          "Invalid email or password",
+          "メールアドレスまたはパスワードが無効です"
+        );
 
       setErrorMessage(message);
     } finally {
@@ -108,14 +120,31 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.formContainer}>
-        <Text style={styles.title}>{t("Welcome Back", "おかえりなさい")}</Text>
-        <Text style={styles.subtitle}>
+      <View
+        style={[
+          styles.formContainer,
+          {
+            width: isSmallScreen ? "100%" : isMediumScreen ? "85%" : 400,
+            maxWidth: 500,
+            padding: isSmallScreen ? 20 : 24,
+          },
+        ]}
+      >
+        <Text style={[styles.title, { fontSize: isSmallScreen ? 24 : 28 }]}>
+          {t("Welcome Back", "おかえりなさい")}
+        </Text>
+        <Text style={[styles.subtitle, { fontSize: isSmallScreen ? 14 : 16 }]}>
           {t("Sign in to continue", "ログインして続ける")}
         </Text>
 
         <TextInput
-          style={styles.input}
+          style={[
+            styles.input,
+            {
+              padding: isSmallScreen ? 14 : 16,
+              fontSize: isSmallScreen ? 15 : 16,
+            },
+          ]}
           placeholder={t("Email", "メールアドレス")}
           placeholderTextColor="#999"
           value={email}
@@ -126,7 +155,13 @@ export default function LoginScreen() {
         />
 
         <TextInput
-          style={styles.input}
+          style={[
+            styles.input,
+            {
+              padding: isSmallScreen ? 14 : 16,
+              fontSize: isSmallScreen ? 15 : 16,
+            },
+          ]}
           placeholder={t("Password", "パスワード")}
           placeholderTextColor="#999"
           value={password}
@@ -142,23 +177,40 @@ export default function LoginScreen() {
         ) : null}
 
         <TouchableOpacity
-          style={[styles.button, isLoading && styles.buttonDisabled]}
+          style={[
+            styles.button,
+            isLoading && styles.buttonDisabled,
+            { padding: isSmallScreen ? 14 : 16 },
+          ]}
           onPress={handleLogin}
           disabled={isLoading}
         >
           {isLoading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>{t("Sign In", "ログイン")}</Text>
+            <Text
+              style={[styles.buttonText, { fontSize: isSmallScreen ? 15 : 16 }]}
+            >
+              {t("Sign In", "ログイン")}
+            </Text>
           )}
         </TouchableOpacity>
 
         <View style={styles.registerContainer}>
-          <Text style={styles.registerText}>
+          <Text
+            style={[styles.registerText, { fontSize: isSmallScreen ? 13 : 14 }]}
+          >
             {t("Don't have an account? ", "アカウントをお持ちでない方 ")}
           </Text>
           <TouchableOpacity onPress={navigateToRegister} disabled={isLoading}>
-            <Text style={styles.registerLink}>{t("Sign Up", "新規登録")}</Text>
+            <Text
+              style={[
+                styles.registerLink,
+                { fontSize: isSmallScreen ? 13 : 14 },
+              ]}
+            >
+              {t("Sign Up", "新規登録")}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -172,6 +224,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f5f5f5",
     justifyContent: "center",
     padding: 20,
+    alignItems: "center",
   },
   formContainer: {
     backgroundColor: "#fff",
@@ -182,6 +235,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
+    width: "100%",
+    maxWidth: 500,
   },
   title: {
     fontSize: 28,

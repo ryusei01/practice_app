@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter, usePathname } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -36,6 +37,9 @@ export default function QuestionSetsScreen() {
   const pathname = usePathname();
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { t, language, setLanguage } = useLanguage();
+  const { width } = useWindowDimensions();
+  const isSmallScreen = width < 600;
+  const isMediumScreen = width >= 600 && width < 1024;
 
   const [hasRedirected, setHasRedirected] = useState(false);
 
@@ -177,11 +181,19 @@ export default function QuestionSetsScreen() {
 
   const renderMyQuestionSetItem = ({ item }: { item: QuestionSet }) => (
     <TouchableOpacity
-      style={styles.card}
+      style={[
+        styles.card,
+        {
+          padding: isSmallScreen ? 12 : 16,
+          marginBottom: isSmallScreen ? 10 : 12,
+        },
+      ]}
       onPress={() => navigateToDetail(item.id)}
     >
       <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>{item.title}</Text>
+        <Text style={[styles.cardTitle, { fontSize: isSmallScreen ? 16 : 18 }]}>
+          {item.title}
+        </Text>
         {item.is_published && (
           <View style={styles.publishedBadge}>
             <Text style={styles.publishedText}>{t("Published", "公開中")}</Text>
@@ -241,12 +253,29 @@ export default function QuestionSetsScreen() {
   );
 
   const renderTextbookItem = ({ item }: { item: Textbook }) => (
-    <View style={styles.textbookCard}>
+    <View
+      style={[
+        styles.textbookCard,
+        {
+          padding: isSmallScreen ? 12 : 16,
+          marginBottom: isSmallScreen ? 10 : 12,
+        },
+      ]}
+    >
       <View style={styles.textbookCardHeader}>
         <Text style={styles.textbookCardIcon}>📚</Text>
-        <Text style={styles.textbookCardName}>{item.name}</Text>
+        <Text
+          style={[
+            styles.textbookCardName,
+            { fontSize: isSmallScreen ? 14 : 16 },
+          ]}
+        >
+          {item.name}
+        </Text>
       </View>
-      <Text style={styles.textbookCardType}>
+      <Text
+        style={[styles.textbookCardType, { fontSize: isSmallScreen ? 11 : 14 }]}
+      >
         {item.type === "markdown" ? "📄 Markdown" : "📕 PDF"}
       </Text>
     </View>
@@ -266,18 +295,40 @@ export default function QuestionSetsScreen() {
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
         }
-        contentContainerStyle={styles.scrollContainer}
+        contentContainerStyle={[
+          styles.scrollContainer,
+          {
+            padding: isSmallScreen ? 12 : 16,
+            paddingBottom: 80,
+          },
+        ]}
       >
         {/* Premium Banner */}
         {!user?.is_premium && (
           <TouchableOpacity
-            style={styles.premiumBanner}
+            style={[
+              styles.premiumBanner,
+              {
+                padding: isSmallScreen ? 16 : 20,
+                marginBottom: isSmallScreen ? 16 : 20,
+              },
+            ]}
             onPress={navigateToPremium}
           >
-            <Text style={styles.premiumBannerTitle}>
+            <Text
+              style={[
+                styles.premiumBannerTitle,
+                { fontSize: isSmallScreen ? 18 : 20 },
+              ]}
+            >
               {t("✨ Upgrade to Premium", "✨ プレミアムにアップグレード")}
             </Text>
-            <Text style={styles.premiumBannerText}>
+            <Text
+              style={[
+                styles.premiumBannerText,
+                { fontSize: isSmallScreen ? 13 : 14 },
+              ]}
+            >
               {t(
                 "Cloud sync • Unlimited storage • Multi-device access",
                 "クラウド同期 • 無制限ストレージ • マルチデバイスアクセス"
@@ -288,7 +339,9 @@ export default function QuestionSetsScreen() {
 
         {/* My Question Sets Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
+          <Text
+            style={[styles.sectionTitle, { fontSize: isSmallScreen ? 18 : 20 }]}
+          >
             {t("My Question Sets", "マイ問題集")}
           </Text>
           {myQuestionSets.length === 0 ? (
@@ -324,7 +377,9 @@ export default function QuestionSetsScreen() {
 
         {/* Available Textbooks Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
+          <Text
+            style={[styles.sectionTitle, { fontSize: isSmallScreen ? 18 : 20 }]}
+          >
             {t("Available Textbooks", "利用可能な教科書")}
           </Text>
           {availableTextbooks.length === 0 ? (
