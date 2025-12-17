@@ -42,3 +42,6 @@ jobs:
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
           projectName: "aipracticebook"
           directory: "frontend/dist"
+          # Cloudflare Pages は「Production branch」と一致する branch を Production として扱う
+          # ここを明示しないと、状況によっては Preview 扱いになることがある
+          branch: ${{ github.ref_name }}
