@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   Modal,
   ScrollView,
@@ -21,6 +20,7 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const [showPasswordRequirements, setShowPasswordRequirements] =
     useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
@@ -53,17 +53,17 @@ export default function RegisterScreen() {
       agreedToTerms,
     });
 
+    setErrorMessage(""); // エラーメッセージをクリア
+
     if (!fullName || !email || !password || !confirmPassword) {
-      Alert.alert(
-        t("Error", "エラー"),
+      setErrorMessage(
         t("Please fill in all fields", "すべてのフィールドを入力してください")
       );
       return;
     }
 
     if (!agreedToTerms) {
-      Alert.alert(
-        t("Error", "エラー"),
+      setErrorMessage(
         t(
           "Please agree to the Terms and Privacy Policy",
           "利用規約とプライバシーポリシーに同意してください"
@@ -73,8 +73,7 @@ export default function RegisterScreen() {
     }
 
     if (password !== confirmPassword) {
-      Alert.alert(
-        t("Error", "エラー"),
+      setErrorMessage(
         t("Passwords do not match", "パスワードが一致しません")
       );
       return;
@@ -82,8 +81,7 @@ export default function RegisterScreen() {
 
     // バックエンドのパスワード強度要件に合わせる
     if (password.length < 8) {
-      Alert.alert(
-        t("Error", "エラー"),
+      setErrorMessage(
         t(
           "Password must be at least 8 characters",
           "パスワードは8文字以上である必要があります"
@@ -93,8 +91,7 @@ export default function RegisterScreen() {
     }
 
     if (!/[A-Z]/.test(password)) {
-      Alert.alert(
-        t("Error", "エラー"),
+      setErrorMessage(
         t(
           "Password must contain at least one uppercase letter",
           "パスワードには大文字を含める必要があります"
@@ -104,8 +101,7 @@ export default function RegisterScreen() {
     }
 
     if (!/[a-z]/.test(password)) {
-      Alert.alert(
-        t("Error", "エラー"),
+      setErrorMessage(
         t(
           "Password must contain at least one lowercase letter",
           "パスワードには小文字を含める必要があります"
@@ -115,8 +111,7 @@ export default function RegisterScreen() {
     }
 
     if (!/[0-9]/.test(password)) {
-      Alert.alert(
-        t("Error", "エラー"),
+      setErrorMessage(
         t(
           "Password must contain at least one number",
           "パスワードには数字を含める必要があります"
@@ -151,7 +146,29 @@ export default function RegisterScreen() {
         "アカウントを作成できませんでした"
       );
 
-      if (error.response?.data?.detail) {
+      // ネットワークエラーの場合
+      if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+        errorMessage = t(
+          "Cannot connect to server. Please make sure the backend server is running.",
+          "サーバーに接続できません。バックエンドサーバーが起動していることを確認してください。"
+        );
+      }
+      // タイムアウトエラーの場合
+      else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        errorMessage = t(
+          "Request timed out. Please try again.",
+          "リクエストがタイムアウトしました。再度お試しください。"
+        );
+      }
+      // サーバーエラーの場合
+      else if (error.response?.status >= 500) {
+        errorMessage = t(
+          "Server error occurred. Please try again later.",
+          "サーバーエラーが発生しました。しばらくしてから再度お試しください。"
+        );
+      }
+      // その他のエラーの場合
+      else if (error.response?.data?.detail) {
         const detail = error.response.data.detail;
 
         // 配列の場合（バリデーションエラー）
@@ -174,8 +191,12 @@ export default function RegisterScreen() {
           errorMessage = JSON.stringify(detail);
         }
       }
+      // その他の予期しないエラー
+      else if (error.message) {
+        errorMessage = `${t("Error", "エラー")}: ${error.message}`;
+      }
 
-      Alert.alert(t("Registration Failed", "登録失敗"), errorMessage);
+      setErrorMessage(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -355,6 +376,12 @@ export default function RegisterScreen() {
             </Text>
           </View>
         )}
+
+        {errorMessage ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{errorMessage}</Text>
+          </View>
+        ) : null}
 
         {/* Terms and Privacy Policy Agreement */}
         <View style={styles.termsContainer}>
@@ -792,15 +819,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFEBEE",
     borderRadius: 8,
     padding: 12,
-    marginTop: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#F44336",
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#F44336",
   },
   errorText: {
-    fontSize: 13,
-    color: "#D32F2F",
-    fontWeight: "600",
+    color: "#C62828",
+    fontSize: 14,
+    lineHeight: 20,
   },
   overlay: {
     position: "absolute",

@@ -2,7 +2,7 @@
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
-slowapi==0.1.7
+slowapi==0.1.9
 pydantic[email]
 email-validator
 

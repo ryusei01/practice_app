@@ -21,7 +21,7 @@ from ..core.auth import (
 from ..core.config import settings
 from ..core.otp import create_otp_code, verify_otp_code
 from ..core.email import send_otp_email
-from ..models import User
+from ..models import User, OTPCode
 from ..main import limiter
 
 router = APIRouter()
@@ -121,20 +121,112 @@ async def register(request: UserRegisterRequest, db: Session = Depends(get_db)):
         HTTPException: メールアドレスが既に登録されている場合
     """
     try:
+        import logging
+        import json
+        import time
+        logger = logging.getLogger(__name__)
+        
+        # #region agent log
+        with open('h:\\document\\program\\project\\practice_app\\.cursor\\debug.log', 'a', encoding='utf-8') as log_file:
+            log_file.write(json.dumps({
+                "timestamp": int(time.time() * 1000),
+                "location": "auth.py:123",
+                "message": "REGISTER: Function entry",
+                "data": {"email": request.email, "username": request.full_name[:3] + "***" if request.full_name else None, "hypothesisId": "F"},
+                "sessionId": "debug-session",
+                "runId": "run1"
+            }, ensure_ascii=False) + "\n")
+        # #endregion
+        
         # パスワード強度チェック
+        # #region agent log
+        with open('h:\\document\\program\\project\\practice_app\\.cursor\\debug.log', 'a', encoding='utf-8') as log_file:
+            log_file.write(json.dumps({
+                "timestamp": int(time.time() * 1000),
+                "location": "auth.py:125",
+                "message": "REGISTER: Before password validation",
+                "data": {"password_length": len(request.password) if request.password else 0, "hypothesisId": "F"},
+                "sessionId": "debug-session",
+                "runId": "run1"
+            }, ensure_ascii=False) + "\n")
+        # #endregion
         is_valid, error_message = validate_password_strength(request.password)
+        # #region agent log
+        with open('h:\\document\\program\\project\\practice_app\\.cursor\\debug.log', 'a', encoding='utf-8') as log_file:
+            log_file.write(json.dumps({
+                "timestamp": int(time.time() * 1000),
+                "location": "auth.py:126",
+                "message": "REGISTER: After password validation",
+                "data": {"is_valid": is_valid, "error_message": error_message if not is_valid else None, "hypothesisId": "F"},
+                "sessionId": "debug-session",
+                "runId": "run1"
+            }, ensure_ascii=False) + "\n")
+        # #endregion
         if not is_valid:
+            # #region agent log
+            with open('h:\\document\\program\\project\\practice_app\\.cursor\\debug.log', 'a', encoding='utf-8') as log_file:
+                log_file.write(json.dumps({
+                    "timestamp": int(time.time() * 1000),
+                    "location": "auth.py:127",
+                    "message": "REGISTER: Password validation failed",
+                    "data": {"error_message": error_message, "hypothesisId": "F"},
+                    "sessionId": "debug-session",
+                    "runId": "run1"
+                }, ensure_ascii=False) + "\n")
+            # #endregion
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=error_message
             )
 
-        # メールアドレスの重複チェック
+        # 期限切れの未認証ユーザーをクリーンアップ（同じメールアドレスで再登録できるようにするため）
+        from ..core.otp import cleanup_inactive_users_with_expired_otp
+        cleaned_count = cleanup_inactive_users_with_expired_otp(db, grace_period_hours=0)  # 即座にクリーンアップ
+        if cleaned_count > 0:
+            logger.info(f"[Register] Cleaned up {cleaned_count} expired inactive users")
+        
+        # メールアドレスの重複チェック（クリーンアップ後）
+        # #region agent log
+        with open('h:\\document\\program\\project\\practice_app\\.cursor\\debug.log', 'a', encoding='utf-8') as log_file:
+            log_file.write(json.dumps({
+                "timestamp": int(time.time() * 1000),
+                "location": "auth.py:133",
+                "message": "REGISTER: Before email duplicate check",
+                "data": {"email": request.email, "hypothesisId": "F"},
+                "sessionId": "debug-session",
+                "runId": "run1"
+            }, ensure_ascii=False) + "\n")
+        # #endregion
         existing_user = db.query(User).filter(User.email == request.email).first()
+        # #region agent log
+        with open('h:\\document\\program\\project\\practice_app\\.cursor\\debug.log', 'a', encoding='utf-8') as log_file:
+            log_file.write(json.dumps({
+                "timestamp": int(time.time() * 1000),
+                "location": "auth.py:134",
+                "message": "REGISTER: After email duplicate check",
+                "data": {"existing_user": existing_user.id if existing_user else None, "hypothesisId": "F"},
+                "sessionId": "debug-session",
+                "runId": "run1"
+            }, ensure_ascii=False) + "\n")
+        # #endregion
         if existing_user:
+            # #region agent log
+            with open('h:\\document\\program\\project\\practice_app\\.cursor\\debug.log', 'a', encoding='utf-8') as log_file:
+                log_file.write(json.dumps({
+                    "timestamp": int(time.time() * 1000),
+                    "location": "auth.py:135",
+                    "message": "REGISTER: Email already exists",
+                    "data": {"email": request.email, "hypothesisId": "F"},
+                    "sessionId": "debug-session",
+                    "runId": "run1"
+                }, ensure_ascii=False) + "\n")
+            # #endregion
+            # セキュリティのため、メールアドレスの存在を隠す
+            # タイミング攻撃を防ぐため、パスワードハッシュ処理を実行（実際には使用しない）
+            get_password_hash(request.password)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="このメールアドレスは既に登録されています"
+                detail="登録に失敗しました。入力内容を確認してください。"
             )
 
         # 新しいユーザーを作成（まだ未認証状態）
@@ -153,20 +245,86 @@ async def register(request: UserRegisterRequest, db: Session = Depends(get_db)):
         db.refresh(new_user)
 
         # OTPコードを生成してメール送信
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"[Register] Creating OTP code for user: {new_user.id}, email: {new_user.email}")
         otp_code = create_otp_code(db, new_user.id, purpose="registration")
-        await send_otp_email(new_user.email, otp_code, new_user.username)
+        logger.info(f"[Register] OTP code created: {otp_code}")
+        
+        logger.info(f"[Register] Sending OTP email to: {new_user.email}")
+        email_sent = await send_otp_email(new_user.email, otp_code, new_user.username)
+        
+        if not email_sent:
+            # メール送信失敗時は、DEBUGモードでもエラーを返す（ユーザー体験のため）
+            logger.error(f"[Register] Email sending failed to {new_user.email}. Deleting user registration.")
+            
+            # OTPコードを削除
+            db.query(OTPCode).filter(OTPCode.user_id == new_user.id).delete()
+            
+            # ユーザーを削除
+            db.delete(new_user)
+            db.commit()
+            
+            # DEBUGモードではログにOTPコードを出力（デバッグ用）
+            if settings.DEBUG:
+                logger.warning(f"[Register] DEBUG: OTP Code that was not sent: {otp_code}")
+            
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="メール送信に失敗しました。しばらくしてから再度お試しください。"
+            )
+        else:
+            logger.info(f"[Register] Email sent successfully to {new_user.email}")
+        
+        logger.info(f"[Register] Registration completed for user: {new_user.id}")
 
         return RegisterPendingResponse(
             user_id=new_user.id,
             email=new_user.email,
             message="認証コードをメールで送信しました。10分以内に入力してください。"
         )
-    except HTTPException:
+    except HTTPException as e:
+        # #region agent log
+        import logging
+        import json
+        import time
+        logger = logging.getLogger(__name__)
+        try:
+            with open('h:\\document\\program\\project\\practice_app\\.cursor\\debug.log', 'a', encoding='utf-8') as log_file:
+                log_file.write(json.dumps({
+                    "timestamp": int(time.time() * 1000),
+                    "location": "auth.py:181",
+                    "message": "REGISTER: HTTPException raised",
+                    "data": {"status_code": e.status_code, "detail": str(e.detail), "hypothesisId": "F"},
+                    "sessionId": "debug-session",
+                    "runId": "run1"
+                }, ensure_ascii=False) + "\n")
+        except:
+            pass
+        # #endregion
         # HTTPExceptionは再スロー
         raise
     except Exception as e:
         # その他のエラーをキャッチしてログに記録
         import logging
+        import json
+        import time
+        logger = logging.getLogger(__name__)
+        # #region agent log
+        try:
+            with open('h:\\document\\program\\project\\practice_app\\.cursor\\debug.log', 'a', encoding='utf-8') as log_file:
+                log_file.write(json.dumps({
+                    "timestamp": int(time.time() * 1000),
+                    "location": "auth.py:187",
+                    "message": "REGISTER: Unexpected exception",
+                    "data": {"error": str(e), "error_type": type(e).__name__, "hypothesisId": "F"},
+                    "sessionId": "debug-session",
+                    "runId": "run1"
+                }, ensure_ascii=False) + "\n")
+        except:
+            pass
+        # #endregion
         logging.error(f"[Register] Unexpected error: {str(e)}", exc_info=True)
         db.rollback()
         raise HTTPException(
@@ -411,6 +569,10 @@ async def verify_otp(request: OTPVerifyRequest, db: Session = Depends(get_db)):
 
     # OTPコードを検証
     if not verify_otp_code(db, user.id, request.otp_code, purpose="registration"):
+        # 期限切れの可能性があるため、期限切れの未認証ユーザーをクリーンアップ
+        from ..core.otp import cleanup_inactive_users_with_expired_otp
+        cleanup_inactive_users_with_expired_otp(db, grace_period_hours=0)  # 即座にクリーンアップ
+        
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="認証コードが無効または期限切れです"
@@ -476,7 +638,6 @@ async def resend_otp(request: ResendOTPRequest, db: Session = Depends(get_db)):
             )
 
         # 既存のOTPコードを無効化
-        from ..models import OTPCode
         existing_codes = db.query(OTPCode).filter(
             OTPCode.user_id == user.id,
             OTPCode.purpose == "registration",

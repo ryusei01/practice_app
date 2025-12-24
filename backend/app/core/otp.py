@@ -209,3 +209,45 @@ def cleanup_expired_otp_codes(db: Session):
         OTPCode.expires_at < datetime.utcnow()
     ).delete()
     db.commit()
+
+
+def cleanup_inactive_users_with_expired_otp(db: Session, grace_period_hours: int = 24):
+    """
+    期限切れのOTPコードを持ち、有効化されていないユーザーを削除
+    
+    セキュリティのため、OTPコードが期限切れになった後、一定期間（デフォルト24時間）経過した
+    未認証ユーザーを削除します。
+    
+    Args:
+        db: データベースセッション
+        grace_period_hours: OTP期限切れ後の猶予期間（時間）
+    """
+    from ..models import User
+    
+    # 期限切れのOTPコードを持つ未認証ユーザーを取得
+    expired_otp_codes = db.query(OTPCode).filter(
+        OTPCode.expires_at < datetime.utcnow() - timedelta(hours=grace_period_hours),
+        OTPCode.used == False,
+        OTPCode.purpose == "registration"
+    ).all()
+    
+    user_ids_to_delete = set()
+    for otp_code in expired_otp_codes:
+        user = db.query(User).filter(
+            User.id == otp_code.user_id,
+            User.is_active == False
+        ).first()
+        if user:
+            user_ids_to_delete.add(user.id)
+    
+    # ユーザーと関連するOTPコードを削除
+    for user_id in user_ids_to_delete:
+        # OTPコードを削除（CASCADEで自動削除されるが、明示的に削除）
+        db.query(OTPCode).filter(OTPCode.user_id == user_id).delete()
+        # ユーザーを削除
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            db.delete(user)
+    
+    db.commit()
+    return len(user_ids_to_delete)

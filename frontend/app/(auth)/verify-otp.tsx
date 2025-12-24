@@ -5,19 +5,18 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useLanguage } from "../../src/contexts/LanguageContext";
-import axios from "axios";
+import { authApi } from "../../src/api/auth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 export default function VerifyOTPScreen() {
   const [otpCode, setOtpCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [timer, setTimer] = useState(600); // 10分 = 600秒
   const { t } = useLanguage();
   const router = useRouter();
@@ -40,39 +39,41 @@ export default function VerifyOTPScreen() {
   };
 
   const handleVerifyOTP = async () => {
+    setErrorMessage("");
+    setSuccessMessage("");
+
     if (!otpCode || otpCode.length !== 6) {
-      Alert.alert(
-        t("Error", "エラー"),
+      setErrorMessage(
         t("Please enter a 6-digit code", "6桁のコードを入力してください")
+      );
+      return;
+    }
+
+    if (!userId) {
+      setErrorMessage(
+        t("User ID is missing", "ユーザーIDが見つかりません")
       );
       return;
     }
 
     setIsLoading(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/auth/verify-otp`, {
-        user_id: userId,
-        otp_code: otpCode,
-      });
+      const response = await authApi.verifyOTP(userId as string, otpCode);
 
-      // トークンを保存
-      await AsyncStorage.setItem("access_token", response.data.access_token);
-      await AsyncStorage.setItem("refresh_token", response.data.refresh_token);
-
-      Alert.alert(
-        t("Success", "成功"),
-        t("Account verified successfully!", "アカウントが認証されました！"),
-        [
-          {
-            text: "OK",
-            onPress: () => router.replace("/"),
-          },
-        ]
+      // トークンはauthApi.verifyOTP内で保存される
+      setSuccessMessage(
+        t("Account verified successfully!", "アカウントが認証されました！")
       );
+
+      // 成功後、少し待ってからリダイレクト
+      setTimeout(() => {
+        router.replace("/");
+      }, 1500);
     } catch (error: any) {
       console.error("[VerifyOTP] Verification failed:", error);
+      console.error("[VerifyOTP] Error details:", error.response?.data);
 
-      let errorMessage = t(
+      let errorMsg = t(
         "Unable to verify code",
         "コードを確認できませんでした"
       );
@@ -80,35 +81,56 @@ export default function VerifyOTPScreen() {
       if (error.response?.data?.detail) {
         const detail = error.response.data.detail;
         if (typeof detail === "string") {
-          errorMessage = detail;
+          errorMsg = detail;
+        } else if (Array.isArray(detail)) {
+          errorMsg = detail
+            .map((err: any) => {
+              if (err.msg) return err.msg;
+              if (err.message) return err.message;
+              return JSON.stringify(err);
+            })
+            .join("\n");
         }
+      } else if (error.message) {
+        errorMsg = error.message;
       }
 
-      Alert.alert(t("Verification Failed", "認証失敗"), errorMessage);
+      setErrorMessage(errorMsg);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleResendCode = async () => {
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    if (!userId) {
+      setErrorMessage(
+        t("User ID is missing", "ユーザーIDが見つかりません")
+      );
+      return;
+    }
+
     setIsLoading(true);
     try {
-      await axios.post(`${API_BASE_URL}/auth/resend-otp`, {
+      // apiClientを使って再送信
+      const apiClient = (await import("../../src/api/client")).default;
+      await apiClient.post("/auth/resend-otp", {
         user_id: userId,
       });
 
       // タイマーをリセット
       setTimer(600);
       setOtpCode("");
-
-      Alert.alert(
-        t("Success", "成功"),
+      setSuccessMessage(
         t("A new code has been sent to your email", "新しいコードをメールに送信しました")
       );
     } catch (error: any) {
       console.error("[VerifyOTP] Resend failed:", error);
+      console.error("[VerifyOTP] Resend error details:", error.response?.data);
 
-      let errorMessage = t(
+      let errorMsg = t(
         "Unable to resend code",
         "コードを再送信できませんでした"
       );
@@ -116,11 +138,21 @@ export default function VerifyOTPScreen() {
       if (error.response?.data?.detail) {
         const detail = error.response.data.detail;
         if (typeof detail === "string") {
-          errorMessage = detail;
+          errorMsg = detail;
+        } else if (Array.isArray(detail)) {
+          errorMsg = detail
+            .map((err: any) => {
+              if (err.msg) return err.msg;
+              if (err.message) return err.message;
+              return JSON.stringify(err);
+            })
+            .join("\n");
         }
+      } else if (error.message) {
+        errorMsg = error.message;
       }
 
-      Alert.alert(t("Error", "エラー"), errorMessage);
+      setErrorMessage(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -145,12 +177,27 @@ export default function VerifyOTPScreen() {
           placeholder={t("Enter 6-digit code", "6桁のコードを入力")}
           placeholderTextColor="#999"
           value={otpCode}
-          onChangeText={(text) => setOtpCode(text.replace(/[^0-9]/g, ""))}
+          onChangeText={(text) => {
+            setOtpCode(text.replace(/[^0-9]/g, ""));
+            setErrorMessage(""); // 入力時にエラーメッセージをクリア
+          }}
           keyboardType="number-pad"
           maxLength={6}
           editable={!isLoading}
           autoFocus
         />
+
+        {errorMessage ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{errorMessage}</Text>
+          </View>
+        ) : null}
+
+        {successMessage ? (
+          <View style={styles.successContainer}>
+            <Text style={styles.successText}>{successMessage}</Text>
+          </View>
+        ) : null}
 
         <View style={styles.timerContainer}>
           <Text
@@ -257,6 +304,32 @@ const styles = StyleSheet.create({
     textAlign: "center",
     borderWidth: 1,
     borderColor: "#e0e0e0",
+  },
+  errorContainer: {
+    backgroundColor: "#FFEBEE",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#F44336",
+  },
+  errorText: {
+    color: "#C62828",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  successContainer: {
+    backgroundColor: "#E8F5E9",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#4CAF50",
+  },
+  successText: {
+    color: "#2E7D32",
+    fontSize: 14,
+    lineHeight: 20,
   },
   timerContainer: {
     marginBottom: 16,
