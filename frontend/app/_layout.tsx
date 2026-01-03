@@ -46,6 +46,7 @@ export default function RootLayout() {
               <Stack.Screen name="(auth)/login" />
               <Stack.Screen name="(auth)/register" />
               <Stack.Screen name="(app)/question-sets/index" />
+              <Stack.Screen name="(app)/my-question-sets/index" />
               <Stack.Screen name="(app)/question-sets/create" />
               <Stack.Screen name="(app)/question-sets/[id]" />
               <Stack.Screen name="(app)/question-sets/[id]/add-question" />

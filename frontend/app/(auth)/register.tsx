@@ -5,10 +5,10 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  Alert,
   ActivityIndicator,
   Modal,
   ScrollView,
-  useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -20,7 +20,6 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
   const [showPasswordRequirements, setShowPasswordRequirements] =
     useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
@@ -29,9 +28,6 @@ export default function RegisterScreen() {
   const { register } = useAuth();
   const { t } = useLanguage();
   const router = useRouter();
-  const { width } = useWindowDimensions();
-  const isSmallScreen = width < 600;
-  const isMediumScreen = width >= 600 && width < 1024;
 
   // パスワード要件のチェック
   const passwordRequirements = {
@@ -53,17 +49,17 @@ export default function RegisterScreen() {
       agreedToTerms,
     });
 
-    setErrorMessage(""); // エラーメッセージをクリア
-
     if (!fullName || !email || !password || !confirmPassword) {
-      setErrorMessage(
+      Alert.alert(
+        t("Error", "エラー"),
         t("Please fill in all fields", "すべてのフィールドを入力してください")
       );
       return;
     }
 
     if (!agreedToTerms) {
-      setErrorMessage(
+      Alert.alert(
+        t("Error", "エラー"),
         t(
           "Please agree to the Terms and Privacy Policy",
           "利用規約とプライバシーポリシーに同意してください"
@@ -73,7 +69,8 @@ export default function RegisterScreen() {
     }
 
     if (password !== confirmPassword) {
-      setErrorMessage(
+      Alert.alert(
+        t("Error", "エラー"),
         t("Passwords do not match", "パスワードが一致しません")
       );
       return;
@@ -81,7 +78,8 @@ export default function RegisterScreen() {
 
     // バックエンドのパスワード強度要件に合わせる
     if (password.length < 8) {
-      setErrorMessage(
+      Alert.alert(
+        t("Error", "エラー"),
         t(
           "Password must be at least 8 characters",
           "パスワードは8文字以上である必要があります"
@@ -91,7 +89,8 @@ export default function RegisterScreen() {
     }
 
     if (!/[A-Z]/.test(password)) {
-      setErrorMessage(
+      Alert.alert(
+        t("Error", "エラー"),
         t(
           "Password must contain at least one uppercase letter",
           "パスワードには大文字を含める必要があります"
@@ -101,7 +100,8 @@ export default function RegisterScreen() {
     }
 
     if (!/[a-z]/.test(password)) {
-      setErrorMessage(
+      Alert.alert(
+        t("Error", "エラー"),
         t(
           "Password must contain at least one lowercase letter",
           "パスワードには小文字を含める必要があります"
@@ -111,7 +111,8 @@ export default function RegisterScreen() {
     }
 
     if (!/[0-9]/.test(password)) {
-      setErrorMessage(
+      Alert.alert(
+        t("Error", "エラー"),
         t(
           "Password must contain at least one number",
           "パスワードには数字を含める必要があります"
@@ -124,9 +125,7 @@ export default function RegisterScreen() {
     setIsLoading(true);
     try {
       const response = await register(email, password, fullName);
-      console.log(
-        "[Register] Registration successful, redirecting to OTP verification"
-      );
+      console.log("[Register] Registration successful, redirecting to OTP verification");
 
       // OTP入力画面に遷移
       router.push({
@@ -146,29 +145,7 @@ export default function RegisterScreen() {
         "アカウントを作成できませんでした"
       );
 
-      // ネットワークエラーの場合
-      if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-        errorMessage = t(
-          "Cannot connect to server. Please make sure the backend server is running.",
-          "サーバーに接続できません。バックエンドサーバーが起動していることを確認してください。"
-        );
-      }
-      // タイムアウトエラーの場合
-      else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-        errorMessage = t(
-          "Request timed out. Please try again.",
-          "リクエストがタイムアウトしました。再度お試しください。"
-        );
-      }
-      // サーバーエラーの場合
-      else if (error.response?.status >= 500) {
-        errorMessage = t(
-          "Server error occurred. Please try again later.",
-          "サーバーエラーが発生しました。しばらくしてから再度お試しください。"
-        );
-      }
-      // その他のエラーの場合
-      else if (error.response?.data?.detail) {
+      if (error.response?.data?.detail) {
         const detail = error.response.data.detail;
 
         // 配列の場合（バリデーションエラー）
@@ -191,12 +168,8 @@ export default function RegisterScreen() {
           errorMessage = JSON.stringify(detail);
         }
       }
-      // その他の予期しないエラー
-      else if (error.message) {
-        errorMessage = `${t("Error", "エラー")}: ${error.message}`;
-      }
 
-      setErrorMessage(errorMessage);
+      Alert.alert(t("Registration Failed", "登録失敗"), errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -208,20 +181,11 @@ export default function RegisterScreen() {
 
   return (
     <View style={styles.container}>
-      <View
-        style={[
-          styles.formContainer,
-          {
-            width: isSmallScreen ? "100%" : isMediumScreen ? "85%" : 500,
-            maxWidth: 600,
-            padding: isSmallScreen ? 20 : 24,
-          },
-        ]}
-      >
-        <Text style={[styles.title, { fontSize: isSmallScreen ? 24 : 28 }]}>
+      <View style={styles.formContainer}>
+        <Text style={styles.title}>
           {t("Create Account", "アカウント作成")}
         </Text>
-        <Text style={[styles.subtitle, { fontSize: isSmallScreen ? 14 : 16 }]}>
+        <Text style={styles.subtitle}>
           {t("Sign up to get started", "登録して始めましょう")}
         </Text>
 
@@ -354,13 +318,7 @@ export default function RegisterScreen() {
         )}
 
         <TextInput
-          style={[
-            styles.input,
-            {
-              padding: isSmallScreen ? 14 : 16,
-              fontSize: isSmallScreen ? 15 : 16,
-            },
-          ]}
+          style={styles.input}
           placeholder={t("Confirm Password", "パスワード確認")}
           placeholderTextColor="#999"
           value={confirmPassword}
@@ -376,12 +334,6 @@ export default function RegisterScreen() {
             </Text>
           </View>
         )}
-
-        {errorMessage ? (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{errorMessage}</Text>
-          </View>
-        ) : null}
 
         {/* Terms and Privacy Policy Agreement */}
         <View style={styles.termsContainer}>
@@ -652,39 +604,25 @@ export default function RegisterScreen() {
               !isPasswordValid ||
               (confirmPassword.length > 0 && password !== confirmPassword)) &&
               styles.buttonDisabled,
-            { padding: isSmallScreen ? 14 : 16 },
           ]}
           onPress={handleRegister}
           disabled={
-            isLoading ||
-            !isPasswordValid ||
-            (confirmPassword.length > 0 && password !== confirmPassword) ||
-            !agreedToTerms
+            isLoading || !isPasswordValid || (confirmPassword.length > 0 && password !== confirmPassword) || !agreedToTerms
           }
         >
           {isLoading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text
-              style={[styles.buttonText, { fontSize: isSmallScreen ? 15 : 16 }]}
-            >
-              {t("Sign Up", "新規登録")}
-            </Text>
+            <Text style={styles.buttonText}>{t("Sign Up", "新規登録")}</Text>
           )}
         </TouchableOpacity>
 
         <View style={styles.loginContainer}>
-          <Text
-            style={[styles.loginText, { fontSize: isSmallScreen ? 13 : 14 }]}
-          >
+          <Text style={styles.loginText}>
             {t("Already have an account? ", "既にアカウントをお持ちの方 ")}
           </Text>
           <TouchableOpacity onPress={navigateToLogin} disabled={isLoading}>
-            <Text
-              style={[styles.loginLink, { fontSize: isSmallScreen ? 13 : 14 }]}
-            >
-              {t("Sign In", "ログイン")}
-            </Text>
+            <Text style={styles.loginLink}>{t("Sign In", "ログイン")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -698,7 +636,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#f5f5f5",
     justifyContent: "center",
     padding: 20,
-    alignItems: "center",
   },
   formContainer: {
     backgroundColor: "#fff",
@@ -709,8 +646,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
-    width: "100%",
-    maxWidth: 600,
   },
   title: {
     fontSize: 28,
@@ -819,14 +754,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFEBEE",
     borderRadius: 8,
     padding: 12,
-    marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: "#F44336",
+    marginTop: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#F44336",
   },
   errorText: {
-    color: "#C62828",
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    color: "#D32F2F",
+    fontWeight: "600",
   },
   overlay: {
     position: "absolute",

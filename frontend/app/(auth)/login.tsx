@@ -97,7 +97,7 @@ export default function LoginScreen() {
     setIsLoading(true);
     try {
       await login(email, password);
-      router.replace("/");
+      // login関数内でダッシュボードにリダイレクトされるため、ここでは何もしない
     } catch (error: any) {
       console.error("[Login] Error:", error);
       const message =

@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useLanguage } from "../../src/contexts/LanguageContext";
 import {
   getTwoFactorStatus,
   enableTwoFactor,
@@ -21,6 +22,9 @@ import {
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const { t } = useLanguage();
+  const { width } = useWindowDimensions();
+  const isSmallScreen = width < 600;
   const [loading, setLoading] = useState(true);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [userEmail, setUserEmail] = useState("");
@@ -28,8 +32,6 @@ export default function SettingsScreen() {
   const [password, setPassword] = useState("");
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [showBackupCodesModal, setShowBackupCodesModal] = useState(false);
-  const { width } = useWindowDimensions();
-  const isSmallScreen = width < 600;
 
   useEffect(() => {
     loadTwoFactorStatus();
@@ -114,13 +116,11 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <View style={[styles.header, { padding: isSmallScreen ? 16 : 20 }]}>
-        <Text style={[styles.title, { fontSize: isSmallScreen ? 20 : 24 }]}>
-          セキュリティ設定
-        </Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>{t("Security Settings", "セキュリティ設定")}</Text>
       </View>
 
-      {/* 2段階認証セクション */}
+      {/* マイページへのリンク */}
       <View
         style={[
           styles.section,
@@ -130,12 +130,21 @@ export default function SettingsScreen() {
           },
         ]}
       >
-        <View style={styles.sectionHeader}>
-          <Text
-            style={[styles.sectionTitle, { fontSize: isSmallScreen ? 18 : 20 }]}
-          >
-            2段階認証
+        <TouchableOpacity
+          style={styles.linkButton}
+          onPress={() => router.push("/(app)/mypage")}
+          testID="settings-to-mypage-button"
+        >
+          <Text style={styles.linkButtonText}>
+            {t("Go to My Profile", "マイページへ")} →
           </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* 2段階認証セクション */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>2段階認証</Text>
           <View
             style={[
               styles.badge,
@@ -181,27 +190,9 @@ export default function SettingsScreen() {
         onRequestClose={() => setShowBackupCodesModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalContent,
-              {
-                width: isSmallScreen ? "95%" : "90%",
-                maxWidth: isSmallScreen ? 400 : 500,
-                padding: isSmallScreen ? 20 : 25,
-              },
-            ]}
-          >
-            <Text
-              style={[styles.modalTitle, { fontSize: isSmallScreen ? 20 : 22 }]}
-            >
-              バックアップコード
-            </Text>
-            <Text
-              style={[
-                styles.modalDescription,
-                { fontSize: isSmallScreen ? 13 : 14 },
-              ]}
-            >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>バックアップコード</Text>
+            <Text style={styles.modalDescription}>
               以下のバックアップコードを安全な場所に保管してください。
               メールにアクセスできない場合に使用できます。
             </Text>
@@ -219,21 +210,10 @@ export default function SettingsScreen() {
             </Text>
 
             <TouchableOpacity
-              style={[
-                styles.button,
-                styles.buttonPrimary,
-                { padding: isSmallScreen ? 12 : 15 },
-              ]}
+              style={[styles.button, styles.buttonPrimary]}
               onPress={() => setShowBackupCodesModal(false)}
             >
-              <Text
-                style={[
-                  styles.buttonText,
-                  { fontSize: isSmallScreen ? 14 : 16 },
-                ]}
-              >
-                閉じる
-              </Text>
+              <Text style={styles.buttonText}>閉じる</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -247,38 +227,14 @@ export default function SettingsScreen() {
         onRequestClose={() => setShowDisableModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalContent,
-              {
-                width: isSmallScreen ? "95%" : "90%",
-                maxWidth: isSmallScreen ? 400 : 500,
-                padding: isSmallScreen ? 20 : 25,
-              },
-            ]}
-          >
-            <Text
-              style={[styles.modalTitle, { fontSize: isSmallScreen ? 20 : 22 }]}
-            >
-              2段階認証を無効化
-            </Text>
-            <Text
-              style={[
-                styles.modalDescription,
-                { fontSize: isSmallScreen ? 13 : 14 },
-              ]}
-            >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>2段階認証を無効化</Text>
+            <Text style={styles.modalDescription}>
               パスワードを入力して確認してください
             </Text>
 
             <TextInput
-              style={[
-                styles.input,
-                {
-                  padding: isSmallScreen ? 10 : 12,
-                  fontSize: isSmallScreen ? 15 : 16,
-                },
-              ]}
+              style={styles.input}
               placeholder="パスワード"
               secureTextEntry
               value={password}
@@ -418,7 +374,6 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 25,
     width: "90%",
-    maxWidth: 500,
     maxHeight: "80%",
   },
   modalTitle: {
@@ -467,5 +422,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 15,
     textAlign: "center",
+  },
+  linkButton: {
+    backgroundColor: "#9C27B0",
+    borderRadius: 8,
+    padding: 14,
+    alignItems: "center",
+  },
+  linkButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

@@ -78,12 +78,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // indexページ以外でエラーが発生した場合のみリダイレクト
       try {
         const currentPath = window.location.pathname;
-        // indexページ、ログインページ、新規登録ページ、OTP検証ページはリダイレクトしない
-        if (currentPath === '/' || currentPath.includes('login') || currentPath.includes('register') || currentPath.includes('verify-otp')) {
+        const isPublicPath =
+          currentPath === '/' ||
+          currentPath.includes('login') ||
+          currentPath.includes('register') ||
+          currentPath.includes('verify-otp') ||
+          currentPath === '/question-sets' ||
+          currentPath === '/trial-question-sets' ||
+          currentPath.startsWith('/set/') ||
+          currentPath.startsWith('/textbook/');
+
+        // 公開ページではリダイレクトしない
+        if (isPublicPath) {
           // 何もしない
-        } else if (currentPath.includes('(trial)')) {
-          // お試しページにいる場合はお試しページに戻す
-          router.replace('/(trial)/trial-question-sets');
         } else {
           // それ以外はログイン画面へ
           router.replace('/(auth)/login');
@@ -100,6 +107,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const response: AuthResponse = await authApi.login({ email, password });
       setUser(response.user);
+      // ログイン成功後、ダッシュボードにリダイレクト
+      router.replace("/(app)/dashboard");
     } catch (error) {
       // エラーを再スローして、呼び出し元でキャッチできるようにする
       throw error;

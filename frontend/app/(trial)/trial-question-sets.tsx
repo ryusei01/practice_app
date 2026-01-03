@@ -8,7 +8,7 @@ import {
   ScrollView,
   useWindowDimensions,
 } from "react-native";
-import { useRouter, useFocusEffect } from "expo-router";
+import { useRouter, useFocusEffect, usePathname } from "expo-router";
 import { useLanguage } from "../../src/contexts/LanguageContext";
 import {
   localStorageService,
@@ -28,6 +28,7 @@ export default function TrialQuestionSetsScreen() {
   const isLoadingRef = useRef(false); // 重複読み込み防止用
   const { t } = useLanguage();
   const router = useRouter();
+  const pathname = usePathname();
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 600;
   const scrollViewRef = useRef<ScrollView>(null);
@@ -274,7 +275,11 @@ export default function TrialQuestionSetsScreen() {
   return (
     <View style={styles.container} nativeID="trial-sets-container">
       <Header
-        title={t("Trial Question Sets", "お試し問題セット")}
+        title={
+          pathname === "/question-sets" || pathname === "/question-sets/"
+            ? t("Question Sets", "問題セット")
+            : t("Trial Question Sets", "お試し問題セット")
+        }
         showLanguageSwitcher
       />
       <ScrollView

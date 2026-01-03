@@ -6,18 +6,17 @@ import {
   ScrollView,
   ActivityIndicator,
   Platform,
-  Linking,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useTranslation } from 'react-i18next';
+import { useLocalSearchParams } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import * as FileSystem from 'expo-file-system';
+import Markdown from 'react-native-markdown-display';
 import { questionSetsApi } from '../../../../src/api/questionSets';
+import { useLanguage } from '../../../../src/contexts/LanguageContext';
 
 export default function TextbookScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useLanguage();
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [content, setContent] = useState<string>('');
   const [textbookType, setTextbookType] = useState<string | null>(null);
@@ -112,48 +111,11 @@ export default function TextbookScreen() {
   };
 
   const renderMarkdown = () => {
-    // 簡易的なMarkdownレンダリング
-    // 実際の実装では、react-native-markdown-displayなどのライブラリを使用
-    const lines = content.split('\n');
     return (
       <ScrollView style={styles.contentContainer}>
-        {lines.map((line, index) => {
-          // 見出し
-          if (line.startsWith('# ')) {
-            return (
-              <Text key={index} style={styles.h1}>
-                {line.substring(2)}
-              </Text>
-            );
-          }
-          if (line.startsWith('## ')) {
-            return (
-              <Text key={index} style={styles.h2}>
-                {line.substring(3)}
-              </Text>
-            );
-          }
-          if (line.startsWith('### ')) {
-            return (
-              <Text key={index} style={styles.h3}>
-                {line.substring(4)}
-              </Text>
-            );
-          }
-          // コードブロック
-          if (line.startsWith('```')) {
-            return null; // コードブロックは簡易実装ではスキップ
-          }
-          // 通常のテキスト
-          if (line.trim()) {
-            return (
-              <Text key={index} style={styles.paragraph}>
-                {line}
-              </Text>
-            );
-          }
-          return <Text key={index}>{'\n'}</Text>;
-        })}
+        <Markdown style={markdownStyles}>
+          {content}
+        </Markdown>
       </ScrollView>
     );
   };
@@ -236,33 +198,6 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
-  h1: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginTop: 24,
-    marginBottom: 16,
-    color: '#333',
-  },
-  h2: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginTop: 20,
-    marginBottom: 12,
-    color: '#333',
-  },
-  h3: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 8,
-    color: '#333',
-  },
-  paragraph: {
-    fontSize: 16,
-    lineHeight: 24,
-    marginBottom: 12,
-    color: '#333',
-  },
   webView: {
     flex: 1,
   },
@@ -282,6 +217,160 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     textAlign: 'center',
+  },
+});
+
+const markdownStyles = StyleSheet.create({
+  // 見出し
+  heading1: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginTop: 24,
+    marginBottom: 16,
+    color: '#333',
+  },
+  heading2: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 20,
+    marginBottom: 12,
+    color: '#333',
+  },
+  heading3: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 8,
+    color: '#333',
+  },
+  heading4: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 14,
+    marginBottom: 6,
+    color: '#333',
+  },
+  heading5: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 12,
+    marginBottom: 4,
+    color: '#333',
+  },
+  heading6: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 10,
+    marginBottom: 4,
+    color: '#333',
+  },
+  // 段落
+  paragraph: {
+    fontSize: 16,
+    lineHeight: 24,
+    marginBottom: 12,
+    color: '#333',
+  },
+  // リスト
+  bullet_list: {
+    marginBottom: 12,
+  },
+  ordered_list: {
+    marginBottom: 12,
+  },
+  list_item: {
+    fontSize: 16,
+    lineHeight: 24,
+    marginBottom: 4,
+    color: '#333',
+  },
+  // コードブロック
+  code_inline: {
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 3,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontSize: 14,
+    color: '#d63384',
+  },
+  code_block: {
+    backgroundColor: '#f5f5f5',
+    padding: 12,
+    borderRadius: 6,
+    marginBottom: 12,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontSize: 14,
+    overflow: 'hidden',
+  },
+  fence: {
+    backgroundColor: '#f5f5f5',
+    padding: 12,
+    borderRadius: 6,
+    marginBottom: 12,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontSize: 14,
+    overflow: 'hidden',
+  },
+  // 引用
+  blockquote: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#007AFF',
+    paddingLeft: 12,
+    marginLeft: 0,
+    marginBottom: 12,
+    backgroundColor: '#f9f9f9',
+    paddingVertical: 8,
+  },
+  // テーブル
+  table: {
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 4,
+  },
+  thead: {
+    backgroundColor: '#f5f5f5',
+  },
+  tbody: {},
+  th: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ddd',
+    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#333',
+  },
+  td: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ddd',
+    fontSize: 16,
+    color: '#333',
+  },
+  tr: {},
+  // 水平線
+  hr: {
+    backgroundColor: '#ddd',
+    height: 1,
+    marginVertical: 16,
+  },
+  // リンク
+  link: {
+    color: '#007AFF',
+    textDecorationLine: 'underline',
+  },
+  // 強調
+  strong: {
+    fontWeight: 'bold',
+  },
+  em: {
+    fontStyle: 'italic',
+  },
+  // 画像
+  image: {
+    marginVertical: 12,
+    borderRadius: 4,
   },
 });
 
