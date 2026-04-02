@@ -25,7 +25,7 @@ jobs:
       - name: Install pip-audit
         run: pip install pip-audit
       - name: Audit backend requirements
-        run: pip-audit -r requirements.txt --desc-on-exit
+        run: pip-audit -r requirements.txt --desc on
 
   frontend-npm-audit:
     continue-on-error: true
