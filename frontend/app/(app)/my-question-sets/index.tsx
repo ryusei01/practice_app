@@ -24,12 +24,14 @@ import {
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
 import AdBanner from "../../../src/components/AdBanner";
+import { srsService } from "../../../src/services/srsService";
 
 export default function MyQuestionSetsScreen() {
   const [myQuestionSets, setMyQuestionSets] = useState<QuestionSet[]>([]);
   const [purchasedQuestionSets, setPurchasedQuestionSets] = useState<
     QuestionSet[]
   >([]);
+  const [dueCounts, setDueCounts] = useState<Record<string, number>>({});
   const [availableTextbooks, setAvailableTextbooks] = useState<Textbook[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -65,6 +67,12 @@ export default function MyQuestionSetsScreen() {
       setMyQuestionSets(myData);
       setPurchasedQuestionSets(purchasedData);
       setAvailableTextbooks(textbooksData);
+
+      const counts: Record<string, number> = {};
+      for (const set of [...myData, ...purchasedData]) {
+        counts[set.id] = await srsService.getDueCount(set.id);
+      }
+      setDueCounts(counts);
     } catch (error: any) {
       console.error("Failed to load question sets:", error);
 
@@ -166,6 +174,13 @@ export default function MyQuestionSetsScreen() {
         <Text style={[styles.cardTitle, { fontSize: isSmallScreen ? 16 : 18 }]}>
           {item.title}
         </Text>
+        {(dueCounts[item.id] || 0) > 0 && (
+          <View style={styles.dueBadge}>
+            <Text style={styles.dueBadgeText}>
+              {t(`${dueCounts[item.id]} due`, `${dueCounts[item.id]}問 要復習`)}
+            </Text>
+          </View>
+        )}
         {item.is_published && (
           <View style={styles.publishedBadge}>
             <Text style={styles.publishedText}>{t("Published", "公開中")}</Text>
@@ -195,6 +210,13 @@ export default function MyQuestionSetsScreen() {
       >
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>{item.title}</Text>
+          {(dueCounts[item.id] || 0) > 0 && (
+            <View style={styles.dueBadge}>
+              <Text style={styles.dueBadgeText}>
+                {t(`${dueCounts[item.id]} due`, `${dueCounts[item.id]}問 要復習`)}
+              </Text>
+            </View>
+          )}
           <View style={styles.purchasedBadge}>
             <Text style={styles.purchasedText}>{t("Purchased", "購入済み")}</Text>
           </View>
@@ -485,6 +507,18 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   purchasedText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  dueBadge: {
+    backgroundColor: "#FF9500",
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginRight: 8,
+  },
+  dueBadgeText: {
     color: "#fff",
     fontSize: 12,
     fontWeight: "600",

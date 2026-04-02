@@ -11,6 +11,7 @@ import { useAuth } from "../../../src/contexts/AuthContext";
 import { questionsApi, Question } from "../../../src/api/questions";
 import { answersApi } from "../../../src/api/answers";
 import QuizEngine, { QuizQuestion, QuizAnswer } from "../../../src/components/QuizEngine";
+import { srsService } from "../../../src/services/srsService";
 
 export default function QuizScreen() {
   const { id, questionIds } = useLocalSearchParams<{ id: string; questionIds?: string }>();
@@ -111,6 +112,16 @@ export default function QuizScreen() {
         await AsyncStorage.setItem(
           `answers_${user.id}`,
           JSON.stringify([...parsedAnswers, ...newAnswers])
+        );
+      }
+
+      // SRS状態を更新（通常版もローカルで共通管理）
+      for (const ans of answers) {
+        await srsService.updateAfterAnswer(
+          id as string,
+          ans.question_id,
+          ans.is_correct,
+          ans.answer_time_sec
         );
       }
 

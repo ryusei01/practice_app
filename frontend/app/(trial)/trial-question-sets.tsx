@@ -8,6 +8,7 @@ import {
   ScrollView,
   useWindowDimensions,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter, useFocusEffect, usePathname } from "expo-router";
 import { useLanguage } from "../../src/contexts/LanguageContext";
 import {
@@ -18,14 +19,20 @@ import {
   getAvailableTextbooks,
   Textbook,
 } from "../../src/services/textbookService";
+import { useAuth } from "../../src/contexts/AuthContext";
 import Header from "../../src/components/Header";
 import Modal from "../../src/components/Modal";
+import { srsService } from "../../src/services/srsService";
 
 export default function TrialQuestionSetsScreen() {
   const [questionSets, setQuestionSets] = useState<LocalQuestionSet[]>([]);
   const [availableTextbooks, setAvailableTextbooks] = useState<Textbook[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const isLoadingRef = useRef(false); // 重複読み込み防止用
+  const [showDefaultSets, setShowDefaultSets] = useState(true);
+  const [showTextbooks, setShowTextbooks] = useState(true);
+  const [dueCounts, setDueCounts] = useState<Record<string, number>>({});
+  const { user } = useAuth();
   const { t, language } = useLanguage();
   const router = useRouter();
   const pathname = usePathname();
@@ -72,6 +79,12 @@ export default function TrialQuestionSetsScreen() {
 
       const textbooks = await getAvailableTextbooks();
       setAvailableTextbooks(textbooks);
+
+      const counts: Record<string, number> = {};
+      for (const set of sets) {
+        counts[set.id] = await srsService.getDueCount(set.id);
+      }
+      setDueCounts(counts);
     } catch (error) {
       console.error("Error loading trial question sets:", error);
       showModal(
@@ -84,6 +97,33 @@ export default function TrialQuestionSetsScreen() {
       isLoadingRef.current = false;
     }
   }, [t]);
+
+  // 表示設定を AsyncStorage から読み込む
+  useEffect(() => {
+    const loadPrefs = async () => {
+      try {
+        const [defVal, tbVal] = await Promise.all([
+          AsyncStorage.getItem("pref_showDefaultSets"),
+          AsyncStorage.getItem("pref_showTextbooks"),
+        ]);
+        if (defVal !== null) setShowDefaultSets(defVal === "true");
+        if (tbVal !== null) setShowTextbooks(tbVal === "true");
+      } catch (_) {}
+    };
+    loadPrefs();
+  }, []);
+
+  const toggleShowDefaultSets = async () => {
+    const next = !showDefaultSets;
+    setShowDefaultSets(next);
+    await AsyncStorage.setItem("pref_showDefaultSets", String(next));
+  };
+
+  const toggleShowTextbooks = async () => {
+    const next = !showTextbooks;
+    setShowTextbooks(next);
+    await AsyncStorage.setItem("pref_showTextbooks", String(next));
+  };
 
   // 画面がフォーカスされたときに問題セット一覧を再読み込み
   useFocusEffect(
@@ -232,13 +272,22 @@ export default function TrialQuestionSetsScreen() {
           >
             {t("Questions", "問題数")}: {item.questions.length}
           </Text>
-          <View style={styles.trialBadge} nativeID={`trial-badge-${item.id}`}>
-            <Text
-              style={styles.trialBadgeText}
-              nativeID={`trial-badge-text-${item.id}`}
-            >
-              {t("Trial Mode", "お試しモード")}
-            </Text>
+          <View style={styles.badgeRow}>
+            <View style={styles.trialBadge} nativeID={`trial-badge-${item.id}`}>
+              <Text
+                style={styles.trialBadgeText}
+                nativeID={`trial-badge-text-${item.id}`}
+              >
+                {t("Trial Mode", "お試しモード")}
+              </Text>
+            </View>
+            {(dueCounts[item.id] || 0) > 0 && (
+              <View style={styles.dueBadge}>
+                <Text style={styles.dueBadgeText}>
+                  {t(`${dueCounts[item.id]} due`, `${dueCounts[item.id]}問 要復習`)}
+                </Text>
+              </View>
+            )}
           </View>
         </TouchableOpacity>
         {!isDefaultSet && (
@@ -307,8 +356,53 @@ export default function TrialQuestionSetsScreen() {
         ]}
         nativeID="trial-sets-content"
       >
+        {/* フィルターチップ */}
+        <View style={styles.filterRow} nativeID="trial-filter-row">
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              showDefaultSets && styles.filterChipActive,
+            ]}
+            onPress={toggleShowDefaultSets}
+            testID="trial-toggle-default-sets"
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                showDefaultSets && styles.filterChipTextActive,
+              ]}
+            >
+              {showDefaultSets
+                ? t("Hide Defaults", "デフォルトを非表示")
+                : t("Show Defaults", "デフォルトを表示")}
+            </Text>
+          </TouchableOpacity>
+
+          {availableTextbooks.length > 0 && (
+            <TouchableOpacity
+              style={[
+                styles.filterChip,
+                showTextbooks && styles.filterChipActive,
+              ]}
+              onPress={toggleShowTextbooks}
+              testID="trial-toggle-textbooks"
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  showTextbooks && styles.filterChipTextActive,
+                ]}
+              >
+                {showTextbooks
+                  ? t("Hide Textbooks", "教科書を非表示")
+                  : t("Show Textbooks", "教科書を表示")}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
         {/* ジャンプボタン（教科書セクションへ） */}
-        {availableTextbooks.length > 0 && (
+        {availableTextbooks.length > 0 && showTextbooks && (
           <View
             style={styles.jumpButtonContainer}
             nativeID="trial-jump-buttons"
@@ -350,13 +444,17 @@ export default function TrialQuestionSetsScreen() {
             </Text>
           </View>
         ) : (
-          questionSets.map((item) => (
-            <View key={item.id}>{renderQuestionSet({ item })}</View>
-          ))
+          questionSets
+            .filter((item) =>
+              showDefaultSets ? true : !item.id.startsWith("default_")
+            )
+            .map((item) => (
+              <View key={item.id}>{renderQuestionSet({ item })}</View>
+            ))
         )}
 
         {/* 教科書セクション */}
-        {availableTextbooks.length > 0 && (
+        {availableTextbooks.length > 0 && showTextbooks && (
           <View
             style={styles.textbookSection}
             nativeID="trial-textbook-section"
@@ -385,7 +483,11 @@ export default function TrialQuestionSetsScreen() {
               padding: isSmallScreen ? 12 : 15,
             },
           ]}
-          onPress={() => router.push("/(trial)/create")}
+          onPress={() =>
+            user
+              ? router.push("/(app)/question-sets/create")
+              : router.push("/(trial)/create")
+          }
           testID="trial-btn-create"
         >
           <Text
@@ -491,14 +593,30 @@ const styles = StyleSheet.create({
     color: "#888",
     marginBottom: 10,
   },
+  badgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    alignItems: "center",
+  },
   trialBadge: {
     backgroundColor: "#34C759",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
-    alignSelf: "flex-start",
   },
   trialBadgeText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  dueBadge: {
+    backgroundColor: "#FF9500",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  dueBadgeText: {
     color: "#fff",
     fontSize: 12,
     fontWeight: "bold",
@@ -537,6 +655,31 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  filterRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 14,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: "#007AFF",
+    backgroundColor: "transparent",
+  },
+  filterChipActive: {
+    backgroundColor: "#007AFF",
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#007AFF",
+  },
+  filterChipTextActive: {
+    color: "#fff",
   },
   textbookSection: {
     marginTop: 30,

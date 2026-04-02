@@ -11,11 +11,18 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useLanguage } from "../../src/contexts/LanguageContext";
-import { localStorageService } from "../../src/services/localStorageService";
+import {
+  localStorageService,
+  LocalQuestion,
+} from "../../src/services/localStorageService";
 import Header from "../../src/components/Header";
-import * as DocumentPicker from 'expo-document-picker';
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system";
+
+type InputMode = "manual" | "csv";
 
 export default function TrialCreateScreen() {
+  const [inputMode, setInputMode] = useState<InputMode>("manual");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [questions, setQuestions] = useState<
@@ -28,11 +35,98 @@ export default function TrialCreateScreen() {
       subcategory2?: string;
     }>
   >([{ question: "", answer: "", difficulty: "medium", category: "", subcategory1: "", subcategory2: "" }]);
+  const [csvQuestions, setCsvQuestions] = useState<LocalQuestion[]>([]);
+  const [csvFileName, setCsvFileName] = useState("");
+  const [csvParseError, setCsvParseError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const { t } = useLanguage();
   const router = useRouter();
+
+  const downloadCSVSample = async () => {
+    const csvSample = [
+      // ヘッダー（全列）
+      "question_text,question_type,option_1,option_2,option_3,option_4,correct_answer,explanation,difficulty,category,subcategory1,subcategory2",
+
+      // ── 短答形式（correct_answer に答えを書くだけ）──
+      "What is the capital of Japan?,,,,,,Tokyo,Japan's capital city is Tokyo,0.2,geography,asia,capitals",
+      "日本の首都は？,,,,,,東京,日本の首都は東京都,0.2,地理,アジア,首都",
+      "What is H2O?,,,,,,Water,H2O is the chemical formula for water,0.1,science,chemistry,compounds",
+      "水の化学式は？,,,,,,H2O,水の化学式はH2Oです,0.1,理科,化学,化合物",
+      "Who wrote Romeo and Juliet?,,,,,,William Shakespeare,Shakespeare wrote this famous play in the late 16th century,0.3,literature,english,drama",
+      "「ロミオとジュリエット」の作者は？,,,,,,シェイクスピア,ウィリアム・シェイクスピアが16世紀末に執筆,0.3,文学,英語,演劇",
+      "What is the speed of light?,,,,,,299792458 m/s,The speed of light in a vacuum is approximately 3×10⁸ m/s,0.6,science,physics,constants",
+      "光の速さは？,,,,,,約30万km/s,真空中の光速は約2.998×10⁸ m/s,0.6,理科,物理,定数",
+
+      // ── 四択形式（option_1〜4 を使う）──
+      "What is 8 × 7?,multiple_choice,42,54,56,64,56,8 multiplied by 7 equals 56,0.2,math,arithmetic,multiplication",
+      "8×7の答えは？,multiple_choice,42,54,56,64,56,8かける7は56,0.2,数学,算数,掛け算",
+      "Which planet is closest to the Sun?,multiple_choice,Venus,Earth,Mercury,Mars,Mercury,Mercury is the innermost planet of the Solar System,0.3,science,astronomy,solar-system",
+      "太陽に最も近い惑星は？,multiple_choice,金星,地球,水星,火星,水星,水星は太陽系で最も内側にある惑星,0.3,理科,天文,太陽系",
+      "What does 'CPU' stand for?,multiple_choice,Central Processing Unit,Computer Power Unit,Core Processing Utility,Central Power Unit,Central Processing Unit,CPU is the main processor in a computer,0.3,IT,hardware,basics",
+      "CPUとは何の略？,multiple_choice,中央処理装置,コンピュータ電源装置,コア処理ユーティリティ,中央電力装置,中央処理装置（Central Processing Unit）,コンピュータの主要な演算装置,0.3,IT,ハードウェア,基礎",
+      "Which country invented the telephone?,multiple_choice,France,Germany,United States,United Kingdom,United States,Alexander Graham Bell patented the telephone in the US in 1876,0.5,history,technology,inventions",
+      "電話を発明した国は？,multiple_choice,フランス,ドイツ,アメリカ,イギリス,アメリカ,グラハム・ベルが1876年にアメリカで特許を取得,0.5,歴史,テクノロジー,発明",
+
+      // ── 正誤判定形式（true / false）──
+      "The Great Wall of China is visible from space.,,,,,,false,This is a common myth. It is not visible with the naked eye from space.,0.4,general,myths,space",
+      "万里の長城は宇宙から肉眼で見える。,,,,,,false,これはよくある誤解。実際には宇宙から肉眼では見えない。,0.4,一般常識,通説,宇宙",
+      "Photosynthesis produces oxygen.,,,,,,true,Plants use CO2 and sunlight to produce glucose and release O2,0.3,science,biology,plants",
+      "光合成によって酸素が生成される。,,,,,,true,植物はCO2と光を使ってグルコースを生成しO2を放出する,0.3,理科,生物,植物",
+      "Python is a compiled language.,,,,,,false,Python is an interpreted language,0.4,IT,programming,python",
+      "Pythonはコンパイル型言語である。,,,,,,false,Pythonはインタプリタ型言語,0.4,IT,プログラミング,Python",
+    ].join("\n");
+
+    if (Platform.OS === "web") {
+      const blob = new Blob([csvSample], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "csv_sample.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      const path = (FileSystem.documentDirectory ?? "") + "csv_sample.csv";
+      await FileSystem.writeAsStringAsync(path, csvSample, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+    }
+  };
+
+  const handleCsvPick = async () => {
+    setCsvParseError("");
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["text/csv", "text/plain", "application/csv", "*/*"],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      const response = await fetch(asset.uri);
+      const text = await response.text();
+      const parsed = localStorageService.parseCSVToQuestionSet(
+        text,
+        title || "untitled",
+        description
+      );
+      if (parsed.questions.length === 0) {
+        setCsvParseError(
+          t(
+            "No valid questions found in CSV. Check the format.",
+            "CSVから有効な問題が見つかりませんでした。フォーマットを確認してください。"
+          )
+        );
+        return;
+      }
+      setCsvQuestions(parsed.questions);
+      setCsvFileName(asset.name || "questions.csv");
+    } catch (err) {
+      setCsvParseError(
+        t("Failed to read CSV file", "CSVファイルの読み込みに失敗しました")
+      );
+    }
+  };
 
   const addQuestion = () => {
     setQuestions([...questions, { question: "", answer: "", difficulty: "medium", category: "", subcategory1: "", subcategory2: "" }]);
@@ -64,15 +158,31 @@ export default function TrialCreateScreen() {
       return;
     }
 
-    const validQuestions = questions.filter(
-      (q) => q.question.trim() && q.answer.trim()
-    );
+    let finalQuestions: typeof questions;
 
-    if (validQuestions.length === 0) {
-      setErrorMessage(
-        t("Please add at least one question", "最低1つの問題を追加してください")
+    if (inputMode === "csv") {
+      if (csvQuestions.length === 0) {
+        setErrorMessage(
+          t("Please select a CSV file", "CSVファイルを選択してください")
+        );
+        return;
+      }
+      finalQuestions = csvQuestions.map((q) => ({
+        question: q.question,
+        answer: q.answer,
+        difficulty: q.difficulty,
+        category: q.category,
+      }));
+    } else {
+      finalQuestions = questions.filter(
+        (q) => q.question.trim() && q.answer.trim()
       );
-      return;
+      if (finalQuestions.length === 0) {
+        setErrorMessage(
+          t("Please add at least one question", "最低1つの問題を追加してください")
+        );
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -80,13 +190,13 @@ export default function TrialCreateScreen() {
       await localStorageService.saveTrialQuestionSet({
         title,
         description,
-        questions: validQuestions,
+        questions: finalQuestions,
       });
 
       setSuccessMessage(
         t("Question set created!", "問題セットを作成しました！")
       );
-      setTimeout(() => router.back(), 1500);
+      setTimeout(() => router.replace("/(trial)/trial-question-sets"), 1500);
     } catch (error) {
       console.error("Error creating trial question set:", error);
       setErrorMessage(
@@ -102,14 +212,14 @@ export default function TrialCreateScreen() {
       <Header title={t("Create Question Set", "問題セットを作成")} />
       <ScrollView style={styles.content}>
         <Text style={styles.title}>
-          {t("Create Question Set (Trial)", "問題セットを作成 (お試し)")}
+          {t("Create Question Set", "問題セットを作成")}
         </Text>
 
         <View style={styles.trialNotice}>
           <Text style={styles.trialNoticeText}>
             {t(
-              "Trial mode: Data is stored locally on your device",
-              "お試しモード: データは端末にローカル保存されます"
+              "Data is stored locally on your device",
+              "データはこのデバイスにローカル保存されます"
             )}
           </Text>
         </View>
@@ -132,7 +242,35 @@ export default function TrialCreateScreen() {
           numberOfLines={3}
         />
 
-        <Text style={styles.sectionTitle}>{t("Questions", "問題")}</Text>
+        {/* タブ切り替え */}
+        <View style={styles.tabRow}>
+          <TouchableOpacity
+            style={[styles.tab, inputMode === "manual" && styles.tabActive]}
+            onPress={() => setInputMode("manual")}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                inputMode === "manual" && styles.tabTextActive,
+              ]}
+            >
+              {t("Manual Input", "手動入力")}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, inputMode === "csv" && styles.tabActive]}
+            onPress={() => setInputMode("csv")}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                inputMode === "csv" && styles.tabTextActive,
+              ]}
+            >
+              {t("CSV Import", "CSVインポート")}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {/* エラー・成功メッセージ */}
         {errorMessage ? (
@@ -147,73 +285,161 @@ export default function TrialCreateScreen() {
           </View>
         ) : null}
 
-        {questions.map((q, index) => (
-          <View key={index} style={styles.questionCard}>
-            <View style={styles.questionHeader}>
-              <Text style={styles.questionNumber}>
-                {t("Question", "問題")} {index + 1}
-              </Text>
-              {questions.length > 1 && (
+        {inputMode === "csv" ? (
+          <View>
+            {/* CSV フォーマット説明 */}
+            <View style={styles.csvFormatBox}>
+              <View style={styles.csvFormatHeader}>
+                <Text style={styles.csvFormatTitle}>
+                  {t("CSV Format", "CSVフォーマット")}
+                </Text>
                 <TouchableOpacity
-                  onPress={() => removeQuestion(index)}
-                  style={styles.removeButton}
+                  style={styles.csvDownloadBtn}
+                  onPress={downloadCSVSample}
                 >
-                  <Text style={styles.removeButtonText}>
-                    {t("Remove", "削除")}
+                  <Text style={styles.csvDownloadBtnText}>
+                    ⬇ {t("Download Sample", "サンプルDL")}
                   </Text>
                 </TouchableOpacity>
-              )}
+              </View>
+
+              <Text style={styles.csvFormatSubtitle}>
+                {t("Required columns", "必須列")}
+              </Text>
+              <Text style={styles.csvFormatCode}>
+                {"question_text, correct_answer"}
+              </Text>
+
+              <Text style={styles.csvFormatSubtitle}>
+                {t("Optional columns", "任意列")}
+              </Text>
+              <Text style={styles.csvFormatCode}>
+                {"question_type, option_1〜option_4,\nexplanation, difficulty, category,\nsubcategory1, subcategory2"}
+              </Text>
+
+              <Text style={styles.csvFormatSubtitle}>
+                {t("Example", "例")}
+              </Text>
+              <Text style={styles.csvFormatCode}>
+                {"question_text,correct_answer,difficulty,category\nWhat is 2+2?,4,0.1,math\n日本の首都は？,東京,0.3,地理"}
+              </Text>
+
+              <Text style={styles.csvFormatNote}>
+                {t(
+                  "difficulty: 0.0=easy / 0.5=medium / 1.0=hard  •  Save as UTF-8",
+                  "difficulty: 0.0=易 / 0.5=中 / 1.0=難  •  UTF-8で保存"
+                )}
+              </Text>
             </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder={t("Question", "問題")}
-              placeholderTextColor="#999"
-              value={q.question}
-              onChangeText={(text) => updateQuestion(index, "question", text)}
-              multiline
-            />
+            {/* ファイル選択ボタン */}
+            <TouchableOpacity
+              style={styles.csvPickButton}
+              onPress={handleCsvPick}
+            >
+              <Text style={styles.csvPickButtonText}>
+                📂 {t("Select CSV File", "CSVファイルを選択")}
+              </Text>
+            </TouchableOpacity>
 
-            <TextInput
-              style={styles.input}
-              placeholder={t("Answer", "答え")}
-              placeholderTextColor="#999"
-              value={q.answer}
-              onChangeText={(text) => updateQuestion(index, "answer", text)}
-              multiline
-            />
+            {csvParseError ? (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{csvParseError}</Text>
+              </View>
+            ) : null}
 
-            <TextInput
-              style={styles.input}
-              placeholder={t("Category (optional)", "カテゴリ (任意)")}
-              placeholderTextColor="#999"
-              value={q.category || ""}
-              onChangeText={(text) => updateQuestion(index, "category", text)}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder={t("Subcategory 1 (optional)", "サブカテゴリ1 (任意)")}
-              placeholderTextColor="#999"
-              value={q.subcategory1 || ""}
-              onChangeText={(text) => updateQuestion(index, "subcategory1", text)}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder={t("Subcategory 2 (optional)", "サブカテゴリ2 (任意)")}
-              placeholderTextColor="#999"
-              value={q.subcategory2 || ""}
-              onChangeText={(text) => updateQuestion(index, "subcategory2", text)}
-            />
+            {csvFileName ? (
+              <View style={styles.csvPreview}>
+                <Text style={styles.csvPreviewFile}>📄 {csvFileName}</Text>
+                <Text style={styles.csvPreviewCount}>
+                  {t("Questions loaded", "読み込んだ問題数")}: {csvQuestions.length}
+                </Text>
+                <TouchableOpacity
+                  style={styles.csvClearButton}
+                  onPress={() => {
+                    setCsvQuestions([]);
+                    setCsvFileName("");
+                    setCsvParseError("");
+                  }}
+                >
+                  <Text style={styles.csvClearButtonText}>
+                    {t("Clear", "クリア")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </View>
-        ))}
+        ) : (
+          <View>
+            {questions.map((q, index) => (
+              <View key={index} style={styles.questionCard}>
+                <View style={styles.questionHeader}>
+                  <Text style={styles.questionNumber}>
+                    {t("Question", "問題")} {index + 1}
+                  </Text>
+                  {questions.length > 1 && (
+                    <TouchableOpacity
+                      onPress={() => removeQuestion(index)}
+                      style={styles.removeButton}
+                    >
+                      <Text style={styles.removeButtonText}>
+                        {t("Remove", "削除")}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
 
-        <TouchableOpacity style={styles.addButton} onPress={addQuestion}>
-          <Text style={styles.addButtonText}>
-            + {t("Add Question", "問題を追加")}
-          </Text>
-        </TouchableOpacity>
+                <TextInput
+                  style={styles.input}
+                  placeholder={t("Question", "問題")}
+                  placeholderTextColor="#999"
+                  value={q.question}
+                  onChangeText={(text) => updateQuestion(index, "question", text)}
+                  multiline
+                />
+
+                <TextInput
+                  style={styles.input}
+                  placeholder={t("Answer", "答え")}
+                  placeholderTextColor="#999"
+                  value={q.answer}
+                  onChangeText={(text) => updateQuestion(index, "answer", text)}
+                  multiline
+                />
+
+                <TextInput
+                  style={styles.input}
+                  placeholder={t("Category (optional)", "カテゴリ (任意)")}
+                  placeholderTextColor="#999"
+                  value={q.category || ""}
+                  onChangeText={(text) => updateQuestion(index, "category", text)}
+                />
+
+                <TextInput
+                  style={styles.input}
+                  placeholder={t("Subcategory 1 (optional)", "サブカテゴリ1 (任意)")}
+                  placeholderTextColor="#999"
+                  value={q.subcategory1 || ""}
+                  onChangeText={(text) => updateQuestion(index, "subcategory1", text)}
+                />
+
+                <TextInput
+                  style={styles.input}
+                  placeholder={t("Subcategory 2 (optional)", "サブカテゴリ2 (任意)")}
+                  placeholderTextColor="#999"
+                  value={q.subcategory2 || ""}
+                  onChangeText={(text) => updateQuestion(index, "subcategory2", text)}
+                />
+              </View>
+            ))}
+
+            <TouchableOpacity style={styles.addButton} onPress={addQuestion}>
+              <Text style={styles.addButtonText}>
+                + {t("Add Question", "問題を追加")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <TouchableOpacity
           style={[styles.createButton, isLoading && styles.buttonDisabled]}
@@ -360,6 +586,133 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     backgroundColor: "#B0B0B0",
+  },
+  tabRow: {
+    flexDirection: "row",
+    marginBottom: 16,
+    borderRadius: 8,
+    overflow: "hidden",
+    borderWidth: 1.5,
+    borderColor: "#007AFF",
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    backgroundColor: "transparent",
+  },
+  tabActive: {
+    backgroundColor: "#007AFF",
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#007AFF",
+  },
+  tabTextActive: {
+    color: "#fff",
+  },
+  csvFormatBox: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  csvFormatHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  csvFormatTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#333",
+  },
+  csvDownloadBtn: {
+    backgroundColor: "#007AFF",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  csvDownloadBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  csvFormatSubtitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#555",
+    marginTop: 6,
+    marginBottom: 3,
+  },
+  csvFormatCode: {
+    fontFamily: "monospace",
+    fontSize: 11,
+    color: "#555",
+    backgroundColor: "#fff",
+    borderRadius: 4,
+    padding: 8,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  csvFormatNote: {
+    fontSize: 11,
+    color: "#888",
+    lineHeight: 16,
+    marginTop: 6,
+  },
+  csvPickButton: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    padding: 16,
+    alignItems: "center",
+    marginBottom: 14,
+    borderWidth: 2,
+    borderColor: "#007AFF",
+    borderStyle: "dashed",
+  },
+  csvPickButtonText: {
+    color: "#007AFF",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  csvPreview: {
+    backgroundColor: "#E8F5E9",
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 14,
+    borderLeftWidth: 4,
+    borderLeftColor: "#34C759",
+    gap: 4,
+  },
+  csvPreviewFile: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#2E7D32",
+  },
+  csvPreviewCount: {
+    fontSize: 13,
+    color: "#2E7D32",
+  },
+  csvClearButton: {
+    alignSelf: "flex-start",
+    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#34C759",
+  },
+  csvClearButtonText: {
+    fontSize: 12,
+    color: "#2E7D32",
+    fontWeight: "600",
   },
   errorContainer: {
     backgroundColor: "#FFEBEE",

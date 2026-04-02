@@ -20,6 +20,7 @@ import { questionsApi, Question } from "../../../src/api/questions";
 import { answersApi } from "../../../src/api/answers";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { localStorageService, LocalQuestionSet } from "../../../src/services/localStorageService";
+import { srsService } from "../../../src/services/srsService";
 
 // expo-speechはモバイルのみ対応なので条件付きインポート
 let Speech: any = null;
@@ -282,6 +283,16 @@ export default function FlashcardScreen() {
 
       // 古い回答履歴をクリーンアップ（最新1000件のみ保持）
       await localStorageService.cleanupOldAnswers(id, 1000);
+
+      // SRS状態を更新（通常版もローカルで共通管理）
+      for (const ans of finalAnswers) {
+        await srsService.updateAfterAnswer(
+          id as string,
+          ans.question_id,
+          ans.is_correct,
+          ans.answer_time_sec
+        );
+      }
 
       // 通常版でユーザーがログインしている場合はAPIにも送信
       if (!isTrial && user) {

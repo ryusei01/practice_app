@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useLanguage } from '../../../src/contexts/LanguageContext';
 import AdBanner from '../../../src/components/AdBanner';
+import { studyRecordService } from '../../../src/services/studyRecordService';
+import { srsService } from '../../../src/services/srsService';
 
 interface AnswerResult {
   question_id: string;
@@ -24,6 +26,8 @@ export default function QuizResultScreen() {
   const router = useRouter();
   const { t } = useLanguage();
   const params = useLocalSearchParams();
+  const hasRecordedRef = useRef(false);
+  const [nextReviewLabel, setNextReviewLabel] = useState('');
 
   // URLパラメータから結果データを取得
   const score = parseInt(params.score as string) || 0;
@@ -37,6 +41,28 @@ export default function QuizResultScreen() {
   const incorrectAnswers = answers.filter(a => !a.is_correct);
   const accuracy = total > 0 ? (score / total) * 100 : 0;
   const averageTime = total > 0 ? totalTime / total : 0;
+
+  // 結果画面表示＝学習記録へ加算（StrictMode等の二重実行ガード付き）
+  useEffect(() => {
+    if (hasRecordedRef.current) return;
+    hasRecordedRef.current = true;
+    void studyRecordService.addRecord({
+      count: total,
+      correct: score,
+      studyTimeSec: totalTime,
+    });
+  }, [total, score, totalTime]);
+
+  // 次回復習（SRS）を表示用に取得
+  useEffect(() => {
+    if (!questionSetId) return;
+    (async () => {
+      const map = await srsService.getSRSMap(questionSetId);
+      const earliest = srsService.getNextReviewDate(map);
+      if (!earliest) return;
+      setNextReviewLabel(srsService.formatNextReview(earliest, t));
+    })();
+  }, [questionSetId, t]);
 
   // カテゴリ別の統計
   const categoryStats = answers.reduce((acc, answer) => {
@@ -103,6 +129,13 @@ export default function QuizResultScreen() {
             <Text style={styles.statLabel}>{t('Avg Time', '平均時間')}</Text>
           </View>
         </View>
+
+        {nextReviewLabel ? (
+          <View style={styles.nextReviewBox}>
+            <Text style={styles.nextReviewLabel}>{t('Next Review', '次回復習')}</Text>
+            <Text style={styles.nextReviewValue}>{nextReviewLabel}</Text>
+          </View>
+        ) : null}
       </View>
 
       {/* カテゴリ別統計 */}
@@ -286,6 +319,26 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginBottom: 8,
+  },
+  nextReviewBox: {
+    backgroundColor: '#EBF5FF',
+    borderRadius: 8,
+    padding: 12,
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  nextReviewLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  nextReviewValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#007AFF',
   },
   statValue: {
     fontSize: 24,

@@ -23,14 +23,6 @@ export default function CreateQuestionSetScreen() {
     console.log("handleCreate called");
     console.log("User:", user);
 
-    if (!user) {
-      Alert.alert(
-        t("Error", "エラー"),
-        t("User not authenticated", "ユーザー認証されていません")
-      );
-      return;
-    }
-
     if (!agreedToCopyright) {
       Alert.alert(
         t("Copyright Agreement Required", "著作権に関する確認"),
@@ -52,9 +44,14 @@ export default function CreateQuestionSetScreen() {
     }
 
     setIsLoading(true);
-    console.log("Loading state set to true");
     try {
-      // 最小限の情報で問題集を作成（仮のタイトルとカテゴリ）
+      if (!user) {
+        // 未認証: 問題も入力できるローカル作成フォームへ
+        router.replace("/(trial)/create");
+        return;
+      }
+
+      // 認証済み: API 経由でサーバー保存
       const questionSetData = {
         title: t("New Question Set", "新しい問題集"),
         category: t("Uncategorized", "未分類"),
@@ -64,20 +61,10 @@ export default function CreateQuestionSetScreen() {
         is_published: false,
       };
 
-      console.log("Question set data:", questionSetData);
-
-      // クラウドに保存（プレミアムユーザー or デフォルト動作）
-      console.log("Calling questionSetsApi.create...");
       const result = await questionSetsApi.create(questionSetData);
-      console.log("API call result:", result);
-      console.log("Result type:", typeof result);
-      console.log("Result keys:", Object.keys(result));
-
       const createdQuestionSetId = result.id;
-      console.log("Created question set ID:", createdQuestionSetId);
 
       if (!createdQuestionSetId) {
-        console.error("No ID returned from API!");
         Alert.alert(
           t("Error", "エラー"),
           t(
@@ -88,7 +75,6 @@ export default function CreateQuestionSetScreen() {
         return;
       }
 
-      // 問題集作成成功、詳細画面に遷移（編集モードのパラメータ付き）
       router.push(`/(app)/question-sets/${createdQuestionSetId}?mode=setup`);
     } catch (error: any) {
       console.error("Error creating question set:", error);
@@ -100,7 +86,6 @@ export default function CreateQuestionSetScreen() {
           t("Failed to create question set", "問題集の作成に失敗しました")
       );
     } finally {
-      console.log("Setting loading to false");
       setIsLoading(false);
     }
   };

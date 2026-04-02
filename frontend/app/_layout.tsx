@@ -58,7 +58,13 @@ export default function RootLayout() {
             <Stack.Screen name="(app)/admin/index" />
             <Stack.Screen name="(app)/settings" />
             <Stack.Screen name="(app)/verify-otp" />
-            <Stack.Screen name="(trial)" />
+            <Stack.Screen name="(trial)/trial-question-sets" />
+            <Stack.Screen name="(trial)/create" />
+            <Stack.Screen name="(trial)/set/[id]" />
+            <Stack.Screen name="(trial)/set/[id]/textbook" />
+            <Stack.Screen name="(trial)/set/[id]/question/[questionIndex]" />
+            <Stack.Screen name="(trial)/quiz/[id]" />
+            <Stack.Screen name="(trial)/textbook/[path]" />
             <Stack.Screen name="(app)/flashcard/[id]" />
             <Stack.Screen name="(public)/privacy-policy" />
             <Stack.Screen name="(public)/terms-of-service" />

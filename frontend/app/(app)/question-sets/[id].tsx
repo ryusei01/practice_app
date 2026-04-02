@@ -28,6 +28,7 @@ import { commonStyles } from "../../../src/styles/questionSetDetailStyles";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { copyrightApi, reportsApi, CopyrightCheckResult } from "../../../src/api/reports";
 import ReportModal from "../../../src/components/ReportModal";
+import { srsService, SRSMap } from "../../../src/services/srsService";
 
 // 問題ごとの回答統計
 interface QuestionStats {
@@ -59,6 +60,8 @@ export default function QuestionSetDetailScreen() {
   const [questionStats, setQuestionStats] = useState<
     Map<string, QuestionStats>
   >(new Map());
+  const [srsMap, setSrsMap] = useState<SRSMap>({});
+  const [dueCount, setDueCount] = useState(0);
 
   // 問題選択モーダル用のstate
   const [selectionModalVisible, setSelectionModalVisible] = useState(false);
@@ -66,6 +69,7 @@ export default function QuestionSetDetailScreen() {
     "all" | "ai" | "range" | "category"
   >("all");
   const [questionCount, setQuestionCount] = useState(10); // 初期値10問
+  const [questionCountInput, setQuestionCountInput] = useState("10");
   const [rangeStart, setRangeStart] = useState(0);
   const [questionGroups, setQuestionGroups] = useState<QuestionGroup[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -113,6 +117,7 @@ export default function QuestionSetDetailScreen() {
       ]);
       setQuestionSet(setData);
       setQuestions(questionsData);
+      setQuestionCountInput(String(questionCount));
 
       // カテゴリグループを取得
       try {
@@ -124,6 +129,12 @@ export default function QuestionSetDetailScreen() {
 
       // 回答データを読み込み
       await loadAnswerStats();
+
+      // SRS状態を読み込み（既存履歴から初期化も行う）
+      const qids = questionsData.map((q) => q.id).filter(Boolean);
+      const map = await srsService.initializeFromHistory(id, qids);
+      setSrsMap(map);
+      setDueCount(await srsService.getDueCount(id));
     } catch (error) {
       console.error("Failed to load data:", error);
       Alert.alert("Error", "Failed to load question set");
@@ -544,6 +555,7 @@ ${t("Important notes", "注意事項")}:
     index: number;
   }) => {
     const stats = questionStats.get(item.id);
+    const srs = srsMap[item.id];
 
     return (
       <View style={styles.questionCard}>
@@ -587,8 +599,85 @@ ${t("Important notes", "注意事項")}:
             </View>
           </View>
         )}
+
+        {/* 忘却曲線（保持率） + 次回復習 */}
+        {srs && (() => {
+          const retention = srsService.getRetention(srs);
+          const retPct = Math.round(retention * 100);
+          const barColor = retPct > 80 ? "#4CAF50" : retPct > 50 ? "#FF9500" : "#F44336";
+          const reviewLabel = srsService.formatNextReview(srs.nextReviewDate, t);
+          return (
+            <View style={styles.retentionContainer}>
+              <View style={styles.retentionRow}>
+                <Text style={styles.retentionLabel}>
+                  {t("Retention", "記憶保持率")}
+                </Text>
+                <Text style={[styles.retentionValue, { color: barColor }]}>
+                  {retPct}%
+                </Text>
+              </View>
+              <View style={styles.retentionBarBg}>
+                <View
+                  style={[
+                    styles.retentionBarFill,
+                    { width: `${retPct}%`, backgroundColor: barColor },
+                  ]}
+                />
+              </View>
+              <Text style={styles.reviewDateText}>
+                {t("Next review", "次回復習")}: {reviewLabel}
+              </Text>
+            </View>
+          );
+        })()}
       </View>
     );
+  };
+
+  const handleStartReviewQuiz = async () => {
+    const dueIds = await srsService.getDueQuestions(id);
+    if (dueIds.length === 0) {
+      Alert.alert(
+        t("No Review Needed", "復習不要"),
+        t("All questions are up to date!", "全ての問題の復習は完了しています！")
+      );
+      return;
+    }
+    router.push(`/(app)/quiz/${id}?questionIds=${dueIds.join(",")}`);
+  };
+
+  const handleStartForgettingCurveReviewQuiz = async () => {
+    const allIds = questions.map((q) => q.id).filter(Boolean);
+    const reviewIds = await srsService.getLowestRetentionQuestions(
+      id,
+      questionCount,
+      allIds
+    );
+    if (reviewIds.length === 0) {
+      Alert.alert(
+        t("No Review Needed", "復習不要"),
+        t("No questions available for review", "復習できる問題がありません")
+      );
+      return;
+    }
+    router.push(`/(app)/quiz/${id}?questionIds=${reviewIds.join(",")}`);
+  };
+
+  const handleStartMostIncorrectReviewQuiz = async () => {
+    const allIds = questions.map((q) => q.id).filter(Boolean);
+    const reviewIds = await srsService.getMostIncorrectQuestions(
+      id,
+      questionCount,
+      allIds
+    );
+    if (reviewIds.length === 0) {
+      Alert.alert(
+        t("No Review Needed", "復習不要"),
+        t("No questions available for review", "復習できる問題がありません")
+      );
+      return;
+    }
+    router.push(`/(app)/quiz/${id}?questionIds=${reviewIds.join(",")}`);
   };
 
   if (isLoading) {
@@ -785,6 +874,12 @@ question_text,correct_answer,category,difficulty`;
           <Text style={styles.statValue}>{questions.length}</Text>
           <Text style={styles.statLabel}>Questions</Text>
         </View>
+        {dueCount > 0 && (
+          <View style={styles.stat}>
+            <Text style={[styles.statValue, { color: "#FF9500" }]}>{dueCount}</Text>
+            <Text style={styles.statLabel}>{t("Due for Review", "要復習")}</Text>
+          </View>
+        )}
         <View style={styles.stat}>
           <Text style={styles.statValue}>¥{questionSet.price}</Text>
           <Text style={styles.statLabel}>Price</Text>
@@ -921,6 +1016,13 @@ question_text,correct_answer,category,difficulty`;
             </Text>
           </TouchableOpacity>
         </View>
+        {dueCount > 0 && (
+          <TouchableOpacity style={styles.reviewButton} onPress={handleStartReviewQuiz}>
+            <Text style={styles.reviewButtonText}>
+              {t(`Review ${dueCount} questions`, `${dueCount}問を復習する`)}
+            </Text>
+          </TouchableOpacity>
+        )}
         <View style={styles.buttonRow}>
           <TouchableOpacity
             style={styles.addButton}
@@ -1102,6 +1204,36 @@ question_text,correct_answer,category,difficulty`;
             {t("Selection Mode", "選択モード")}
           </Text>
 
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>{t("Number of questions", "問題数")}:</Text>
+            <TextInput
+              style={styles.input}
+              value={questionCountInput}
+              onChangeText={(text) => setQuestionCountInput(text)}
+              onBlur={() => {
+                const num = parseInt(questionCountInput);
+                const max = questions.length;
+                if (isNaN(num) || num < 1) {
+                  setQuestionCount(1);
+                  setQuestionCountInput("1");
+                } else if (max > 0 && num > max) {
+                  setQuestionCount(max);
+                  setQuestionCountInput(String(max));
+                } else {
+                  setQuestionCount(num);
+                  setQuestionCountInput(String(num));
+                }
+              }}
+              keyboardType="numeric"
+              placeholder="10"
+              onStartShouldSetResponder={() => true}
+              onResponderTerminationRequest={() => false}
+            />
+            <Text style={styles.selectionOptionDesc}>
+              {t("Used for AI/Range/Review", "AI/範囲/復習で使われます")}
+            </Text>
+          </View>
+
           <TouchableOpacity
             style={[
               styles.selectionOption,
@@ -1124,7 +1256,7 @@ question_text,correct_answer,category,difficulty`;
                   selectionMode === "all" && styles.selectionOptionTitleActive,
                 ]}
               >
-                {t("All Questions", "全ての問題")}
+                📚 {t("All Questions", "全ての問題")}
               </Text>
             </View>
             <Text style={styles.selectionOptionDesc}>
@@ -1284,7 +1416,7 @@ question_text,correct_answer,category,difficulty`;
                     styles.selectionOptionTitleActive,
                 ]}
               >
-                📊 {t("Range Selection", "範囲選出")}
+                🎯 {t("Range Selection", "範囲選出")}
               </Text>
             </View>
             <Text style={styles.selectionOptionDesc}>
@@ -1341,11 +1473,62 @@ question_text,correct_answer,category,difficulty`;
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.startButton}
+            style={[styles.startButton, styles.reviewStartButton]}
+            onPress={handleStartReviewQuiz}
+          >
+            <Text style={styles.reviewStartButtonText}>
+              ⏰ {t(
+                `Forgetting curve (recommended) (${questionCount})`,
+                `忘却曲線（推奨）で復習開始（${questionCount}問）`
+              )}
+            </Text>
+            <Text style={styles.reviewStartButtonDesc}>
+              {t(
+                "Due items only (recommended timing)",
+                "期限が来た問題だけ（おすすめ）"
+              )}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.startButton, styles.reviewStartButton]}
+            onPress={handleStartForgettingCurveReviewQuiz}
+          >
+            <Text style={styles.reviewStartButtonText}>
+              📉 {t(
+                `Forgetting curve (precise) (${questionCount})`,
+                `忘却曲線（精密）で復習開始（${questionCount}問）`
+              )}
+            </Text>
+            <Text style={styles.reviewStartButtonDesc}>
+              {t("Lowest retention first", "記憶保持率が低い順に出題")}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.startButton, styles.reviewStartButton]}
+            onPress={handleStartMostIncorrectReviewQuiz}
+          >
+            <Text style={styles.reviewStartButtonText}>
+              ❌ {t(
+                `Review most incorrect (${questionCount})`,
+                `間違いが多い順で復習開始（${questionCount}問）`
+              )}
+            </Text>
+            <Text style={styles.reviewStartButtonDesc}>
+              {t("Most wrong answers first", "間違い回数が多い問題から")}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.startButton, styles.primaryStartButton]}
             onPress={handleStartQuizWithSelection}
           >
             <Text style={styles.startButtonText}>
-              {t("Start Quiz", "クイズ開始")}
+              ▶ {t("Start Quiz", "クイズ開始")}
+            </Text>
+            <Text style={styles.primaryStartButtonDesc}>
+              {t("Start with the selected mode above", "上の選択モードでクイズを開始")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1647,5 +1830,100 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 15,
     fontWeight: "600",
+  },
+  retentionContainer: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#e0e0e0",
+  },
+  retentionRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  retentionLabel: {
+    fontSize: 12,
+    color: "#666",
+  },
+  retentionValue: {
+    fontSize: 13,
+    fontWeight: "bold",
+  },
+  retentionBarBg: {
+    height: 6,
+    backgroundColor: "#e0e0e0",
+    borderRadius: 3,
+    overflow: "hidden",
+    marginBottom: 4,
+  },
+  retentionBarFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
+  reviewDateText: {
+    fontSize: 11,
+    color: "#999",
+  },
+  reviewButton: {
+    backgroundColor: "#FF9500",
+    borderRadius: 8,
+    padding: 14,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  reviewButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  primaryStartButton: {
+    backgroundColor: "#007AFF",
+  },
+  reviewStartButton: {
+    backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: "#007AFF",
+    alignItems: "flex-start",
+  },
+  reviewStartButtonText: {
+    ...commonStyles.startButtonText,
+    color: "#007AFF",
+    width: "100%",
+    textAlign: "left",
+  },
+  reviewStartButtonDesc: {
+    marginTop: 6,
+    fontSize: 12,
+    color: "#007AFF",
+    opacity: 0.85,
+    width: "100%",
+    textAlign: "left",
+  },
+  primaryStartButtonDesc: {
+    marginTop: 6,
+    fontSize: 12,
+    color: "#fff",
+    opacity: 0.9,
+  },
+  selectionOption: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 2,
+    borderColor: "#007AFF",
+  },
+  selectionOptionActive: {
+    backgroundColor: "#E8F4FF",
+    borderColor: "#007AFF",
+  },
+  selectionOptionTitle: {
+    ...commonStyles.selectionOptionTitle,
+    fontSize: 18,
+    color: "#007AFF",
+  },
+  selectionOptionTitleActive: {
+    color: "#007AFF",
   },
 });

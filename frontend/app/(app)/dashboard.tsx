@@ -105,6 +105,40 @@ export default function DashboardScreen() {
 
           <View style={styles.menuContainer} nativeID="menu-container">
             <TouchableOpacity
+              style={[styles.menuButton, styles.recordsButton]}
+              onPress={() => router.push("/(app)/study-records")}
+              nativeID="menu-btn-study-records"
+            >
+              <Text
+                style={styles.menuButtonText}
+                nativeID="menu-text-study-records"
+              >
+                {t("Study Records", "学習記録")}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.menuButton, styles.learningPlanButton]}
+              onPress={() => router.push("/(app)/learning-plan")}
+              nativeID="menu-btn-learning-plan"
+            >
+              <Text
+                style={styles.menuButtonText}
+                nativeID="menu-text-learning-plan"
+              >
+                {t("AI Learning Plan", "AI学習プラン")}
+              </Text>
+              <View style={styles.overlay} nativeID="menu-overlay-learning-plan">
+                <Text
+                  style={styles.overlayText}
+                  nativeID="menu-overlay-text-learning-plan"
+                >
+                  {t("Under Preparation", "準備中")}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={styles.menuButton}
               onPress={() => router.push("/(app)/ai-dashboard")}
               nativeID="menu-btn-ai-dashboard"
@@ -319,6 +353,12 @@ const styles = StyleSheet.create({
   },
   profileButton: {
     backgroundColor: "#9C27B0",
+  },
+  recordsButton: {
+    backgroundColor: "#2ECC71",
+  },
+  learningPlanButton: {
+    backgroundColor: "#8E44AD",
   },
   settingsButton: {
     backgroundColor: "#FF9500",

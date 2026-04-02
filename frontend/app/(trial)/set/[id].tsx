@@ -30,6 +30,7 @@ import Header from "../../../src/components/Header";
 import Modal from "../../../src/components/Modal";
 import { commonStyles } from "../../../src/styles/questionSetDetailStyles";
 import aiService from "../../../src/services/aiService";
+import { srsService, SRSMap } from "../../../src/services/srsService";
 
 // 問題ごとの回答統計
 interface QuestionStats {
@@ -48,6 +49,10 @@ export default function TrialSetDetailScreen() {
   const [questionStats, setQuestionStats] = useState<
     Map<string, QuestionStats>
   >(new Map());
+
+  // SRS (忘却曲線) 用のstate
+  const [srsMap, setSrsMap] = useState<SRSMap>({});
+  const [dueCount, setDueCount] = useState(0);
 
   // 問題選択モーダル用のstate
   const [selectionModalVisible, setSelectionModalVisible] = useState(false);
@@ -172,6 +177,15 @@ export default function TrialSetDetailScreen() {
 
       // 回答データを読み込み
       await loadAnswerStats();
+
+      // SRS状態を読み込み（既存履歴から初期化も行う）
+      if (set) {
+        const qids = set.questions.map((q) => q.id).filter(Boolean);
+        const map = await srsService.initializeFromHistory(id, qids);
+        setSrsMap(map);
+        const due = await srsService.getDueCount(id);
+        setDueCount(due);
+      }
     } catch (error) {
       console.error("Failed to load question set:", error);
       showErrorModal(
@@ -397,7 +411,22 @@ export default function TrialSetDetailScreen() {
       }
 
       // 選択した問題IDをクエリパラメータで渡す
-      const questionIds = selectedQuestions.map((q) => q.id).join(",");
+      // trialデータは id が未設定(null) の場合があるため、id が無い場合は元配列のindexで渡す
+      const questionIds = selectedQuestions
+        .map((q) => {
+          const qid = (q as any)?.id;
+          if (qid !== null && qid !== undefined && String(qid).trim() !== "") {
+            return String(qid);
+          }
+          const idx =
+            questionSet.questions.findIndex((qq) => qq === q) ??
+            questionSet.questions.findIndex(
+              (qq) => qq.question === (q as any)?.question && qq.answer === (q as any)?.answer
+            );
+          return idx >= 0 ? `idx:${idx}` : "";
+        })
+        .filter(Boolean)
+        .join(",");
       router.push(`/(trial)/quiz/${id}?questionIds=${questionIds}`);
     } catch (error) {
       console.error("Failed to select questions:", error);
@@ -408,6 +437,55 @@ export default function TrialSetDetailScreen() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleStartReviewQuiz = async () => {
+    if (!questionSet) return;
+    const dueIds = await srsService.getDueQuestions(id);
+    if (dueIds.length === 0) {
+      showErrorModal(
+        t("No Review Needed", "復習不要"),
+        t("All questions are up to date!", "全ての問題の復習は完了しています！")
+      );
+      return;
+    }
+    router.push(`/(trial)/quiz/${id}?questionIds=${dueIds.join(",")}`);
+  };
+
+  const handleStartForgettingCurveReviewQuiz = async () => {
+    if (!questionSet) return;
+    const allIds = questionSet.questions.map((q) => q.id).filter(Boolean);
+    const reviewIds = await srsService.getLowestRetentionQuestions(
+      id,
+      questionCount,
+      allIds
+    );
+    if (reviewIds.length === 0) {
+      showErrorModal(
+        t("No Review Needed", "復習不要"),
+        t("No questions available for review", "復習できる問題がありません")
+      );
+      return;
+    }
+    router.push(`/(trial)/quiz/${id}?questionIds=${reviewIds.join(",")}`);
+  };
+
+  const handleStartMostIncorrectReviewQuiz = async () => {
+    if (!questionSet) return;
+    const allIds = questionSet.questions.map((q) => q.id).filter(Boolean);
+    const reviewIds = await srsService.getMostIncorrectQuestions(
+      id,
+      questionCount,
+      allIds
+    );
+    if (reviewIds.length === 0) {
+      showErrorModal(
+        t("No Review Needed", "復習不要"),
+        t("No questions available for review", "復習できる問題がありません")
+      );
+      return;
+    }
+    router.push(`/(trial)/quiz/${id}?questionIds=${reviewIds.join(",")}`);
   };
 
   const handleStartFlashcard = () => {
@@ -478,6 +556,38 @@ export default function TrialSetDetailScreen() {
             </View>
           </View>
         )}
+
+        {/* 保持率バー + 復習期限 */}
+        {srsMap[item.id] && (() => {
+          const srs = srsMap[item.id];
+          const retention = srsService.getRetention(srs);
+          const retPct = Math.round(retention * 100);
+          const barColor = retPct > 80 ? "#4CAF50" : retPct > 50 ? "#FF9500" : "#F44336";
+          const reviewLabel = srsService.formatNextReview(srs.nextReviewDate, t);
+          return (
+            <View style={styles.retentionContainer}>
+              <View style={styles.retentionRow}>
+                <Text style={styles.retentionLabel}>
+                  {t("Retention", "記憶保持率")}
+                </Text>
+                <Text style={[styles.retentionValue, { color: barColor }]}>
+                  {retPct}%
+                </Text>
+              </View>
+              <View style={styles.retentionBarBg}>
+                <View
+                  style={[
+                    styles.retentionBarFill,
+                    { width: `${retPct}%`, backgroundColor: barColor },
+                  ]}
+                />
+              </View>
+              <Text style={styles.reviewDateText}>
+                {t("Next review", "次回復習")}: {reviewLabel}
+              </Text>
+            </View>
+          );
+        })()}
 
         <View style={styles.clickHint} nativeID={`click-hint-${index}`}>
           <Text
@@ -592,6 +702,16 @@ export default function TrialSetDetailScreen() {
             {t("Questions", "問題数")}
           </Text>
         </View>
+        {dueCount > 0 && (
+          <View style={styles.stat}>
+            <Text style={[styles.statValue, { color: "#FF9500" }]}>
+              {dueCount}
+            </Text>
+            <Text style={styles.statLabel}>
+              {t("Due for Review", "要復習")}
+            </Text>
+          </View>
+        )}
       </View>
 
       {questionGroups.length > 0 && (
@@ -726,10 +846,20 @@ export default function TrialSetDetailScreen() {
             disabled={questionSet.questions.length === 0}
           >
             <Text style={styles.flashcardButtonText}>
-              📇 {t("Flashcard", "赤シート機能")}
+              {t("Flashcard", "赤シート機能")}
             </Text>
           </TouchableOpacity>
         </View>
+        {dueCount > 0 && (
+          <TouchableOpacity
+            style={styles.reviewButton}
+            onPress={handleStartReviewQuiz}
+          >
+            <Text style={styles.reviewButtonText}>
+              {t(`Review ${dueCount} questions`, `${dueCount}問を復習する`)}
+            </Text>
+          </TouchableOpacity>
+        )}
         {questionSet?.textbook_path ? (
           <View style={styles.textbookButtonRow}>
             <TouchableOpacity
@@ -783,6 +913,35 @@ export default function TrialSetDetailScreen() {
             {t("Selection Mode", "選択モード")}
           </Text>
 
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>{t("Number of questions", "問題数")}:</Text>
+            <TextInput
+              style={styles.input}
+              value={questionCountInput}
+              onChangeText={(text) => setQuestionCountInput(text)}
+              onBlur={() => {
+                const num = parseInt(questionCountInput);
+                if (isNaN(num) || num < 1) {
+                  setQuestionCount(1);
+                  setQuestionCountInput("1");
+                } else if (questionSet && num > questionSet.questions.length) {
+                  setQuestionCount(questionSet.questions.length);
+                  setQuestionCountInput(questionSet.questions.length.toString());
+                } else {
+                  setQuestionCount(num);
+                  setQuestionCountInput(num.toString());
+                }
+              }}
+              keyboardType="numeric"
+              placeholder="10"
+              placeholderTextColor="#999"
+              editable={true}
+            />
+            <Text style={styles.selectionOptionDesc}>
+              {t("Used for AI/Random/Review", "AI/ランダム/復習で使われます")}
+            </Text>
+          </View>
+
           <TouchableOpacity
             style={[
               styles.selectionOption,
@@ -805,7 +964,7 @@ export default function TrialSetDetailScreen() {
                   selectionMode === "all" && styles.selectionOptionTitleActive,
                 ]}
               >
-                {t("All Questions", "全ての問題")}
+                📚 {t("All Questions", "全ての問題")}
               </Text>
             </View>
             <Text style={styles.selectionOptionDesc}>
@@ -844,48 +1003,13 @@ export default function TrialSetDetailScreen() {
                   🤖 {t("AI Selection", "AI選出")}
                 </Text>
               </View>
-              <Text style={styles.selectionOptionDesc}>
+            <Text style={styles.selectionOptionDesc}>
                 {t(
                   "AI selects questions based on wrong answers, attempt count, and answer time (default: 10 questions)",
-                  "AIが間違えた数、出題回数、回答時間から問題を選出（初期値：10問）"
+                "AIが間違えた数、出題回数、回答時間から問題を選出"
                 )}
               </Text>
             </TouchableOpacity>
-            {selectionMode === "ai" && (
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>
-                  {t("Number of questions", "問題数")}:
-                </Text>
-                <TextInput
-                  style={styles.input}
-                  value={questionCountInput}
-                  onChangeText={(text) => {
-                    // 入力中は完全に自由に入力できるようにする（制限なし）
-                    setQuestionCountInput(text);
-                  }}
-                  onBlur={() => {
-                    // フォーカスが外れた時に検証・制限を適用
-                    const num = parseInt(questionCountInput);
-                    if (isNaN(num) || num < 1) {
-                      setQuestionCount(1);
-                      setQuestionCountInput("1");
-                    } else if (num > questionSet.questions.length) {
-                      setQuestionCount(questionSet.questions.length);
-                      setQuestionCountInput(
-                        questionSet.questions.length.toString()
-                      );
-                    } else {
-                      setQuestionCount(num);
-                      setQuestionCountInput(num.toString());
-                    }
-                  }}
-                  keyboardType="numeric"
-                  placeholder="10"
-                  placeholderTextColor="#999"
-                  editable={true}
-                />
-              </View>
-            )}
           </View>
 
           <TouchableOpacity
@@ -986,7 +1110,7 @@ export default function TrialSetDetailScreen() {
                       styles.selectionOptionTitleActive,
                   ]}
                 >
-                  📊 {t("Random Selection", "ランダム選出")}
+                🎲 {t("Random Selection", "ランダム選出")}
                 </Text>
               </View>
               <Text style={styles.selectionOptionDesc}>
@@ -996,49 +1120,72 @@ export default function TrialSetDetailScreen() {
                 )}
               </Text>
             </TouchableOpacity>
-            {selectionMode === "count" && (
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>
-                  {t("Number of questions", "問題数")}:
-                </Text>
-                <TextInput
-                  style={styles.input}
-                  value={questionCountInput}
-                  onChangeText={(text) => {
-                    // 入力中は完全に自由に入力できるようにする（制限なし）
-                    setQuestionCountInput(text);
-                  }}
-                  onBlur={() => {
-                    // フォーカスが外れた時に検証・制限を適用
-                    const num = parseInt(questionCountInput);
-                    if (isNaN(num) || num < 1) {
-                      setQuestionCount(1);
-                      setQuestionCountInput("1");
-                    } else if (num > questionSet.questions.length) {
-                      setQuestionCount(questionSet.questions.length);
-                      setQuestionCountInput(
-                        questionSet.questions.length.toString()
-                      );
-                    } else {
-                      setQuestionCount(num);
-                      setQuestionCountInput(num.toString());
-                    }
-                  }}
-                  keyboardType="numeric"
-                  placeholder="10"
-                  placeholderTextColor="#999"
-                  editable={true}
-                />
-              </View>
-            )}
           </View>
 
           <TouchableOpacity
-            style={styles.startButton}
+            style={[styles.startButton, styles.reviewStartButton]}
+            onPress={handleStartReviewQuiz}
+          >
+            <Text style={styles.reviewStartButtonText}>
+              ⏰ {t(
+                `Forgetting curve (recommended) (${questionCount})`,
+                `忘却曲線（推奨）で復習開始（${questionCount}問）`
+              )}
+            </Text>
+            <Text style={styles.reviewStartButtonDesc}>
+              {t(
+                "Due items only (recommended timing)",
+                "期限が来た問題だけ（おすすめ）"
+              )}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.startButton, styles.reviewStartButton]}
+            onPress={handleStartForgettingCurveReviewQuiz}
+          >
+            <Text style={styles.reviewStartButtonText}>
+              📉 {t(
+                `Forgetting curve (precise) (${questionCount})`,
+                `忘却曲線（精密）で復習開始（${questionCount}問）`
+              )}
+            </Text>
+            <Text style={styles.reviewStartButtonDesc}>
+              {t(
+                "Lowest retention first",
+                "記憶保持率が低い順に出題"
+              )}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.startButton, styles.reviewStartButton]}
+            onPress={handleStartMostIncorrectReviewQuiz}
+          >
+            <Text style={styles.reviewStartButtonText}>
+              ❌ {t(
+                `Review most incorrect (${questionCount})`,
+                `間違いが多い順で復習開始（${questionCount}問）`
+              )}
+            </Text>
+            <Text style={styles.reviewStartButtonDesc}>
+              {t(
+                "Most wrong answers first",
+                "間違い回数が多い問題から"
+              )}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.startButton, styles.primaryStartButton]}
             onPress={handleStartQuizWithSelection}
           >
-            <Text style={styles.startButtonText}>
-              {t("Start Quiz", "クイズ開始")}
+            <Text style={styles.startButtonText}>▶ {t("Start Quiz", "クイズ開始")}</Text>
+            <Text style={styles.primaryStartButtonDesc}>
+              {t(
+                "Start with the selected mode above",
+                "上の選択モードでクイズを開始"
+              )}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1162,6 +1309,53 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#333",
   },
+  retentionContainer: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#e0e0e0",
+  },
+  retentionRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  retentionLabel: {
+    fontSize: 12,
+    color: "#666",
+  },
+  retentionValue: {
+    fontSize: 13,
+    fontWeight: "bold",
+  },
+  retentionBarBg: {
+    height: 6,
+    backgroundColor: "#e0e0e0",
+    borderRadius: 3,
+    overflow: "hidden",
+    marginBottom: 4,
+  },
+  retentionBarFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
+  reviewDateText: {
+    fontSize: 11,
+    color: "#999",
+  },
+  reviewButton: {
+    backgroundColor: "#FF9500",
+    borderRadius: 8,
+    padding: 14,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  reviewButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
   errorText: {
     fontSize: 18,
     color: "#666",
@@ -1220,9 +1414,15 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   selectionOption: {
-    ...commonStyles.selectionOption,
-    backgroundColor: "#f5f5f5",
-    borderColor: "#e0e0e0",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 2,
+    borderColor: "#007AFF",
+  },
+  selectionOptionActive: {
+    backgroundColor: "#E8F4FF",
+    borderColor: "#007AFF",
   },
   selectionOptionHeader: {
     ...commonStyles.selectionOptionHeader,
@@ -1231,6 +1431,10 @@ const styles = StyleSheet.create({
   selectionOptionTitle: {
     ...commonStyles.selectionOptionTitle,
     fontSize: 18,
+    color: "#007AFF",
+  },
+  selectionOptionTitleActive: {
+    color: "#007AFF",
   },
   selectionOptionDesc: {
     ...commonStyles.selectionOptionDesc,
@@ -1249,9 +1453,39 @@ const styles = StyleSheet.create({
     ...commonStyles.startButton,
     borderRadius: 12,
   },
+  primaryStartButton: {
+    backgroundColor: "#007AFF",
+  },
+  reviewStartButton: {
+    backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: "#007AFF",
+    alignItems: "flex-start",
+  },
   startButtonText: {
     ...commonStyles.startButtonText,
     fontSize: 18,
+  },
+  reviewStartButtonText: {
+    ...commonStyles.startButtonText,
+    fontSize: 18,
+    color: "#007AFF",
+    width: "100%",
+    textAlign: "left",
+  },
+  reviewStartButtonDesc: {
+    marginTop: 6,
+    fontSize: 12,
+    color: "#007AFF",
+    opacity: 0.85,
+    width: "100%",
+    textAlign: "left",
+  },
+  primaryStartButtonDesc: {
+    marginTop: 6,
+    fontSize: 12,
+    color: "#fff",
+    opacity: 0.9,
   },
   categoryHeader: {
     ...commonStyles.categoryHeader,

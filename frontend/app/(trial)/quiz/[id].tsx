@@ -11,6 +11,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
 import { localStorageService, LocalQuestionSet } from "../../../src/services/localStorageService";
+import { srsService, SRSMap } from "../../../src/services/srsService";
 import Header from "../../../src/components/Header";
 import QuizEngine, { QuizQuestion, QuizAnswer } from "../../../src/components/QuizEngine";
 import Modal from "../../../src/components/Modal";
@@ -26,6 +27,8 @@ export default function TrialQuizScreen() {
   const [showResult, setShowResult] = useState(false);
   const [finalScore, setFinalScore] = useState(0);
   const [finalTotal, setFinalTotal] = useState(0);
+  const [finalTotalTime, setFinalTotalTime] = useState(0);
+  const [nextReviewLabel, setNextReviewLabel] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const { t } = useLanguage();
   const router = useRouter();
@@ -46,8 +49,25 @@ export default function TrialQuizScreen() {
 
         // questionIdsが指定されている場合は、選択された問題のみを使用
         if (questionIds) {
-          const selectedIds = questionIds.split(',');
-          const selected = set.questions.filter(q => selectedIds.includes(q.id));
+          const selectedIds = questionIds
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+
+          const indexKeys = selectedIds.filter((s) => s.startsWith("idx:"));
+          const idKeys = selectedIds.filter((s) => !s.startsWith("idx:"));
+
+          const selectedByIndex = indexKeys
+            .map((k) => Number(k.slice(4)))
+            .filter((n) => Number.isFinite(n) && n >= 0 && n < set.questions.length)
+            .map((n) => set.questions[n]);
+
+          // URLパラメータはstring。保存側のidがnumber等でも一致するようにstring化して比較する
+          const selectedById = set.questions.filter((q) =>
+            idKeys.includes(String((q as any).id))
+          );
+
+          const selected = [...selectedByIndex, ...selectedById].filter(Boolean);
           setSelectedQuestions(selected);
         } else {
           setSelectedQuestions(null); // 全ての問題を使用
@@ -95,6 +115,18 @@ export default function TrialQuizScreen() {
 
       // 古い回答履歴をクリーンアップ（最新1000件のみ保持）
       await localStorageService.cleanupOldAnswers(questionSet.id, 1000);
+
+      // SRS状態を更新
+      for (const ans of answers) {
+        await srsService.updateAfterAnswer(
+          questionSet.id, ans.question_id, ans.is_correct, ans.answer_time_sec
+        );
+      }
+      const srsMap = await srsService.getSRSMap(questionSet.id);
+      const earliest = srsService.getNextReviewDate(srsMap);
+      if (earliest) {
+        setNextReviewLabel(srsService.formatNextReview(earliest, t));
+      }
     } catch (error: any) {
       console.error("Error saving trial result:", error);
       // 容量超過エラーの場合はユーザーに通知
@@ -106,7 +138,8 @@ export default function TrialQuizScreen() {
 
     // 結果画面を表示（回答数ベース）
     setFinalScore(score);
-    setFinalTotal(answers.length); // 回答した問題数
+    setFinalTotal(answers.length);
+    setFinalTotalTime(totalTime);
     setShowResult(true);
   };
 
@@ -114,6 +147,8 @@ export default function TrialQuizScreen() {
     setShowResult(false);
     setFinalScore(0);
     setFinalTotal(0);
+    setFinalTotalTime(0);
+    setNextReviewLabel("");
     // 問題セットをリロードして QuizEngine をリセット
     loadQuestionSet();
   };
@@ -162,8 +197,15 @@ export default function TrialQuizScreen() {
     );
   }
 
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return mins > 0 ? `${mins}${t('m', '分')} ${secs}${t('s', '秒')}` : `${secs}${t('s', '秒')}`;
+  };
+
   if (showResult) {
     const percentage = Math.round((finalScore / finalTotal) * 100);
+    const averageTime = finalTotal > 0 ? Math.floor(finalTotalTime / finalTotal) : 0;
 
     return (
       <View style={styles.container}>
@@ -174,6 +216,26 @@ export default function TrialQuizScreen() {
             {finalScore} / {finalTotal}
           </Text>
           <Text style={styles.resultPercentage}>{percentage}%</Text>
+
+          <View style={styles.statsGrid}>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{formatTime(finalTotalTime)}</Text>
+              <Text style={styles.statLabel}>{t('Total Time', '合計時間')}</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{formatTime(averageTime)}</Text>
+              <Text style={styles.statLabel}>{t('Avg Time', '平均時間')}</Text>
+            </View>
+          </View>
+
+          {nextReviewLabel ? (
+            <View style={styles.nextReviewBox}>
+              <Text style={styles.nextReviewLabel}>
+                {t('Next Review', '次回復習')}
+              </Text>
+              <Text style={styles.nextReviewValue}>{nextReviewLabel}</Text>
+            </View>
+          ) : null}
 
           <TouchableOpacity style={styles.button} onPress={handleRestart}>
             <Text style={styles.buttonText}>{t("Try Again", "もう一度")}</Text>
@@ -280,7 +342,52 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: "600",
     color: "#34C759",
-    marginBottom: 40,
+    marginBottom: 24,
+  },
+  statsGrid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    maxWidth: 300,
+    marginBottom: 32,
+  },
+  statBox: {
+    width: "48%",
+    backgroundColor: "#f8f8f8",
+    padding: 16,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: "#666",
+  },
+  nextReviewBox: {
+    backgroundColor: "#EBF5FF",
+    borderRadius: 8,
+    padding: 12,
+    width: "100%",
+    maxWidth: 300,
+    alignItems: "center",
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "#007AFF",
+  },
+  nextReviewLabel: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 4,
+  },
+  nextReviewValue: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#007AFF",
   },
   button: {
     backgroundColor: "#007AFF",

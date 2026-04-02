@@ -3,8 +3,15 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from .config import settings
 
+db_url = (settings.DATABASE_URL or "").strip()
+if not db_url:
+    raise RuntimeError(
+        "DATABASE_URL is empty. Set DATABASE_URL env var (Cloud Run service env / GitHub Actions secret) "
+        "to a valid SQLAlchemy URL like: postgresql+psycopg2://USER:PASSWORD@HOST:5432/DBNAME"
+    )
+
 engine = create_engine(
-    settings.DATABASE_URL,
+    db_url,
     pool_pre_ping=True,  # 接続の有効性を確認
     pool_recycle=3600,  # 1時間で接続を再利用
     pool_size=5,  # 接続プールサイズ

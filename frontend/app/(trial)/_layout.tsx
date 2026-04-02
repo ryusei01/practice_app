@@ -1,4 +1,4 @@
-import { Stack } from "expo-router";
+import { Slot } from "expo-router";
 import { useEffect } from "react";
 import { loadDefaultQuestionSets } from "../../src/data/defaultQuestionSets";
 
@@ -7,5 +7,5 @@ export default function TrialLayout() {
     loadDefaultQuestionSets();
   }, []);
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return <Slot />;
 }
