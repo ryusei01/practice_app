@@ -3,6 +3,7 @@ import React, {
   useEffect,
   useCallback,
   useRef,
+  useLayoutEffect,
 } from "react";
 import {
   View,
@@ -14,7 +15,14 @@ import {
   TextInput,
   ScrollView,
 } from "react-native";
-import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
+import {
+  useRouter,
+  useLocalSearchParams,
+  useFocusEffect,
+  useRootNavigationState,
+  useNavigationContainerRef,
+} from "expo-router";
+import { CommonActions } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
 import {
@@ -40,10 +48,30 @@ interface QuestionStats {
   lastAnsweredAt: string | null;
 }
 
+const TRIAL_CREATE_ROUTE = "(trial)/create";
+
+/** 共有URLなどで /set/ に来たとき、履歴直下にお試し「作成」が残っているとブラウザ戻るで作成画面になるのを防ぐ */
+function resetRootStackIfPrevIsTrialCreate(
+  rootState: ReturnType<typeof useRootNavigationState>
+) {
+  const idx = rootState.index;
+  if (idx < 1) return null;
+  const prev = rootState.routes[idx - 1];
+  if (prev.name !== TRIAL_CREATE_ROUTE) return null;
+  const newRoutes = rootState.routes.filter((_, i) => i !== idx - 1);
+  // RN の ResetState 型は key/type 等を要求するが、リセット時は既存 route 配列をそのまま渡すのが意図どおり動作する
+  return CommonActions.reset({
+    index: newRoutes.length - 1,
+    routes: newRoutes,
+  } as never);
+}
+
 export default function TrialSetDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useLanguage();
   const router = useRouter();
+  const rootNavState = useRootNavigationState();
+  const rootNavRef = useNavigationContainerRef();
   const [questionSet, setQuestionSet] = useState<LocalQuestionSet | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [questionStats, setQuestionStats] = useState<
@@ -96,6 +124,14 @@ export default function TrialSetDetailScreen() {
   useEffect(() => {
     setListOrderMode("category");
   }, [id]);
+
+  useLayoutEffect(() => {
+    if (!id) return;
+    const action = resetRootStackIfPrevIsTrialCreate(rootNavState);
+    if (action && rootNavRef.current) {
+      rootNavRef.current.dispatch(action);
+    }
+  }, [id, rootNavState, rootNavRef]);
 
   const showErrorModal = (title: string, message: string) => {
     setErrorModalConfig({ title, message });

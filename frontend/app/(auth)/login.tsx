@@ -17,6 +17,18 @@ import { useLanguage } from "../../src/contexts/LanguageContext";
 
 WebBrowser.maybeCompleteAuthSession();
 
+/** 未設定・プレースホルダーは web 用 ID にフォールバック（ネイティブでも Web クライアント ID で開発可能） */
+function resolveGoogleClientId(
+  platformSpecific: string | undefined,
+  webClientId: string | undefined
+): string | undefined {
+  const raw = platformSpecific?.trim();
+  if (!raw || raw.includes("xxxx")) {
+    return webClientId;
+  }
+  return raw;
+}
+
 export default function LoginScreen() {
   const { loginWithGoogle, isLoading: authLoading } = useAuth();
   const { t } = useLanguage();
@@ -25,10 +37,17 @@ export default function LoginScreen() {
 
   const redirectUri = makeRedirectUri({ native: "quizmarketplace://redirect" });
 
+  const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
   const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    webClientId,
+    iosClientId: resolveGoogleClientId(
+      process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+      webClientId
+    ),
+    androidClientId: resolveGoogleClientId(
+      process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+      webClientId
+    ),
     redirectUri,
   });
 

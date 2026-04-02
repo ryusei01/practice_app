@@ -30,6 +30,16 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      # ローカルの .env は Cloudflare に載らない。未設定だと本番で client_id が空になり Google 400 になる。
+      - name: Verify EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+        env:
+          EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
+        run: |
+          if [ -z "$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID" ]; then
+            echo "::error::GitHub Actions のシークレット EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID が未設定または空です。リポジトリ Settings → Secrets and variables → Actions で、GCP の「ウェブアプリ」用 OAuth クライアント ID と同じ値を登録してから再デプロイしてください。"
+            exit 1
+          fi
+
       - name: Build
         working-directory: frontend
         env:
