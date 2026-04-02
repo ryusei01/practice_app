@@ -6,7 +6,7 @@ import re
 import logging
 from typing import List, Dict, Optional
 from ..services.local_translator import LocalTranslator
-from deep_translator import GoogleTranslator
+from .google_web_translator import GoogleTranslator
 from ..core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -126,10 +126,6 @@ class TextbookTranslator:
         Returns:
             翻訳されたMarkdownテキスト
         """
-        # #region agent log
-        with open(r'h:\document\program\project\practice_app\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(f'{{"timestamp":{int(__import__("time").time()*1000)},"location":"textbook_translator.py:112","message":"translate_markdown called","data":{{"target_lang":"{target_lang}","source_lang":"{source_lang}","text_length":{len(markdown_text)},"text_preview":"{markdown_text[:100].replace(chr(34),chr(92)+chr(34))}"}},"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}}\n')
-        # #endregion
         # Markdownを分割
         parts = self._split_markdown(markdown_text)
 

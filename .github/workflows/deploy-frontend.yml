@@ -14,6 +14,10 @@ jobs:
   deploy-frontend:
     name: Deploy Frontend to Cloudflare Pages
     runs-on: ubuntu-latest
+    # gitHubToken で Cloudflare → GitHub Deployments を連携する場合に必須（無いと npx wrangler が exit 1 になりがち）
+    permissions:
+      contents: read
+      deployments: write
 
     steps:
       - name: Checkout repo
@@ -65,7 +69,17 @@ jobs:
           EXPO_PUBLIC_AD_SLOT_WEB: ${{ secrets.EXPO_PUBLIC_AD_SLOT_WEB }}
         run: npm run build:web
 
+      - name: Verify build output (dist)
+        working-directory: frontend
+        run: |
+          if [ ! -d dist ] || [ -z "$(ls -A dist 2>/dev/null)" ]; then
+            echo "::error::frontend/dist が空または存在しません。Expo の web ビルドが失敗している可能性があります。"
+            exit 1
+          fi
+          ls -la dist | head -20
+
       - name: Deploy to Cloudflare Pages
+        id: pages-deploy
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
