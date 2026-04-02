@@ -11,6 +11,11 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+
+class MLDisabledError(RuntimeError):
+    """ENABLE_ML=false のときに ML 機能を呼び出すと送出されるエラー。"""
+
+
 # モデルは初回利用時に遅延ロード
 _embedding_model: Any = None
 _embedding_model_name: str = ""
@@ -20,7 +25,15 @@ def get_embedding_model(model_name: str = "paraphrase-multilingual-MiniLM-L12-v2
     """
     sentence-transformers のモデルをシングルトンで取得。
     日本語・英語両対応の軽量モデルをデフォルトに。
+    ENABLE_ML=false の場合は MLDisabledError を送出する。
     """
+    import os
+    if os.getenv("ENABLE_ML", "true").lower() == "false":
+        raise MLDisabledError(
+            "ML機能は無効化されています (ENABLE_ML=false)。"
+            "開発環境では ENABLE_ML=true を設定してください。"
+        )
+
     global _embedding_model, _embedding_model_name
     if _embedding_model is None or _embedding_model_name != model_name:
         try:

@@ -1,0 +1,34 @@
+# 仮想環境
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 環境変数（機密情報）
+.env
+.env.*
+!.env.example
+
+# テスト・開発ツール
+tests/
+.pytest_cache/
+*.log
+
+# Git
+.git/
+.gitignore
+
+# ドキュメント
+*.md
+docs/
+
+# ビルド成果物
+dist/
+build/
+*.egg-info/
+
+# ローカル DB / SQL ファイル
+*.sql
+migrations/

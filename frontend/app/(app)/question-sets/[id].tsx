@@ -15,7 +15,7 @@ import {
 import * as FileSystem from "expo-file-system";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
-import { useTranslation } from "react-i18next";
+import { useLanguage } from "../../../src/contexts/LanguageContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { questionSetsApi, QuestionSet } from "../../../src/api/questionSets";
 import {
@@ -39,7 +39,7 @@ interface QuestionStats {
 
 export default function QuestionSetDetailScreen() {
   const { id, mode } = useLocalSearchParams<{ id: string; mode?: string }>();
-  const { t } = useTranslation();
+  const { t } = useLanguage();
   const { user } = useAuth();
   const [questionSet, setQuestionSet] = useState<QuestionSet | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -259,7 +259,7 @@ export default function QuestionSetDetailScreen() {
         // カテゴリ別選択
         if (!selectedCategory) {
           Alert.alert(
-            t("common.error"),
+            t("Error", "エラー"),
             t("Please select a category", "カテゴリを選択してください")
           );
           setIsLoading(false);
@@ -281,7 +281,7 @@ export default function QuestionSetDetailScreen() {
 
       if (selectedQuestions.length === 0) {
         Alert.alert(
-          t("common.error"),
+          t("Error", "エラー"),
           t(
             "No questions match your selection",
             "選択条件に一致する問題がありません"
@@ -297,7 +297,7 @@ export default function QuestionSetDetailScreen() {
     } catch (error) {
       console.error("Failed to select questions:", error);
       Alert.alert(
-        t("common.error"),
+        t("Error", "エラー"),
         t("Failed to select questions", "問題の選択に失敗しました")
       );
     } finally {
@@ -367,35 +367,54 @@ export default function QuestionSetDetailScreen() {
   };
 
   const handleShowCSVHelp = () => {
-    const helpMessage = `${t("csv.formatHelp")}:
+    const helpMessage = `${t("CSV Format Help", "CSV形式のヘルプ")}:
 
-${t("csv.requiredFields")}:
-• ${t("csv.questionText")}
-• ${t("csv.correctAnswer")}
+${t("Required fields", "必須フィールド")}:
+• ${t("question_text (question body)", "question_text（問題文）")}
+• ${t("correct_answer", "correct_answer（正解）")}
 
-${t("csv.optionalFields")}:
-• ${t("csv.questionType")}
-  ${t("csv.questionTypeOptions")}
-• option_1〜option_4 (${t("csv.options")})
-• ${t("csv.explanation")}
-• ${t("csv.difficulty")}
-• ${t("csv.category")}
-• subcategory1 (${t("csv.subcategory1")})
-• subcategory2 (${t("csv.subcategory2")})
+${t("Optional fields", "任意フィールド")}:
+• ${t("question_type", "question_type")}
+  ${t(
+    "(multiple_choice, true_false, short_answer, etc.)",
+    "（multiple_choice, true_false, short_answer など）"
+  )}
+• option_1〜option_4 (${t("options", "選択肢")})
+• ${t("explanation", "解説")}
+• ${t("difficulty (0-1)", "難易度（0〜1）")}
+• ${t("category", "カテゴリ")}
+• subcategory1 (${t("subcategory 1", "サブカテゴリ1")})
+• subcategory2 (${t("subcategory 2", "サブカテゴリ2")})
 
-${t("csv.exampleCSV")}:
+${t("Example CSV", "CSV例")}:
 question_text,question_type,option_1,option_2,option_3,option_4,correct_answer,explanation,difficulty,category,subcategory1,subcategory2
 What is 2+2?,,2,3,4,5,4,Basic addition,0.2,math,arithmetic,addition
 The sky is blue,,,,,,true,Common knowledge,0.1,general,nature,sky
 Capital of France?,,,,,,Paris,Paris is the capital,0.3,geography,europe,capitals
 
-${t("csv.importantNotes")}:
-• ${t("csv.note1")}
-• ${t("csv.note2")}
-• ${t("csv.note3")}
-• ${t("csv.note4")}`;
+${t("Important notes", "注意事項")}:
+• ${t(
+    "Save CSV files as UTF-8.",
+    "CSVファイルはUTF-8で保存してください。"
+  )}
+• ${t(
+    "The first row must be the header row.",
+    "1行目は必ずヘッダー行にしてください。"
+  )}
+• ${t(
+    "difficulty is a number from 0 to 1.",
+    "difficultyは0〜1の数値です。"
+  )}
+• ${t(
+    "For true/false questions, put true or false in correct_answer.",
+    "正誤問題は correct_answer に true または false を入れてください。"
+  )}`;
 
-    showModal(t("csv.formatHelp"), helpMessage, [{ text: t("common.ok") }]);
+    showModal(
+      t("CSV Format Help", "CSV形式のヘルプ"),
+      helpMessage,
+      [{ text: t("OK", "OK") }]
+    );
   };
 
   const handleUploadCSV = async () => {
@@ -418,12 +437,15 @@ ${t("csv.importantNotes")}:
 
       // カスタムモーダルで確認
       showModal(
-        t("questionSets.uploadCSV"),
-        t("csv.uploadConfirm", { fileName: file.name }),
+        t("Upload CSV", "CSVをアップロード"),
+        t(
+          `Upload "${file.name}"?`,
+          `「${file.name}」をアップロードしますか？`
+        ),
         [
-          { text: t("common.cancel"), style: "cancel" },
+          { text: t("Cancel", "キャンセル"), style: "cancel" },
           {
-            text: t("common.upload"),
+            text: t("Upload", "アップロード"),
             onPress: async () => {
               try {
                 setIsLoading(true);
@@ -445,21 +467,29 @@ ${t("csv.importantNotes")}:
                     : "Unknown errors occurred";
 
                   showModal(
-                    t("csv.uploadWithErrors"),
-                    `${t("csv.createdQuestions", {
-                      count: response.total_created,
-                    })}\n${t("csv.errors", {
-                      count: response.total_errors,
-                    })}\n\n${errorMessages}`,
-                    [{ text: t("common.ok"), onPress: () => loadData() }]
+                    t(
+                      "Upload completed with errors",
+                      "アップロード完了（エラーあり）"
+                    ),
+                    `${t(
+                      `Created ${response.total_created} questions`,
+                      `${response.total_created}問を作成しました`
+                    )}\n${t(
+                      `${response.total_errors} errors`,
+                      `エラー ${response.total_errors} 件`
+                    )}\n\n${errorMessages}`,
+                    [{ text: t("OK", "OK"), onPress: () => loadData() }]
                   );
                 } else {
                   showModal(
-                    t("common.success"),
-                    t("csv.uploadSuccess", { count: response.total_created }),
+                    t("Success", "成功"),
+                    t(
+                      `Successfully uploaded ${response.total_created} questions`,
+                      `${response.total_created}問をアップロードしました`
+                    ),
                     [
                       {
-                        text: t("common.ok"),
+                        text: t("OK", "OK"),
                         onPress: () => {
                           loadData();
                           if (setupMode && setupStep === 1) {
@@ -474,7 +504,10 @@ ${t("csv.importantNotes")}:
                 console.error("Failed to upload CSV:", error);
 
                 // エラーメッセージを安全に取得
-                let errorMessage = t("csv.uploadError");
+                let errorMessage = t(
+                  "CSV upload failed",
+                  "CSVのアップロードに失敗しました"
+                );
                 if (error.response?.data?.detail) {
                   if (typeof error.response.data.detail === "string") {
                     errorMessage = error.response.data.detail;
@@ -487,8 +520,8 @@ ${t("csv.importantNotes")}:
                   }
                 }
 
-                showModal(t("common.error"), errorMessage, [
-                  { text: t("common.ok") },
+                showModal(t("Error", "エラー"), errorMessage, [
+                  { text: t("OK", "OK") },
                 ]);
               } finally {
                 setIsLoading(false);
@@ -872,7 +905,7 @@ question_text,correct_answer,category,difficulty`;
               style={styles.startQuizButtonText}
               nativeID="start-quiz-button-text"
             >
-              {t("questionSets.startQuiz")}
+              {t("Start Quiz", "クイズ開始")}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -894,7 +927,7 @@ question_text,correct_answer,category,difficulty`;
             onPress={handleAddQuestion}
           >
             <Text style={styles.addButtonText}>
-              {t("questionSets.addQuestion")}
+              {t("Add Question", "問題を追加")}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -902,7 +935,7 @@ question_text,correct_answer,category,difficulty`;
             onPress={handleUploadCSV}
           >
             <Text style={styles.uploadCSVButtonText}>
-              {t("questionSets.uploadCSV")}
+              {t("Upload CSV", "CSVをアップロード")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -924,7 +957,7 @@ question_text,correct_answer,category,difficulty`;
             onPress={handleShowCSVHelp}
           >
             <Text style={styles.helpButtonText}>
-              {t("questionSets.csvHelp")}
+              {t("CSV Help", "CSVヘルプ")}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -953,7 +986,7 @@ question_text,correct_answer,category,difficulty`;
             style={styles.deleteButton}
             onPress={handleDeleteSet}
           >
-            <Text style={styles.deleteButtonText}>{t("common.delete")}</Text>
+            <Text style={styles.deleteButtonText}>{t("Delete", "削除")}</Text>
           </TouchableOpacity>
         </View>
 

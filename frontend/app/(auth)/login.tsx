@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
+import { makeRedirectUri } from "expo-auth-session";
 import { router } from "expo-router";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useLanguage } from "../../src/contexts/LanguageContext";
@@ -22,13 +23,15 @@ export default function LoginScreen() {
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 600;
 
+  const redirectUri = makeRedirectUri({ native: "quizmarketplace://redirect" });
+
   const [request, response, promptAsync] = Google.useAuthRequest({
     webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
     iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
     androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    redirectUri,
   });
 
-  // TODO: Google Cloud Console 設定後に削除する
   React.useEffect(() => {
     if (request) {
       console.log("[OAuth] redirect_uri:", request.redirectUri);

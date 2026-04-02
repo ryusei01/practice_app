@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useTranslation } from "react-i18next";
+import { useLanguage } from "../contexts/LanguageContext";
 import { questionsApi } from "../api/questions";
 
 type QuestionType = "multiple_choice" | "true_false" | "text_input";
@@ -49,7 +49,7 @@ function parseBulkText(text: string): ParsedQuestion[] {
 
 export default function AddQuestionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { t } = useTranslation();
+  const { t } = useLanguage();
   const router = useRouter();
 
   const [activeTab, setActiveTab] = useState<TabMode>("single");
@@ -110,15 +110,15 @@ export default function AddQuestionScreen() {
     if (questionType === "multiple_choice") {
       const validOptions = options.filter((o) => o.trim().length > 0);
       if (!questionText.trim()) {
-        Alert.alert(t("common.error"), t("addQuestion.errorNoQuestion"));
+        Alert.alert(t("Error", "エラー"), t("Please enter a question", "問題文を入力してください"));
         return null;
       }
       if (validOptions.length < 2) {
-        Alert.alert(t("common.error"), t("addQuestion.errorOptions"));
+        Alert.alert(t("Error", "エラー"), t("Please add at least 2 options", "選択肢を2つ以上入力してください"));
         return null;
       }
       if (correctIndex === null || !options[correctIndex]?.trim()) {
-        Alert.alert(t("common.error"), t("addQuestion.errorNoCorrect"));
+        Alert.alert(t("Error", "エラー"), t("Please select the correct answer", "正解を選択してください"));
         return null;
       }
       return {
@@ -135,18 +135,18 @@ export default function AddQuestionScreen() {
 
     if (questionType === "true_false") {
       if (!questionText.trim()) {
-        Alert.alert(t("common.error"), t("addQuestion.errorNoQuestion"));
+        Alert.alert(t("Error", "エラー"), t("Please enter a question", "問題文を入力してください"));
         return null;
       }
       if (!correctAnswerText.trim()) {
-        Alert.alert(t("common.error"), t("addQuestion.errorNoCorrect"));
+        Alert.alert(t("Error", "エラー"), t("Please select the correct answer", "正解を選択してください"));
         return null;
       }
       return {
         question_set_id: id,
         question_text: questionText.trim(),
         question_type: questionType,
-        options: [t("addQuestion.trueLabel"), t("addQuestion.falseLabel")],
+        options: [t("True", "正しい"), t("False", "誤り")],
         correct_answer: correctAnswerText.trim(),
         explanation: explanation.trim() || undefined,
         difficulty: DIFFICULTY_MAP[difficulty],
@@ -156,11 +156,11 @@ export default function AddQuestionScreen() {
 
     // text_input
     if (!questionText.trim()) {
-      Alert.alert(t("common.error"), t("addQuestion.errorNoQuestion"));
+      Alert.alert(t("Error", "エラー"), t("Please enter a question", "問題文を入力してください"));
       return null;
     }
     if (!correctAnswerText.trim()) {
-      Alert.alert(t("common.error"), t("addQuestion.errorNoCorrect"));
+      Alert.alert(t("Error", "エラー"), t("Please select the correct answer", "正解を選択してください"));
       return null;
     }
     return {
@@ -184,8 +184,8 @@ export default function AddQuestionScreen() {
       router.back();
     } catch (error: any) {
       Alert.alert(
-        t("common.error"),
-        error.response?.data?.detail || t("addQuestion.saveError")
+        t("Error", "エラー"),
+        error.response?.data?.detail || t("Failed to save question", "保存に失敗しました")
       );
     } finally {
       setIsLoading(false);
@@ -199,11 +199,11 @@ export default function AddQuestionScreen() {
     try {
       await questionsApi.create(payload as any);
       resetSingleForm();
-      Alert.alert(t("common.success"), t("addQuestion.savedNext"));
+      Alert.alert(t("Success", "成功"), t("Saved! Enter the next question.", "保存しました。次の問題を入力してください。"));
     } catch (error: any) {
       Alert.alert(
-        t("common.error"),
-        error.response?.data?.detail || t("addQuestion.saveError")
+        t("Error", "エラー"),
+        error.response?.data?.detail || t("Failed to save question", "保存に失敗しました")
       );
     } finally {
       setIsLoading(false);
@@ -213,18 +213,21 @@ export default function AddQuestionScreen() {
   // ----- まとめて入力モード: ハンドラ -----
 
   const handleInsertTemplate = () => {
-    setBulkText(t("addQuestion.bulkTemplate"));
+    setBulkText(t(
+      "Enter question here\nEnter answer here\n\nNext question\nNext answer",
+      "問題文をここに入力\n答えをここに入力\n\n次の問題文\n次の答え"
+    ));
     setParsedQuestions(null);
   };
 
   const handlePreview = () => {
     if (!bulkText.trim()) {
-      Alert.alert(t("common.error"), t("addQuestion.errorBulkEmpty"));
+      Alert.alert(t("Error", "エラー"), t("Please enter some questions", "問題を入力してください"));
       return;
     }
     const parsed = parseBulkText(bulkText);
     if (parsed.length === 0) {
-      Alert.alert(t("common.error"), t("addQuestion.parseError"));
+      Alert.alert(t("Error", "エラー"), t("Format error: each question needs at least 2 lines (question + answer)", "フォーマットエラー: 各問題に問題文と答えが必要です（2行以上）"));
       return;
     }
     setParsedQuestions(parsed);
@@ -253,9 +256,9 @@ export default function AddQuestionScreen() {
     }
     setIsBulkLoading(false);
     Alert.alert(
-      t("common.success"),
-      t("addQuestion.bulkSuccess", { count: successCount }),
-      [{ text: t("common.ok"), onPress: () => router.back() }]
+      t("Success", "成功"),
+      t(`Added ${successCount} question(s)`, `${successCount}問を追加しました`),
+      [{ text: t("OK", "OK"), onPress: () => router.back() }]
     );
   };
 
@@ -308,22 +311,22 @@ export default function AddQuestionScreen() {
   const renderSingleForm = () => (
     <View>
       {/* 問題タイプ */}
-      <Text style={styles.label}>{t("addQuestion.questionType")}</Text>
+      <Text style={styles.label}>{t("Question Type", "問題タイプ")}</Text>
       <View style={styles.typeSelector}>
-        {renderTypeButton("multiple_choice", t("addQuestion.multipleChoice"))}
-        {renderTypeButton("true_false", t("addQuestion.trueFalse"))}
-        {renderTypeButton("text_input", t("addQuestion.textInput"))}
+        {renderTypeButton("multiple_choice", t("Multiple Choice", "多肢選択"))}
+        {renderTypeButton("true_false", t("True / False", "正誤問題"))}
+        {renderTypeButton("text_input", t("Text Input", "記述式"))}
       </View>
 
       {/* 問題文 */}
       <Text style={styles.label}>
-        {t("addQuestion.questionText")} <Text style={styles.required}>*</Text>
+        {t("Question Text", "問題文")} <Text style={styles.required}>*</Text>
       </Text>
       <TextInput
         style={[styles.input, styles.textArea]}
         value={questionText}
         onChangeText={setQuestionText}
-        placeholder={t("addQuestion.questionTextPlaceholder")}
+        placeholder={t("Enter your question", "問題文を入力してください")}
         multiline
         numberOfLines={4}
         textAlignVertical="top"
@@ -334,9 +337,9 @@ export default function AddQuestionScreen() {
       {questionType === "multiple_choice" && (
         <>
           <Text style={styles.label}>
-            {t("addQuestion.options")} <Text style={styles.required}>*</Text>
+            {t("Options", "選択肢")} <Text style={styles.required}>*</Text>
           </Text>
-          <Text style={styles.hint}>{t("addQuestion.tapToSelect")}</Text>
+          <Text style={styles.hint}>{t("Tap the button on the left of the correct option", "正解にする選択肢の左のボタンをタップしてください")}</Text>
           {options.map((option, index) => (
             <View key={index} style={styles.optionRow}>
               <TouchableOpacity
@@ -357,7 +360,7 @@ export default function AddQuestionScreen() {
                 ]}
                 value={option}
                 onChangeText={(v) => handleOptionChange(index, v)}
-                placeholder={`${t("addQuestion.optionPlaceholder")} ${String.fromCharCode(65 + index)}`}
+                placeholder={`${t("Option", "選択肢")} ${String.fromCharCode(65 + index)}`}
                 editable={!isLoading}
               />
               {options.length > 2 && (
@@ -372,7 +375,7 @@ export default function AddQuestionScreen() {
           ))}
           {options.length < 8 && (
             <TouchableOpacity style={styles.addOptionButton} onPress={handleAddOption}>
-              <Text style={styles.addOptionText}>{t("addQuestion.addOption")}</Text>
+              <Text style={styles.addOptionText}>{t("+ Add Option", "+ 選択肢を追加")}</Text>
             </TouchableOpacity>
           )}
         </>
@@ -382,43 +385,43 @@ export default function AddQuestionScreen() {
       {questionType === "true_false" && (
         <>
           <Text style={styles.label}>
-            {t("addQuestion.correctAnswer")} <Text style={styles.required}>*</Text>
+            {t("Correct Answer", "正解")} <Text style={styles.required}>*</Text>
           </Text>
           <View style={styles.trueFalseRow}>
             <TouchableOpacity
               style={[
                 styles.trueFalseButton,
-                correctAnswerText === t("addQuestion.trueLabel") &&
+                correctAnswerText === t("True", "正しい") &&
                   styles.trueFalseButtonActive,
               ]}
-              onPress={() => setCorrectAnswerText(t("addQuestion.trueLabel"))}
+              onPress={() => setCorrectAnswerText(t("True", "正しい"))}
             >
               <Text
                 style={[
                   styles.trueFalseText,
-                  correctAnswerText === t("addQuestion.trueLabel") &&
+                  correctAnswerText === t("True", "正しい") &&
                     styles.trueFalseTextActive,
                 ]}
               >
-                {t("addQuestion.trueLabel")}
+                {t("True", "正しい")}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
                 styles.trueFalseButton,
-                correctAnswerText === t("addQuestion.falseLabel") &&
+                correctAnswerText === t("False", "誤り") &&
                   styles.trueFalseButtonActive,
               ]}
-              onPress={() => setCorrectAnswerText(t("addQuestion.falseLabel"))}
+              onPress={() => setCorrectAnswerText(t("False", "誤り"))}
             >
               <Text
                 style={[
                   styles.trueFalseText,
-                  correctAnswerText === t("addQuestion.falseLabel") &&
+                  correctAnswerText === t("False", "誤り") &&
                     styles.trueFalseTextActive,
                 ]}
               >
-                {t("addQuestion.falseLabel")}
+                {t("False", "誤り")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -429,25 +432,25 @@ export default function AddQuestionScreen() {
       {questionType === "text_input" && (
         <>
           <Text style={styles.label}>
-            {t("addQuestion.correctAnswer")} <Text style={styles.required}>*</Text>
+            {t("Correct Answer", "正解")} <Text style={styles.required}>*</Text>
           </Text>
           <TextInput
             style={styles.input}
             value={correctAnswerText}
             onChangeText={setCorrectAnswerText}
-            placeholder={t("addQuestion.correctAnswerPlaceholder")}
+            placeholder={t("Enter the correct answer", "正解を入力してください")}
             editable={!isLoading}
           />
         </>
       )}
 
       {/* 解説 */}
-      <Text style={styles.label}>{t("addQuestion.explanation")}</Text>
+      <Text style={styles.label}>{t("Explanation (optional)", "解説（任意）")}</Text>
       <TextInput
         style={[styles.input, styles.textArea]}
         value={explanation}
         onChangeText={setExplanation}
-        placeholder={t("addQuestion.explanationPlaceholder")}
+        placeholder={t("Explain why this is the correct answer", "なぜこれが正解なのかを説明してください")}
         multiline
         numberOfLines={3}
         textAlignVertical="top"
@@ -455,20 +458,20 @@ export default function AddQuestionScreen() {
       />
 
       {/* 難易度 */}
-      <Text style={styles.label}>{t("addQuestion.difficulty")}</Text>
+      <Text style={styles.label}>{t("Difficulty", "難易度")}</Text>
       <View style={styles.difficultyRow}>
-        {renderDifficultyButton("easy", t("addQuestion.easy"))}
-        {renderDifficultyButton("medium", t("addQuestion.medium"))}
-        {renderDifficultyButton("hard", t("addQuestion.hard"))}
+        {renderDifficultyButton("easy", t("Easy", "易"))}
+        {renderDifficultyButton("medium", t("Medium", "普通"))}
+        {renderDifficultyButton("hard", t("Hard", "難"))}
       </View>
 
       {/* カテゴリ */}
-      <Text style={styles.label}>{t("addQuestion.category")}</Text>
+      <Text style={styles.label}>{t("Category (optional)", "カテゴリ（任意）")}</Text>
       <TextInput
         style={styles.input}
         value={category}
         onChangeText={setCategory}
-        placeholder={t("addQuestion.categoryPlaceholder")}
+        placeholder={t("e.g., Math, Grammar", "例: 数学、英語")}
         editable={!isLoading}
       />
 
@@ -481,7 +484,7 @@ export default function AddQuestionScreen() {
         {isLoading ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.primaryButtonText}>{t("addQuestion.saveAndNext")}</Text>
+          <Text style={styles.primaryButtonText}>{t("Save & Add Next", "保存して次の問題へ")}</Text>
         )}
       </TouchableOpacity>
 
@@ -490,7 +493,7 @@ export default function AddQuestionScreen() {
         onPress={handleSaveAndBack}
         disabled={isLoading}
       >
-        <Text style={styles.secondaryButtonText}>{t("addQuestion.saveAndBack")}</Text>
+        <Text style={styles.secondaryButtonText}>{t("Save & Go Back", "保存して戻る")}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -498,23 +501,23 @@ export default function AddQuestionScreen() {
         onPress={() => router.back()}
         disabled={isLoading}
       >
-        <Text style={styles.cancelButtonText}>{t("common.cancel")}</Text>
+        <Text style={styles.cancelButtonText}>{t("Cancel", "キャンセル")}</Text>
       </TouchableOpacity>
     </View>
   );
 
   const renderBulkForm = () => (
     <View>
-      <Text style={styles.bulkDescription}>{t("addQuestion.bulkDescription")}</Text>
+      <Text style={styles.bulkDescription}>{t("Separate questions with a blank line or \"---\" to add multiple questions at once.", "空行または「---」で問題を区切って、複数の問題をまとめて入力できます。")}</Text>
 
       {/* フォーマット例 */}
       <View style={styles.formatBox}>
-        <Text style={styles.formatBoxTitle}>{t("addQuestion.formatTitle")}</Text>
-        <Text style={styles.formatBoxText}>{t("addQuestion.formatExample")}</Text>
+        <Text style={styles.formatBoxTitle}>{t("Input Format", "入力フォーマット")}</Text>
+        <Text style={styles.formatBoxText}>{t("Question 1\nAnswer 1\n\nQuestion 2\nAnswer 2\n\n---\nQuestion 3\nAnswer 3", "問題文1\n答え1\n\n問題文2\n答え2\n\n---\n問題文3\n答え3")}</Text>
       </View>
 
       <TouchableOpacity style={styles.templateButton} onPress={handleInsertTemplate}>
-        <Text style={styles.templateButtonText}>{t("addQuestion.insertTemplate")}</Text>
+        <Text style={styles.templateButtonText}>{t("Insert Template", "テンプレートを挿入")}</Text>
       </TouchableOpacity>
 
       <TextInput
@@ -524,7 +527,7 @@ export default function AddQuestionScreen() {
           setBulkText(v);
           setParsedQuestions(null);
         }}
-        placeholder={t("addQuestion.bulkPlaceholder")}
+        placeholder={t("Question\nAnswer\n\nQuestion 2\nAnswer 2\n...", "問題文\n答え\n\n問題文2\n答え2\n...")}
         multiline
         textAlignVertical="top"
         editable={!isBulkLoading}
@@ -533,7 +536,7 @@ export default function AddQuestionScreen() {
       {/* プレビューボタン */}
       {!parsedQuestions && (
         <TouchableOpacity style={styles.primaryButton} onPress={handlePreview}>
-          <Text style={styles.primaryButtonText}>{t("addQuestion.preview")}</Text>
+          <Text style={styles.primaryButtonText}>{t("Preview", "プレビュー確認")}</Text>
         </TouchableOpacity>
       )}
 
@@ -541,7 +544,7 @@ export default function AddQuestionScreen() {
       {parsedQuestions && (
         <View>
           <Text style={styles.previewTitle}>
-            {t("addQuestion.previewCount", { count: parsedQuestions.length })}
+            {t(`${parsedQuestions.length} question(s) recognized`, `${parsedQuestions.length}問が認識されました`)}
           </Text>
           {parsedQuestions.map((q, i) => (
             <View key={i} style={styles.previewItem}>
@@ -551,7 +554,7 @@ export default function AddQuestionScreen() {
                   {q.question_text}
                 </Text>
                 <Text style={styles.previewAnswer}>
-                  {t("addQuestion.correctAnswer")}: {q.correct_answer}
+                  {t("Correct Answer", "正解")}: {q.correct_answer}
                 </Text>
               </View>
             </View>
@@ -574,7 +577,7 @@ export default function AddQuestionScreen() {
             disabled={isBulkLoading}
           >
             <Text style={styles.primaryButtonText}>
-              {t("addQuestion.bulkSave", { count: parsedQuestions.length })}
+              {t(`Add ${parsedQuestions.length} Question(s)`, `${parsedQuestions.length}問を一括追加`)}
             </Text>
           </TouchableOpacity>
 
@@ -583,7 +586,7 @@ export default function AddQuestionScreen() {
             onPress={() => setParsedQuestions(null)}
             disabled={isBulkLoading}
           >
-            <Text style={styles.cancelButtonText}>{t("addQuestion.editAgain")}</Text>
+            <Text style={styles.cancelButtonText}>{t("Edit Again", "入力に戻る")}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -593,7 +596,7 @@ export default function AddQuestionScreen() {
         onPress={() => router.back()}
         disabled={isBulkLoading}
       >
-        <Text style={styles.cancelButtonText}>{t("common.cancel")}</Text>
+        <Text style={styles.cancelButtonText}>{t("Cancel", "キャンセル")}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -608,7 +611,7 @@ export default function AddQuestionScreen() {
             onPress={() => setActiveTab("single")}
           >
             <Text style={[styles.tabText, activeTab === "single" && styles.tabTextActive]}>
-              {t("addQuestion.tabSingle")}
+              {t("One by One", "1問ずつ")}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -616,7 +619,7 @@ export default function AddQuestionScreen() {
             onPress={() => setActiveTab("bulk")}
           >
             <Text style={[styles.tabText, activeTab === "bulk" && styles.tabTextActive]}>
-              {t("addQuestion.tabBulk")}
+              {t("Bulk Input", "まとめて入力")}
             </Text>
           </TouchableOpacity>
         </View>

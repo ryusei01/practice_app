@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = "*"  # カンマ区切りで複数ドメイン指定可能
 
+    # ML機能フラグ (sentence-transformers 等を使う機能。本番では False に設定)
+    ENABLE_ML: bool = True
+
     # Ollama (Local LLM)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_TRANSLATION_MODEL: str = "llama3.2:1b"  # 軽量モデル推奨

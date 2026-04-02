@@ -14,6 +14,7 @@ from ..models import Answer, User, QuestionSet, Question
 from ..ai import StatsUpdater
 from ..services.ai_evaluator import evaluate_text_answer
 from ..services.embedding_grading import (
+    MLDisabledError,
     RubricItem,
     MisconceptionItem,
     evaluate_with_rubric_and_misconceptions,
@@ -153,6 +154,11 @@ async def evaluate_text_with_rubric_endpoint(
         return to_legacy_evaluation_format(result, pass_threshold=60.0)
     except HTTPException:
         raise
+    except MLDisabledError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"ML採点機能は現在利用できません: {e}",
+        )
     except Exception as e:
         import traceback
         traceback.print_exc()
