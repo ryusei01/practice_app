@@ -47,5 +47,8 @@
   "private": true,
   "engines": {
     "node": ">=20.19.4"
+  },
+  "overrides": {
+    "markdown-it": "^12.3.2"
   }
 }

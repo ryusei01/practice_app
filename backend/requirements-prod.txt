@@ -1,10 +1,12 @@
-# FastAPI & Server
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-multipart==0.0.6
+# FastAPI & Server (starlette>=0.47.2, h11>=0.15 for known CVEs)
+fastapi==0.134.0
+starlette>=0.47.2
+h11>=0.15.0
+uvicorn[standard]==0.42.0
+python-multipart==0.0.22
 slowapi==0.1.9
-pydantic[email]
-email-validator
+pydantic[email]==2.12.5
+email-validator>=2.0.0
 
 # Database
 sqlalchemy==2.0.23
@@ -13,7 +15,7 @@ asyncpg==0.29.0
 psycopg2-binary==2.9.11
 
 # Supabase
-supabase==2.3.0
+supabase==2.28.3
 
 # Authentication
 python-jose[cryptography]==3.3.0
@@ -30,9 +32,8 @@ numpy==1.26.2
 deep-translator==1.11.4
 
 # Utilities
-pydantic==2.5.0
-pydantic-settings==2.1.0
-httpx==0.24.1
+pydantic-settings==2.13.1
+httpx==0.28.1
 redis>=5.0.0
 
 # NOTE: sentence-transformers, scikit-learn, lightgbm, pandas, joblib は
