@@ -74,6 +74,7 @@ export default function Modal({
 
             <ScrollView
               style={styles.scrollView}
+              contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
             >
               {message && <Text style={styles.modalMessage}>{message}</Text>}
@@ -171,6 +172,10 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     maxHeight: 500,
+  },
+  scrollContent: {
+    alignItems: "stretch",
+    width: "100%",
   },
   buttonContainer: {
     flexDirection: "row",

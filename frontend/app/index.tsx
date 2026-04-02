@@ -486,34 +486,36 @@ export default function Home() {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.button, styles.settingsButton, styles.modalFullWidthButton]}
-              onPress={() => {
-                setShowTrialStartWarningModal(false);
-                router.push("/(app)/premium-upgrade");
-              }}
-              testID="btn-trial-warning-premium"
-            >
-              <Text style={styles.buttonText}>
-                {t("View Premium plan", "有料プランを見る")}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.trialWarningActionStack}>
+              <TouchableOpacity
+                style={[styles.modalWideCta, styles.modalWideCtaPremium]}
+                onPress={() => {
+                  setShowTrialStartWarningModal(false);
+                  router.push("/(app)/premium-upgrade");
+                }}
+                testID="btn-trial-warning-premium"
+              >
+                <Text style={styles.buttonText}>
+                  {t("View Premium plan", "有料プランを見る")}
+                </Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.button, styles.trialButton, styles.modalFullWidthButton]}
-              onPress={() => {
-                setShowTrialStartWarningModal(false);
-                router.push("/(trial)/trial-question-sets");
-              }}
-              testID="btn-trial-warning-continue"
-            >
-              <Text style={styles.buttonText}>
-                {t(
-                  "I understand — continue with local trial",
-                  "理解したうえでお試しを続ける"
-                )}
-              </Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalWideCta, styles.modalWideCtaStart]}
+                onPress={() => {
+                  setShowTrialStartWarningModal(false);
+                  router.push("/(trial)/trial-question-sets");
+                }}
+                testID="btn-trial-warning-continue"
+              >
+                <Text style={styles.buttonText}>
+                  {t(
+                    "I understand — start (device-only storage)",
+                    "理解したうえで始める"
+                  )}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             <TouchableOpacity
               style={styles.modalCancelButton}
@@ -781,13 +783,31 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     paddingLeft: 4,
   },
-  modalFullWidthButton: {
+  /** 注意モーダル内: `button` の maxWidth:300 を避け、親幅いっぱいに揃える */
+  trialWarningActionStack: {
+    alignSelf: "stretch",
     width: "100%",
+  },
+  modalWideCta: {
+    width: "100%",
+    alignSelf: "stretch",
+    borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
     marginVertical: 6,
-    maxWidth: undefined,
+  },
+  modalWideCtaPremium: {
+    backgroundColor: "#FF9500",
+  },
+  modalWideCtaStart: {
+    backgroundColor: "#007AFF",
   },
   modalBody: {
     paddingBottom: 4,
+    alignSelf: "stretch",
+    width: "100%",
   },
   infoBox: {
     flexDirection: "row",
