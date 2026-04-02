@@ -98,12 +98,22 @@ export const srsService = {
     setId: string,
     questionId: string,
     isCorrect: boolean,
-    answerTimeSec: number
+    answerTimeSec: number,
+    opts?: { admittedUnknown?: boolean }
   ): Promise<SRSState> {
     const map = await this.getSRSMap(setId);
     const prev = map[questionId] || createDefaultState();
     const quality = qualityFromAnswer(isCorrect, answerTimeSec);
-    const next = applySmTwo(prev, quality);
+    let next = applySmTwo(prev, quality);
+    // 「わからない」は通常の不正解より復習を早める（ease を追加で下げる）
+    if (opts?.admittedUnknown && !isCorrect) {
+      const easeFactor = Math.max(1.3, next.easeFactor - 0.25);
+      next = {
+        ...next,
+        easeFactor,
+        stability: Math.max(1, next.interval * easeFactor),
+      };
+    }
     map[questionId] = next;
     await this.saveSRSMap(setId, map);
     return next;

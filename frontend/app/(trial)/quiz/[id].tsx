@@ -119,7 +119,11 @@ export default function TrialQuizScreen() {
       // SRS状態を更新
       for (const ans of answers) {
         await srsService.updateAfterAnswer(
-          questionSet.id, ans.question_id, ans.is_correct, ans.answer_time_sec
+          questionSet.id,
+          ans.question_id,
+          ans.is_correct,
+          ans.answer_time_sec,
+          ans.admitted_unknown ? { admittedUnknown: true } : undefined
         );
       }
       const srsMap = await srsService.getSRSMap(questionSet.id);

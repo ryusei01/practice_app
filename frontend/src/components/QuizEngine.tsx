@@ -37,6 +37,8 @@ export interface QuizAnswer {
   user_answer: string;
   is_correct: boolean;
   answer_time_sec: number;
+  /** ユーザーが「わからない」と明示した場合（SRS などで通常の不正解より厳しく扱う） */
+  admitted_unknown?: boolean;
 }
 
 export interface QuizEngineProps {
@@ -284,6 +286,32 @@ export default function QuizEngine({
     }
   };
 
+  const handleDontKnow = () => {
+    if (isSubmitting) return;
+
+    const currentQuestion = questions[currentQuestionIndex];
+    const answerTimeSec = Math.floor((Date.now() - startTime) / 1000);
+    const dontKnowLabel = t("(don't know)", "（わからない）");
+
+    const newAnswer: QuizAnswer = {
+      question_id: currentQuestion.id,
+      user_answer: dontKnowLabel,
+      is_correct: false,
+      answer_time_sec: answerTimeSec,
+      admitted_unknown: true,
+    };
+    setAnswers([...answers, newAnswer]);
+
+    setIsCorrect(false);
+    setEvaluationFeedback(
+      t("Recorded as don't know", "わからないとして記録しました")
+    );
+    setEvaluationConfidence(0);
+    setShowResult(true);
+    setTotalAnswered(totalAnswered + 1);
+    setCanOverride(false);
+  };
+
   const handleOverrideCorrect = () => {
     setOverrideType('correct');
     setShowOverrideModal(true);
@@ -296,7 +324,12 @@ export default function QuizEngine({
 
   const confirmOverride = () => {
     const updatedAnswers = [...answers];
-    updatedAnswers[updatedAnswers.length - 1].is_correct = overrideType === 'correct';
+    const last = updatedAnswers[updatedAnswers.length - 1];
+    if (!last || last.admitted_unknown) {
+      setShowOverrideModal(false);
+      return;
+    }
+    last.is_correct = overrideType === 'correct';
     setAnswers(updatedAnswers);
 
     if (overrideType === 'correct') {
@@ -578,46 +611,48 @@ export default function QuizEngine({
             )}
           </View>
 
-          {/* 正誤を手動で記録するボタン */}
-          <View style={styles.manualRecordContainer}>
-            <Text style={styles.manualRecordTitle}>
-              {t("Record result:", "結果を記録:")}
-            </Text>
-            <View style={styles.manualRecordButtons}>
-              <TouchableOpacity
-                style={[
-                  styles.manualButton,
-                  styles.manualButtonCorrect,
-                  isCorrect && styles.manualButtonActive
-                ]}
-                onPress={() => {
-                  if (!isCorrect) {
-                    handleOverrideCorrect();
-                  }
-                }}
-              >
-                <Text style={[styles.manualButtonText, isCorrect && styles.manualButtonTextActive]}>
-                  ✓ {t("Correct", "正解")}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.manualButton,
-                  styles.manualButtonIncorrect,
-                  !isCorrect && styles.manualButtonActive
-                ]}
-                onPress={() => {
-                  if (isCorrect) {
-                    handleOverrideIncorrect();
-                  }
-                }}
-              >
-                <Text style={[styles.manualButtonText, !isCorrect && styles.manualButtonTextActive]}>
-                  ✗ {t("Incorrect", "不正解")}
-                </Text>
-              </TouchableOpacity>
+          {/* 正誤を手動で記録するボタン（「わからない」のときは上書き不可） */}
+          {!answers[answers.length - 1]?.admitted_unknown && (
+            <View style={styles.manualRecordContainer}>
+              <Text style={styles.manualRecordTitle}>
+                {t("Record result:", "結果を記録:")}
+              </Text>
+              <View style={styles.manualRecordButtons}>
+                <TouchableOpacity
+                  style={[
+                    styles.manualButton,
+                    styles.manualButtonCorrect,
+                    isCorrect && styles.manualButtonActive
+                  ]}
+                  onPress={() => {
+                    if (!isCorrect) {
+                      handleOverrideCorrect();
+                    }
+                  }}
+                >
+                  <Text style={[styles.manualButtonText, isCorrect && styles.manualButtonTextActive]}>
+                    ✓ {t("Correct", "正解")}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.manualButton,
+                    styles.manualButtonIncorrect,
+                    !isCorrect && styles.manualButtonActive
+                  ]}
+                  onPress={() => {
+                    if (isCorrect) {
+                      handleOverrideIncorrect();
+                    }
+                  }}
+                >
+                  <Text style={[styles.manualButtonText, !isCorrect && styles.manualButtonTextActive]}>
+                    ✗ {t("Incorrect", "不正解")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          )}
 
           {currentQuestion.explanation && (
             <View style={styles.explanationContainer}>
@@ -632,17 +667,28 @@ export default function QuizEngine({
 
       <View style={styles.buttonContainer}>
         {!showResult ? (
-          <TouchableOpacity
-            style={[styles.submitButton, isSubmitting && styles.buttonDisabled]}
-            onPress={handleSubmitAnswer}
-            disabled={isSubmitting || !userAnswer.trim()}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.submitButtonText}>{t("Submit Answer", "回答する")}</Text>
-            )}
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity
+              style={[styles.submitButton, isSubmitting && styles.buttonDisabled]}
+              onPress={handleSubmitAnswer}
+              disabled={isSubmitting || !userAnswer.trim()}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.submitButtonText}>{t("Submit Answer", "回答する")}</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.dontKnowButton, isSubmitting && styles.buttonDisabled]}
+              onPress={handleDontKnow}
+              disabled={isSubmitting}
+            >
+              <Text style={styles.dontKnowButtonText}>
+                {t("Don't know", "わからない")}
+              </Text>
+            </TouchableOpacity>
+          </>
         ) : (
           <TouchableOpacity
             style={styles.nextButton}
@@ -1067,6 +1113,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   submitButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  dontKnowButton: {
+    backgroundColor: "#8E8E93",
+    borderRadius: 8,
+    padding: 16,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  dontKnowButtonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",

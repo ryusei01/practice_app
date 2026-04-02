@@ -121,7 +121,8 @@ export default function QuizScreen() {
           id as string,
           ans.question_id,
           ans.is_correct,
-          ans.answer_time_sec
+          ans.answer_time_sec,
+          ans.admitted_unknown ? { admittedUnknown: true } : undefined
         );
       }
 
