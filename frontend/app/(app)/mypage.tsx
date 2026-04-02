@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { platformShadow } from "@/src/styles/platformShadow";
 import {
   View,
   Text,
@@ -17,7 +18,11 @@ import { useLanguage } from "../../src/contexts/LanguageContext";
 import Header from "../../src/components/Header";
 import { authApi } from "../../src/api/auth";
 import { answersApi, UserStats } from "../../src/api/answers";
-import { questionSetsApi, QuestionSet } from "../../src/api/questionSets";
+import {
+  questionSetsApi,
+  QuestionSet,
+  contentLanguageDisplayLabel,
+} from "../../src/api/questionSets";
 import { paymentsApi, Purchase } from "../../src/api/payments";
 import apiClient from "../../src/api/client";
 
@@ -619,6 +624,7 @@ export default function MyPageScreen() {
               >
                 <Text style={styles.questionSetTitle}>{qs.title}</Text>
                 <Text style={styles.questionSetMeta}>
+                  {contentLanguageDisplayLabel(qs.content_language, t)} •{" "}
                   {qs.total_questions || 0} {t("questions", "問")} • ¥
                   {qs.price || 0} • {qs.total_purchases || 0}{" "}
                   {t("sales", "販売")}
@@ -657,6 +663,7 @@ export default function MyPageScreen() {
               >
                 <Text style={styles.questionSetTitle}>{qs.title}</Text>
                 <Text style={styles.questionSetMeta}>
+                  {contentLanguageDisplayLabel(qs.content_language, t)} •{" "}
                   {qs.total_questions || 0} {t("questions", "問")}
                 </Text>
               </TouchableOpacity>
@@ -833,10 +840,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     margin: 15,
     padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...platformShadow({
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+    }),
     elevation: 3,
   },
   sectionHeader: {

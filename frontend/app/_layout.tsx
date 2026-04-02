@@ -1,36 +1,13 @@
 import { Stack } from "expo-router";
-import Head from "expo-router/head";
 import { Platform } from "react-native";
+import { WebThirdPartyScripts } from "../src/components/WebThirdPartyScripts";
 import { AuthProvider } from "../src/contexts/AuthContext";
 import { LanguageProvider } from "../src/contexts/LanguageContext";
 
 export default function RootLayout() {
   return (
     <>
-      {Platform.OS === "web" && (
-        <Head>
-          {/* Google tag (gtag.js) */}
-          <script
-            async
-            src="https://www.googletagmanager.com/gtag/js?id=G-XT4CVC965E"
-          ></script>
-          <script
-            dangerouslySetInnerHTML={{
-              __html: `
-                window.dataLayer = window.dataLayer || [];
-                function gtag(){dataLayer.push(arguments);}
-                gtag('js', new Date());
-                gtag('config', 'G-XT4CVC965E');
-              `,
-            }}
-          />
-          <script
-            async
-            src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9679910712332333"
-            crossOrigin="anonymous"
-          ></script>
-        </Head>
-      )}
+      {Platform.OS === "web" && <WebThirdPartyScripts />}
 
       <LanguageProvider>
         <AuthProvider>

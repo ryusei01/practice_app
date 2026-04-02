@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { platformShadow } from "@/src/styles/platformShadow";
 import {
   View,
   Text,
@@ -15,7 +16,11 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { questionSetsApi, QuestionSet } from "../../../src/api/questionSets";
+import {
+  questionSetsApi,
+  QuestionSet,
+  contentLanguageDisplayLabel,
+} from "../../../src/api/questionSets";
 import { questionsApi, Question } from "../../../src/api/questions";
 import { answersApi } from "../../../src/api/answers";
 import { useAuth } from "../../../src/contexts/AuthContext";
@@ -420,7 +425,14 @@ export default function FlashcardScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.closeButton}>✕</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{questionSet.title}</Text>
+        <View style={styles.headerTitleBlock}>
+          <Text style={styles.headerTitle} numberOfLines={2}>
+            {questionSet.title}
+          </Text>
+          <Text style={styles.headerLang}>
+            {contentLanguageDisplayLabel(questionSet.content_language, t)}
+          </Text>
+        </View>
         <TouchableOpacity onPress={isSpeaking ? stopSpeaking : speakQuestion}>
           <Text style={styles.speakerButton}>
             {isSpeaking ? "🔇" : "🔊"}
@@ -758,11 +770,23 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     width: 30,
   },
+  headerTitleBlock: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: "600",
     color: "#333",
-    flex: 1,
+    textAlign: "center",
+  },
+  headerLang: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#5856D6",
+    marginTop: 2,
     textAlign: "center",
   },
   placeholder: {
@@ -823,10 +847,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    ...platformShadow({
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+    }),
     elevation: 5,
   },
   cardHeader: {
@@ -1074,10 +1100,12 @@ const styles = StyleSheet.create({
     padding: 24,
     width: "85%",
     maxWidth: 400,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    ...platformShadow({
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+    }),
     elevation: 8,
   },
   modalTitle: {

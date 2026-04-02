@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from "react";
+import { platformShadow } from "@/src/styles/platformShadow";
 import {
   View,
   Text,
@@ -654,10 +655,12 @@ const styles = StyleSheet.create({
   },
   tabActive: {
     backgroundColor: "#fff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    ...platformShadow({
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+    }),
     elevation: 2,
   },
   tabText: {

@@ -15,6 +15,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 from ..core.limiter import limiter
+from ..core.client_ip import get_client_ip
+from ..core.redis_oauth_guard import (
+    check_oauth_ip_blocked,
+    clear_oauth_failure_counter,
+    record_oauth_failure,
+)
 
 from ..core.database import get_db
 from ..core.auth import (
@@ -89,6 +95,7 @@ def _make_unique_username(db: Session, base_name: str) -> str:
 
 
 @router.post("/google", response_model=TokenResponse)
+@limiter.limit("30/hour")
 @limiter.limit("10/minute")
 async def google_login(request: Request, body: GoogleAuthRequest, db: Session = Depends(get_db)):
     """
@@ -101,13 +108,28 @@ async def google_login(request: Request, body: GoogleAuthRequest, db: Session = 
     Returns:
         JWTトークンとユーザー情報
     """
+    ip = get_client_ip(request)
     try:
-        return await _google_login_impl(body, db)
+        await check_oauth_ip_blocked(ip)
+        try:
+            result = await _google_login_impl(body, db)
+        except HTTPException as he:
+            if he.status_code in (
+                status.HTTP_401_UNAUTHORIZED,
+                status.HTTP_400_BAD_REQUEST,
+            ):
+                await record_oauth_failure(ip, f"http_{he.status_code}")
+            raise
+        await clear_oauth_failure_counter(ip)
+        return result
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.error("=== /auth/google 500 エラー詳細 ===\n%s", traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Internal error: {type(e).__name__}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="サーバーエラーが発生しました。しばらくしてから再試行してください。",
+        )
 
 
 async def _google_login_impl(body: GoogleAuthRequest, db: Session):

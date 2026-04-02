@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { platformShadow } from "@/src/styles/platformShadow";
 import {
   View,
   Text,
@@ -853,10 +854,12 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     paddingHorizontal: 24,
     marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
+    ...platformShadow({
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.06,
+      shadowRadius: 3,
+    }),
     elevation: 2,
     ...Platform.select({
       web: { cursor: "pointer" },

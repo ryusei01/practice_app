@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { platformShadow } from "@/src/styles/platformShadow";
 import {
   View,
   Text,
@@ -18,6 +19,7 @@ import {
 import {
   LanguageFilter,
   resolvedContentLanguage,
+  contentLanguageDisplayLabel,
 } from "../../src/api/questionSets";
 import {
   getAvailableTextbooks,
@@ -278,6 +280,14 @@ export default function TrialQuestionSetsScreen() {
             {t("Questions", "問題数")}: {item.questions.length}
           </Text>
           <View style={styles.badgeRow}>
+            <View style={styles.langBadge} nativeID={`trial-lang-${item.id}`}>
+              <Text
+                style={styles.langBadgeText}
+                nativeID={`trial-lang-text-${item.id}`}
+              >
+                {contentLanguageDisplayLabel(item.content_language, t)}
+              </Text>
+            </View>
             <View style={styles.trialBadge} nativeID={`trial-badge-${item.id}`}>
               <Text
                 style={styles.trialBadgeText}
@@ -351,9 +361,7 @@ export default function TrialQuestionSetsScreen() {
       <Text style={styles.textbookCardType}>
         {item.type === "markdown" ? "📄 Markdown" : "📕 PDF"}
         {" · "}
-        {item.language === "en"
-          ? "English"
-          : t("Japanese", "日本語")}
+        {contentLanguageDisplayLabel(item.language, t)}
       </Text>
     </TouchableOpacity>
   );
@@ -668,10 +676,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 15,
     marginBottom: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...platformShadow({
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+    }),
     elevation: 3,
   },
   cardContent: {
@@ -706,6 +716,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   trialBadgeText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  langBadge: {
+    backgroundColor: "#5856D6",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  langBadgeText: {
     color: "#fff",
     fontSize: 12,
     fontWeight: "bold",
@@ -796,10 +817,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 15,
     marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...platformShadow({
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+    }),
     elevation: 3,
   },
   textbookCardHeader: {

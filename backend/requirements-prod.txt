@@ -33,6 +33,7 @@ deep-translator==1.11.4
 pydantic==2.5.0
 pydantic-settings==2.1.0
 httpx==0.24.1
+redis>=5.0.0
 
 # NOTE: sentence-transformers, scikit-learn, lightgbm, pandas, joblib は
 # 開発環境 (requirements.txt) のみ。本番では ENABLE_ML=false で ML機能を無効化。

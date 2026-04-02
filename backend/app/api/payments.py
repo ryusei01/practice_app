@@ -3,7 +3,7 @@ Stripe Connect決済APIエンドポイント
 """
 import stripe
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -16,6 +16,8 @@ from datetime import datetime
 from ..core.database import get_db
 from ..core.auth import get_current_active_user
 from ..core.config import settings
+from ..core.limiter import limiter
+from ..core.rate_limit_keys import payment_user_or_ip_key
 from ..models import User, QuestionSet, Purchase
 from ..services.stripe_service import stripe_service
 
@@ -53,8 +55,11 @@ class PurchaseResponse(BaseModel):
 
 
 @router.post("/create-payment-intent", response_model=CreatePaymentIntentResponse)
+@limiter.limit("30/hour", key_func=payment_user_or_ip_key)
+@limiter.limit("10/minute", key_func=payment_user_or_ip_key)
 async def create_payment_intent(
-    request: CreatePaymentIntentRequest,
+    request: Request,
+    payload: CreatePaymentIntentRequest,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -65,7 +70,7 @@ async def create_payment_intent(
     """
     # 問題集を取得
     question_set = db.query(QuestionSet).filter(
-        QuestionSet.id == request.question_set_id
+        QuestionSet.id == payload.question_set_id
     ).first()
 
     if not question_set:
@@ -83,7 +88,7 @@ async def create_payment_intent(
     # 既に購入済みかチェック
     existing_purchase = db.query(Purchase).filter(
         Purchase.buyer_id == current_user.id,
-        Purchase.question_set_id == request.question_set_id
+        Purchase.question_set_id == payload.question_set_id
     ).first()
 
     if existing_purchase:
@@ -97,7 +102,7 @@ async def create_payment_intent(
         new_purchase = Purchase(
             id=str(uuid.uuid4()),
             buyer_id=current_user.id,
-            question_set_id=request.question_set_id,
+            question_set_id=payload.question_set_id,
             amount=0,
             platform_fee=0,
             seller_amount=0
@@ -125,7 +130,7 @@ async def create_payment_intent(
             amount=question_set.price,
             seller_account_id=creator.stripe_account_id,
             metadata={
-                "question_set_id": request.question_set_id,
+                "question_set_id": payload.question_set_id,
                 "buyer_id": current_user.id,
             }
         )
@@ -146,7 +151,10 @@ async def create_payment_intent(
 
 
 @router.post("/confirm-purchase")
+@limiter.limit("60/hour", key_func=payment_user_or_ip_key)
+@limiter.limit("30/minute", key_func=payment_user_or_ip_key)
 async def confirm_purchase(
+    request: Request,
     payment_intent_id: str,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
@@ -173,9 +181,15 @@ async def confirm_purchase(
         )
 
     if pi.status != "succeeded":
+        logger.info(
+            "confirm_purchase incomplete status=%s pi=%s user=%s",
+            pi.status,
+            payment_intent_id,
+            current_user.id,
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"決済が完了していません (status: {pi.status})"
+            detail="決済が完了していません。カード情報をご確認のうえ、しばらくしてから再度お試しください。",
         )
 
     metadata = pi.get("metadata") or {}
@@ -212,8 +226,11 @@ async def confirm_purchase(
 
 
 @router.post("/create-connect-account-link")
+@limiter.limit("20/hour", key_func=payment_user_or_ip_key)
+@limiter.limit("5/minute", key_func=payment_user_or_ip_key)
 async def create_connect_account_link(
-    request: StripeAccountLinkRequest,
+    request: Request,
+    payload: StripeAccountLinkRequest,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -231,8 +248,8 @@ async def create_connect_account_link(
 
         url = stripe_service.create_account_link(
             account_id=current_user.stripe_account_id,
-            return_url=request.return_url,
-            refresh_url=request.refresh_url,
+            return_url=payload.return_url,
+            refresh_url=payload.refresh_url,
         )
     except Exception as e:
         logger.error(f"Connect アカウントリンク作成エラー: {e}")

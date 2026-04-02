@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { platformShadow } from "@/src/styles/platformShadow";
 import {
   View,
   Text,
@@ -18,6 +19,7 @@ import {
   QuestionSetWithQuestions,
   LanguageFilter,
   resolvedContentLanguage,
+  contentLanguageDisplayLabel,
 } from "../../../src/api/questionSets";
 import {
   getAvailableTextbooks,
@@ -250,6 +252,9 @@ export default function MyQuestionSetsScreen() {
       )}
       <View style={styles.cardFooter}>
         <Text style={styles.cardCategory}>{item.category}</Text>
+        <Text style={styles.cardLang}>
+          {contentLanguageDisplayLabel(item.content_language, t)}
+        </Text>
         <Text style={styles.cardQuestions}>
           {t(`${item.total_questions} questions`, `${item.total_questions} 問`)}
         </Text>
@@ -284,6 +289,9 @@ export default function MyQuestionSetsScreen() {
         )}
         <View style={styles.cardFooter}>
           <Text style={styles.cardCategory}>{item.category}</Text>
+          <Text style={styles.cardLang}>
+            {contentLanguageDisplayLabel(item.content_language, t)}
+          </Text>
           <Text style={styles.cardQuestions}>
             {t(`${item.total_questions} questions`, `${item.total_questions} 問`)}
           </Text>
@@ -328,9 +336,7 @@ export default function MyQuestionSetsScreen() {
       >
         {item.type === "markdown" ? "📄 Markdown" : "📕 PDF"}
         {" · "}
-        {item.language === "en"
-          ? "English"
-          : t("Japanese", "日本語")}
+        {contentLanguageDisplayLabel(item.language, t)}
       </Text>
     </View>
   );
@@ -542,10 +548,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 20,
     marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
+    ...platformShadow({
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+    }),
     elevation: 5,
   },
   premiumBannerTitle: {
@@ -599,10 +607,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...platformShadow({
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+    }),
     elevation: 3,
   },
   cardHeader: {
@@ -679,6 +689,11 @@ const styles = StyleSheet.create({
     color: "#007AFF",
     fontWeight: "500",
   },
+  cardLang: {
+    fontSize: 13,
+    color: "#5856D6",
+    fontWeight: "600",
+  },
   cardQuestions: {
     fontSize: 14,
     color: "#666",
@@ -694,10 +709,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...platformShadow({
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+    }),
     elevation: 3,
   },
   textbookCardHeader: {
@@ -744,10 +761,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#007AFF",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    ...platformShadow({
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+    }),
     elevation: 6,
   },
   fabText: {

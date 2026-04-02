@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { platformShadow } from "@/src/styles/platformShadow";
 import {
   View,
   Text,
@@ -269,10 +270,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     padding: 24,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...platformShadow({
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+    }),
     elevation: 3,
     alignItems: 'center',
   },
@@ -357,10 +360,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     padding: 20,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...platformShadow({
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+    }),
     elevation: 3,
   },
   sectionTitle: {

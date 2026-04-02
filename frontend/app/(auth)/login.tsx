@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef } from "react";
+import { platformShadow } from "@/src/styles/platformShadow";
 import {
   View,
   Text,
@@ -257,10 +258,12 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: "#fff",
     borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    ...platformShadow({
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+    }),
     elevation: 4,
     alignItems: "center",
   },
@@ -300,10 +303,12 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     paddingHorizontal: 24,
     width: "100%",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
+    ...platformShadow({
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.06,
+      shadowRadius: 3,
+    }),
     elevation: 2,
   },
   buttonDisabled: {

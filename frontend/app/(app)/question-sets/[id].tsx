@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { platformShadow } from "@/src/styles/platformShadow";
 import {
   View,
   Text,
@@ -17,7 +18,11 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { questionSetsApi, QuestionSet } from "../../../src/api/questionSets";
+import {
+  questionSetsApi,
+  QuestionSet,
+  contentLanguageDisplayLabel,
+} from "../../../src/api/questionSets";
 import {
   questionsApi,
   Question,
@@ -939,6 +944,9 @@ question_text,correct_answer,category,difficulty`;
         </View>
         <View style={styles.metadata}>
           <Text style={styles.category}>{questionSet.category}</Text>
+          <Text style={styles.langMeta}>
+            {contentLanguageDisplayLabel(questionSet.content_language, t)}
+          </Text>
           {questionSet.is_published && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>Published</Text>
@@ -1728,6 +1736,11 @@ const styles = StyleSheet.create({
     color: "#007AFF",
     fontWeight: "500",
   },
+  langMeta: {
+    fontSize: 14,
+    color: "#5856D6",
+    fontWeight: "600",
+  },
   badge: {
     backgroundColor: "#34C759",
     borderRadius: 12,
@@ -2056,10 +2069,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 16,
     alignItems: "center",
-    shadowColor: "#FF9500",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    ...platformShadow({
+      shadowColor: "#FF9500",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+    }),
     elevation: 4,
   },
   purchaseButtonText: {

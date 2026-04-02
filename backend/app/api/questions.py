@@ -12,7 +12,43 @@ import io
 
 from ..core.database import get_db
 from ..core.auth import get_current_active_user
+from ..core.config import settings
 from ..models import User, Question, QuestionSet, Answer
+
+_CSV_ALLOWED_MEDIA = frozenset({"text/csv", "application/csv", "text/plain"})
+
+
+def _validate_bulk_csv_metadata(filename: str | None, content_type: str | None) -> None:
+    name = (filename or "").strip()
+    if not name.lower().endswith(".csv"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="アップロードできるのは .csv ファイルのみです。",
+        )
+    ct = (content_type or "").split(";")[0].strip().lower()
+    if ct and ct not in _CSV_ALLOWED_MEDIA:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="許可されていないファイル形式です。CSV をアップロードしてください。",
+        )
+
+
+async def _read_upload_capped(file: UploadFile, max_bytes: int) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    chunk_size = 1024 * 1024
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="ファイルサイズが上限を超えています。",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 router = APIRouter()
 
@@ -467,9 +503,11 @@ async def bulk_upload_questions(
             detail="この問題集に問題を追加する権限がありません"
         )
 
+    _validate_bulk_csv_metadata(file.filename, file.content_type)
+    contents = await _read_upload_capped(file, settings.BULK_CSV_MAX_BYTES)
+
     # CSVファイルを読み込み
     try:
-        contents = await file.read()
         decoded = contents.decode('utf-8')
         csv_reader = csv.DictReader(io.StringIO(decoded))
 

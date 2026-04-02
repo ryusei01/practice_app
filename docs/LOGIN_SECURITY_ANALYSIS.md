@@ -4,7 +4,21 @@
 
 本ドキュメントでは、アプリケーションのログイン機能におけるセキュリティ実装を包括的に分析し、安全性を評価します。
 
-**最終更新日:** 2024 年
+**最終更新日:** 2024 年（※下記「0. 実装の現状」は 2026 年時点で追記）
+
+---
+
+## 0. 実装の現状（Google OAuth 専用・2026 年追記）
+
+本番のログイン経路は **Google OAuth のみ**（`POST /api/v1/auth/google`）。**メール＋パスワードのログイン API は存在しない**。
+
+| 項目 | 現状 |
+|------|------|
+| アカウントロック（DB の `failed_login_attempts` / `locked_until`） | スキーマに列はあるが **OAuth フローでは未使用**（将来パスワード認証を追加する場合の拡張用） |
+| ブルートフォース相当の抑止 | **slowapi** による IP ベースの `10/minute` および `30/hour`、オプションで **Redis** による同一 IP の連続トークン検証失敗後の一時ブロック（`REDIS_URL` 設定時） |
+| プロキシ背後の IP | `TRUST_X_FORWARDED_FOR=true` で `X-Forwarded-For` 先頭をクライアント IP として使用 |
+
+以下のセクション 1.x のうち、**パスワード強度・OTP・アカウントロックのコード例**は歴史的記述または別ブランチを指している可能性があります。OAuth 専用構成では **セクション 0 を正**とする。
 
 ---
 
@@ -113,63 +127,31 @@ user.refresh_token = get_password_hash(refresh_token)
 
 #### ✅ レート制限（Rate Limiting）
 
-**実装:** `backend/app/api/auth.py` - `@limiter.limit("5/minute")`
+**実装:** `backend/app/api/auth.py` の `google_login`（`slowapi`）
 
-**設定:**
+**設定（現行）:**
 
-- **制限:** 1 分間に 5 回まで
+- **制限例:** `10/minute` かつ `30/hour`（同一キーで両方適用）
 - **ライブラリ:** `slowapi`
-- **識別方法:** IP アドレスベース
-
-**評価:** ⭐⭐⭐⭐ (良好)
+- **識別方法:** 既定は接続元 IP。`TRUST_X_FORWARDED_FOR=true` のときは `X-Forwarded-For` 先頭（`backend/app/core/client_ip.py`）
 
 **動作:**
 
-- 制限を超えると`429 Too Many Requests`エラーを返す
-- 1 分後に自動的にリセット
-- IP アドレスごとに独立してカウント
-
-**改善提案:**
-
-- ユーザー ID ベースのレート制限も追加（同一ユーザーへの集中攻撃対策）
-- 失敗回数に応じた動的なレート制限（例: 3 回失敗後は 1 分間に 1 回）
+- 制限超過時は `429 Too Many Requests`
+- **マルチワーカー／複数インスタンス**では in-memory の slowapi だけでは共有されない → 本番スケールでは **Redis** による失敗カウント（`backend/app/core/redis_oauth_guard.py`）を併用可能
 
 ---
 
-#### ✅ アカウントロックアウト
+#### アカウントロックアウト（パスワード認証時の設計メモ）
 
-**実装:** `backend/app/api/auth.py` - ログイン処理内
+**現状:** 本リポジトリのログインは **Google OAuth のみ**のため、DB の `failed_login_attempts` / `locked_until` は **OAuth では更新されない**。
 
-**設定:**
+**将来、メール＋パスワードログインを追加する場合の推奨:**
 
-- **ロック条件:** 連続 5 回のログイン失敗
-- **ロック時間:** 15 分間
-- **カウンター管理:** `failed_login_attempts`フィールド
+- 連続失敗 **7 回**でロック、ロック時間は運用ポリシーに合わせて設定
+- ユーザー列挙を避けるため、失敗時は **汎用エラーメッセージ**を返す
 
-**評価:** ⭐⭐⭐⭐⭐ (最高評価)
-
-**セキュリティ機能:**
-
-1. パスワード検証前にアカウントロック状態をチェック
-2. 失敗回数をカウント
-3. 5 回失敗で自動的にロック
-4. ログイン成功時にカウンターとロックをリセット
-5. 残り試行回数をユーザーに通知
-
-```python
-# アカウントロックチェック
-if user.locked_until and user.locked_until > datetime.utcnow():
-    remaining_minutes = int((user.locked_until - datetime.utcnow()).total_seconds() / 60)
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail=f"アカウントがロックされています。{remaining_minutes}分後に再試行してください"
-    )
-```
-
-**注意点:**
-
-- タイミング攻撃のリスク: ユーザーが存在するかどうかで応答時間が異なる可能性
-- 現在の実装では、ユーザーが存在しない場合とパスワードが間違っている場合で同じエラーメッセージを返しているため、このリスクは軽減されている
+**OAuth 経路での「失敗」相当:** 無効トークン・aud 不一致などは **同一 IP の連続失敗**として Redis でカウントし、閾値超過で一時拒否（アカウント単位のロックとは別物）。
 
 ---
 

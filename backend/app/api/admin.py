@@ -284,6 +284,7 @@ def _build_application_response(user: User, db: Session) -> SellerApplicationRes
             "title": qs.title,
             "category": qs.category,
             "total_questions": qs.total_questions or 0,
+            "content_language": getattr(qs, "content_language", None) or "ja",
             "created_at": qs.created_at.isoformat() if qs.created_at else None,
         }
         for qs in pending_qs

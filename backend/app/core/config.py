@@ -37,6 +37,16 @@ class Settings(BaseSettings):
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""
+    # リバースプロキシ（Cloudflare / Render 等）背後でクライアント IP を X-Forwarded-For から取る
+    TRUST_X_FORWARDED_FOR: bool = False
+    # OAuth 連続失敗の一時拒否（Redis）。未設定時は無効
+    REDIS_URL: Optional[str] = None
+    OAUTH_FAIL_THRESHOLD: int = 7
+    OAUTH_FAIL_WINDOW_SEC: int = 900  # 15 分
+    OAUTH_BLOCK_DURATION_SEC: int = 900
+
+    # 問題 CSV 一括アップロード上限（バイト）
+    BULK_CSV_MAX_BYTES: int = 5_242_880  # 5 MiB
 
     # Email / SMTP
     SMTP_HOST: str = "smtp.gmail.com"
@@ -47,6 +57,8 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: str = "*"  # カンマ区切りで複数ドメイン指定可能
+    # True のとき、CORS_ORIGINS の列挙に加えて本番ドメインを正規表現で許可（列挙漏れ対策）
+    CORS_ALLOW_PRODUCT_ORIGIN_REGEX: bool = True
 
     # ML機能フラグ (sentence-transformers 等を使う機能。本番では False に設定)
     ENABLE_ML: bool = True

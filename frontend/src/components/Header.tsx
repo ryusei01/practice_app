@@ -1,4 +1,5 @@
 import React, { ReactNode } from "react";
+import { platformShadow } from "@/src/styles/platformShadow";
 import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from "react-native";
 import { useRouter, usePathname } from "expo-router";
 import { useAuth } from "../contexts/AuthContext";
@@ -100,10 +101,12 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 20,
     paddingTop: 10, // ステータスバー分のスペース
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...platformShadow({
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+    }),
     elevation: 3,
   },
   headerContent: {

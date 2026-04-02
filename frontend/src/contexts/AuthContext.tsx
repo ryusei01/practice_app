@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import { authApi, AuthResponse } from '../api/auth';
 import { tokenStorage } from '../utils/secureStorage';
@@ -62,21 +63,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await tokenStorage.clearAll();
       setUser(null);
 
-      try {
-        const currentPath = window.location.pathname;
-        const isPublicPath =
-          currentPath === '/' ||
-          currentPath.includes('login') ||
-          currentPath === '/question-sets' ||
-          currentPath === '/trial-question-sets' ||
-          currentPath.startsWith('/set/') ||
-          currentPath.startsWith('/textbook/');
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        try {
+          const currentPath = window.location.pathname;
+          const isPublicPath =
+            currentPath === '/' ||
+            currentPath.includes('login') ||
+            currentPath === '/question-sets' ||
+            currentPath === '/trial-question-sets' ||
+            currentPath.startsWith('/set/') ||
+            currentPath.startsWith('/textbook/');
 
-        if (!isPublicPath) {
-          router.replace('/(auth)/login');
+          if (!isPublicPath) {
+            router.replace('/(auth)/login');
+          }
+        } catch (navError) {
+          console.error('Navigation failed:', navError);
         }
-      } catch (navError) {
-        console.error('Navigation failed:', navError);
       }
     } finally {
       setIsLoading(false);

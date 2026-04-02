@@ -16,6 +16,8 @@ import uuid
 from ..core.database import get_db
 from ..core.auth import get_current_active_user
 from ..core.config import settings
+from ..core.limiter import limiter
+from ..core.rate_limit_keys import payment_user_or_ip_key
 from ..models import User, Purchase, QuestionSet
 from ..models.processed_checkout import ProcessedCheckoutSession
 
@@ -53,7 +55,10 @@ async def get_plan_display():
 
 
 @router.post("/create-checkout", response_model=CreateCheckoutResponse)
+@limiter.limit("20/hour", key_func=payment_user_or_ip_key)
+@limiter.limit("5/minute", key_func=payment_user_or_ip_key)
 async def create_premium_checkout(
+    request: Request,
     success_url: str,
     cancel_url: str,
     current_user: User = Depends(get_current_active_user),

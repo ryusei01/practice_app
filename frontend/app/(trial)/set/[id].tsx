@@ -37,6 +37,7 @@ import {
 import Header from "../../../src/components/Header";
 import Modal from "../../../src/components/Modal";
 import { commonStyles } from "../../../src/styles/questionSetDetailStyles";
+import { contentLanguageDisplayLabel } from "../../../src/api/questionSets";
 import aiService from "../../../src/services/aiService";
 import { srsService, SRSMap } from "../../../src/services/srsService";
 
@@ -717,10 +718,17 @@ export default function TrialSetDetailScreen() {
               </Text>
             )}
           </Text>
-          <View style={styles.trialBadge} nativeID="trial-badge">
-            <Text style={styles.trialBadgeText} nativeID="trial-badge-text">
-              {t("Trial Mode", "お試しモード")}
-            </Text>
+          <View style={styles.titleBadges} nativeID="trial-title-badges">
+            <View style={styles.langBadge} nativeID="trial-lang-badge">
+              <Text style={styles.langBadgeText} nativeID="trial-lang-badge-text">
+                {contentLanguageDisplayLabel(questionSet.content_language, t)}
+              </Text>
+            </View>
+            <View style={styles.trialBadge} nativeID="trial-badge">
+              <Text style={styles.trialBadgeText} nativeID="trial-badge-text">
+                {t("Trial Mode", "お試しモード")}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -1320,13 +1328,30 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     flexWrap: "wrap",
   },
+  titleBadges: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    alignItems: "center",
+    alignSelf: "flex-start",
+    marginTop: 8,
+  },
+  langBadge: {
+    backgroundColor: "#5856D6",
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  langBadgeText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
   trialBadge: {
     backgroundColor: "#34C759",
     borderRadius: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    alignSelf: "flex-start",
-    marginTop: 8,
   },
   trialBadgeText: {
     color: "#fff",

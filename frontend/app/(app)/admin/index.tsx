@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { platformShadow } from "@/src/styles/platformShadow";
 import {
   View,
   Text,
@@ -200,7 +201,8 @@ export default function AdminScreen() {
                         <View key={qs.id} style={styles.qsItem}>
                           <Text style={styles.qsTitle}>{qs.title}</Text>
                           <Text style={styles.qsMeta}>
-                            {qs.category} · {qs.total_questions}問
+                            {qs.category} · {qs.total_questions}問 ·{' '}
+                            {qs.content_language === 'en' ? 'English' : '日本語'}
                           </Text>
                         </View>
                       ))}
@@ -377,10 +379,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    ...platformShadow({
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.06,
+      shadowRadius: 4,
+    }),
     elevation: 2,
   },
   cardHeader: {

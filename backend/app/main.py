@@ -32,16 +32,35 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # 環境変数 CORS_ORIGINS から許可するオリジンを取得
 # カンマ区切りで複数指定可能: "https://example.com,https://app.example.com"
 # 開発環境では "*" を指定してすべて許可
-cors_origins_str = settings.CORS_ORIGINS
+# 本番で CORS_ORIGINS にカスタムドメインを書き忘れるとプリフライトが ACAO なしで失敗するため、
+# 当プロダクトの公開ドメインは allow_origin_regex でも許可する（CORS_ALLOW_PRODUCT_ORIGIN_REGEX=False で無効化可）
+cors_origins_str = settings.CORS_ORIGINS.strip()
 if cors_origins_str == "*":
     origins = ["*"]
 else:
-    # カンマ区切りの文字列をリストに変換
-    origins = [origin.strip() for origin in cors_origins_str.split(",")]
+    origins = [
+        o.strip().rstrip("/")
+        for o in cors_origins_str.split(",")
+        if o.strip()
+    ]
+
+# ai-practice-book.com / Cloudflare Pages（*.aipracticebook.pages.dev）
+CORS_PRODUCT_ORIGIN_REGEX = (
+    r"^https://([a-z0-9-]+\.)*ai-practice-book\.com$"
+    r"|^https://([a-z0-9-]+\.)*aipracticebook\.pages\.dev$"
+)
+
+cors_origin_regex = None
+if (
+    settings.CORS_ALLOW_PRODUCT_ORIGIN_REGEX
+    and cors_origins_str != "*"
+):
+    cors_origin_regex = CORS_PRODUCT_ORIGIN_REGEX
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=cors_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

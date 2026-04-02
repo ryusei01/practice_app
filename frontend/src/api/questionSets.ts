@@ -11,6 +11,16 @@ export function resolvedContentLanguage(
   return v === 'en' ? 'en' : 'ja';
 }
 
+/** 一覧・詳細での表示用（英語コンテンツは常に "English"） */
+export function contentLanguageDisplayLabel(
+  lang: ContentLanguage | undefined | null,
+  t: (en: string, ja: string) => string
+): string {
+  return resolvedContentLanguage(lang) === 'en'
+    ? 'English'
+    : t('Japanese', '日本語');
+}
+
 export interface QuestionSet {
   id: string;
   title: string;

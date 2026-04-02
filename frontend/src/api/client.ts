@@ -10,6 +10,7 @@ const API_URL =
 
 const apiClient = axios.create({
   baseURL: API_URL,
+  timeout: 15_000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -93,6 +94,7 @@ apiClient.interceptors.response.use(
           `${API_URL}/auth/refresh`,
           { refresh_token: refreshToken },
           {
+            timeout: 15_000,
             headers: {
               "Content-Type": "application/json",
             },

@@ -1,18 +1,18 @@
 {
   "prompt_engineering_quiz.csv": {
-    "title": "Prompt Engineering Quiz (EN)",
-    "description": "Prompt Engineering Quiz (EN)"
+    "title": "Prompt Engineering Quiz",
+    "description": "Prompt Engineering Quiz"
   },
   "aws_ml_specialty_quiz_en.csv": {
-    "title": "AWS ML Specialty Quiz (EN)",
-    "description": "AWS ML Specialty Quiz (EN)"
+    "title": "AWS ML Specialty Quiz",
+    "description": "AWS ML Specialty Quiz"
   },
   "AWS Certified Machine Learning問題集.csv": {
     "title": "AWS Certified Machine Learning 問題集",
     "description": "AWS Certified Machine Learning 問題集"
   },
   "tensorflow_pytorch_quiz.csv": {
-    "title": "TensorFlow / PyTorch クイズ",
-    "description": "TensorFlow / PyTorch クイズ"
+    "title": "TensorFlow / PyTorch Quiz",
+    "description": "TensorFlow / PyTorch Quiz"
   }
 }

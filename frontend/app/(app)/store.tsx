@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { platformShadow } from "@/src/styles/platformShadow";
 import {
   View,
   Text,
@@ -10,7 +11,11 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { questionSetsApi, QuestionSet } from "../../src/api/questionSets";
+import {
+  questionSetsApi,
+  QuestionSet,
+  contentLanguageDisplayLabel,
+} from "../../src/api/questionSets";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useLanguage } from "../../src/contexts/LanguageContext";
 import AdBanner from "../../src/components/AdBanner";
@@ -190,6 +195,9 @@ export default function StoreScreen() {
 
               <View style={styles.cardFooter}>
                 <Text style={styles.cardCategory}>{item.category}</Text>
+                <Text style={styles.cardLang}>
+                  {contentLanguageDisplayLabel(item.content_language, t)}
+                </Text>
                 <Text style={styles.cardQuestions}>
                   {t(
                     `${item.total_questions} questions`,
@@ -285,10 +293,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 12,
     marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...platformShadow({
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+    }),
     elevation: 3,
   },
   cardHeader: {
@@ -342,6 +352,11 @@ const styles = StyleSheet.create({
     color: "#007AFF",
     fontWeight: "500",
   },
+  cardLang: {
+    fontSize: 13,
+    color: "#5856D6",
+    fontWeight: "600",
+  },
   cardQuestions: {
     fontSize: 13,
     color: "#666",
@@ -386,10 +401,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#007AFF",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    ...platformShadow({
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+    }),
     elevation: 6,
   },
   backFabText: {
