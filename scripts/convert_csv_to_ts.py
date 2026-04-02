@@ -94,6 +94,30 @@ def get_bundle_labels(
     return t, t
 
 
+def infer_content_language(
+    csv_filename: str, title: str, meta: dict[str, dict[str, str]]
+) -> str:
+    """bundle_metadata.json の content_language（ja|en）があれば優先。なければファイル名・タイトルから推定。"""
+    entry = meta.get(csv_filename)
+    if isinstance(entry, dict):
+        lang = (entry.get("content_language") or "").strip().lower()
+        if lang in ("ja", "en"):
+            return lang
+    lower = csv_filename.lower()
+    stem = Path(csv_filename).stem.lower()
+    if lower.endswith("_en.csv") or "english" in lower:
+        return "en"
+    if stem in (
+        "ai_practice",
+        "deep_learning_engineering_questions",
+        "prompt_engineering_quiz",
+    ):
+        return "en"
+    if "(en)" in title.lower():
+        return "en"
+    return "ja"
+
+
 def validate_question_csv(
     csv_path: Path, *, strict: bool
 ) -> tuple[bool, list[str], list[str]]:
@@ -180,6 +204,7 @@ def render_auto_generated_block(rows: list[dict]) -> str:
             f'        title: "{ts_escape(r["title"])}",\n'
             f'        description: "{ts_escape(r["description"])}",\n'
             f'        csvContent: {r["var_name"]},\n'
+            f'        content_language: "{r["content_language"]}",\n'
             "      },"
         )
 
@@ -227,6 +252,7 @@ def collect_csv_tasks(meta: dict[str, dict[str, str]]) -> list[dict]:
         var_core = to_pascal_var_name(sanitized)
         var_name = f"{var_core}_CSV"
         title, description = get_bundle_labels(fname, stem, meta)
+        content_language = infer_content_language(fname, title, meta)
         rows.append(
             {
                 "path": path,
@@ -235,6 +261,7 @@ def collect_csv_tasks(meta: dict[str, dict[str, str]]) -> list[dict]:
                 "var_name": var_name,
                 "title": title,
                 "description": description,
+                "content_language": content_language,
             }
         )
     return rows

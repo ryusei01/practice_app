@@ -40,6 +40,19 @@ jobs:
             exit 1
           fi
 
+      # ビルド時に EXPO_PUBLIC_API_URL が JS に埋め込まれる。未設定・古い Railway URLのままだと CORS / 接続エラーになる。
+      - name: Verify EXPO_PUBLIC_API_URL
+        env:
+          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
+        run: |
+          if [ -z "$EXPO_PUBLIC_API_URL" ]; then
+            echo "::error::EXPO_PUBLIC_API_URL が未設定です。バックエンドのベース URL（例: Cloud Run なら https://quiz-marketplace-api-xxxxx.asia-northeast1.run.app/api/v1）を GitHub の Actions シークレットに設定してください。"
+            exit 1
+          fi
+          if echo "$EXPO_PUBLIC_API_URL" | grep -qi 'railway\.app'; then
+            echo "::warning::EXPO_PUBLIC_API_URL が Railway を指しています。GCP（Cloud Run）運用なら、シークレットを ...run.app/api/v1 に更新し、フロントを再デプロイしてください。バックエンド側の CORS_ORIGINS に https://ai-practice-book.com が含まれることも確認してください。"
+          fi
+
       - name: Build
         working-directory: frontend
         env:

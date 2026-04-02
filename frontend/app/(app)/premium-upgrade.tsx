@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,15 +16,44 @@ import { answersApi, LocalAnswerData, LocalQuestionSetData } from '../../src/api
 import { subscriptionsApi } from '../../src/api/subscriptions';
 
 const BASE_WEB_URL = process.env.EXPO_PUBLIC_WEB_URL || 'https://ai-practice-book.com';
-const PLAN_PRICE_JPY = 550;
-const PLAN_CREDIT_JPY = 200;
+
+const FALLBACK_PLAN_DISPLAY = {
+  price_jpy: 550,
+  credit_jpy: 200,
+  validity_days: 365,
+};
 
 export default function PremiumUpgradeScreen() {
   const [isMigrating, setIsMigrating] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [migrationComplete, setMigrationComplete] = useState(false);
+  const [planDisplay, setPlanDisplay] = useState(FALLBACK_PLAN_DISPLAY);
+  const [planLoading, setPlanLoading] = useState(true);
   const { user } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const d = await subscriptionsApi.getPlanDisplay();
+        if (!cancelled) {
+          setPlanDisplay({
+            price_jpy: d.price_jpy,
+            credit_jpy: d.credit_jpy,
+            validity_days: d.validity_days,
+          });
+        }
+      } catch {
+        if (!cancelled) setPlanDisplay(FALLBACK_PLAN_DISPLAY);
+      } finally {
+        if (!cancelled) setPlanLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleUpgradeToPremium = async () => {
     if (!user) {
@@ -141,16 +170,27 @@ export default function PremiumUpgradeScreen() {
       <View style={styles.content}>
         <Text style={styles.title}>プレミアムプラン</Text>
 
-        {/* 価格カード */}
+        {/* 価格カード（表示値は GET /subscriptions/plan-display） */}
         <View style={styles.priceCard}>
-          <Text style={styles.priceLabel}>月額</Text>
-          <Text style={styles.priceValue}>¥{PLAN_PRICE_JPY.toLocaleString()}</Text>
-          <Text style={styles.priceNote}>（税込）</Text>
-          <View style={styles.creditBadge}>
-            <Text style={styles.creditBadgeText}>
-              ¥{PLAN_CREDIT_JPY} クレジット付与
-            </Text>
-          </View>
+          {planLoading ? (
+            <ActivityIndicator color="#fff" size="large" />
+          ) : (
+            <>
+              <Text style={styles.priceLabel}>1回のお支払い</Text>
+              <Text style={styles.priceValue}>
+                ¥{planDisplay.price_jpy.toLocaleString()}
+              </Text>
+              <Text style={styles.priceNote}>税込・サブスクではありません</Text>
+              <Text style={styles.validityNote}>
+                購入日から {planDisplay.validity_days} 日間プレミアム有効
+              </Text>
+              <View style={styles.creditBadge}>
+                <Text style={styles.creditBadgeText}>
+                  ¥{planDisplay.credit_jpy.toLocaleString()} クレジット付与
+                </Text>
+              </View>
+            </>
+          )}
         </View>
 
         {/* 特典一覧 */}
@@ -162,9 +202,12 @@ export default function PremiumUpgradeScreen() {
         </View>
 
         <View style={styles.featureCard}>
-          <Text style={styles.featureTitle}>¥{PLAN_CREDIT_JPY} クレジット付与</Text>
+          <Text style={styles.featureTitle}>
+            ¥{planDisplay.credit_jpy.toLocaleString()} クレジット付与
+          </Text>
           <Text style={styles.featureDescription}>
-            購入時に¥{PLAN_CREDIT_JPY}分のアプリ内クレジットをプレゼント。問題集の購入にお使いいただけます
+            購入時に¥{planDisplay.credit_jpy.toLocaleString()}
+            分のアプリ内クレジットをプレゼント。問題集の購入にお使いいただけます
           </Text>
         </View>
 
@@ -184,15 +227,18 @@ export default function PremiumUpgradeScreen() {
 
         {!user?.is_premium ? (
           <TouchableOpacity
-            style={[styles.upgradeButton, isCheckingOut && styles.buttonDisabled]}
+            style={[
+              styles.upgradeButton,
+              (isCheckingOut || planLoading) && styles.buttonDisabled,
+            ]}
             onPress={handleUpgradeToPremium}
-            disabled={isCheckingOut}
+            disabled={isCheckingOut || planLoading}
           >
             {isCheckingOut ? (
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.upgradeButtonText}>
-                ¥{PLAN_PRICE_JPY} でプレミアムにアップグレード
+                ¥{planDisplay.price_jpy.toLocaleString()} でプレミアムにアップグレード
               </Text>
             )}
           </TouchableOpacity>
@@ -276,7 +322,15 @@ const styles = StyleSheet.create({
   priceNote: {
     color: 'rgba(255,255,255,0.8)',
     fontSize: 13,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  validityNote: {
+    color: 'rgba(255,255,255,0.95)',
+    fontSize: 14,
+    fontWeight: '600',
     marginBottom: 12,
+    textAlign: 'center',
   },
   creditBadge: {
     backgroundColor: 'rgba(255,255,255,0.25)',

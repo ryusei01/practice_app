@@ -2,7 +2,7 @@
 データベースマイグレーション実行スクリプト
 """
 from app.core.database import engine, Base
-from app.models import User, QuestionSet, Question, Answer
+import app.models  # noqa: F401 — 全テーブルをメタデータに登録
 
 def run_migration():
     """

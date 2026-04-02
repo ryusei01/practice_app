@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,8 @@ import {
   questionSetsApi,
   QuestionSet,
   QuestionSetWithQuestions,
+  LanguageFilter,
+  resolvedContentLanguage,
 } from "../../../src/api/questionSets";
 import {
   getAvailableTextbooks,
@@ -35,6 +37,7 @@ export default function MyQuestionSetsScreen() {
   const [availableTextbooks, setAvailableTextbooks] = useState<Textbook[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [languageFilter, setLanguageFilter] = useState<LanguageFilter>("all");
   const router = useRouter();
   const { user, isLoading: isAuthLoading } = useAuth();
   const { t } = useLanguage();
@@ -158,6 +161,59 @@ export default function MyQuestionSetsScreen() {
     router.push("/(app)/premium-upgrade");
   };
 
+  const filteredMyQuestionSets = useMemo(
+    () =>
+      myQuestionSets.filter(
+        (q) =>
+          languageFilter === "all" ||
+          resolvedContentLanguage(q.content_language) === languageFilter
+      ),
+    [myQuestionSets, languageFilter]
+  );
+
+  const filteredPurchasedQuestionSets = useMemo(
+    () =>
+      purchasedQuestionSets.filter(
+        (q) =>
+          languageFilter === "all" ||
+          resolvedContentLanguage(q.content_language) === languageFilter
+      ),
+    [purchasedQuestionSets, languageFilter]
+  );
+
+  const filteredTextbooks = useMemo(
+    () =>
+      availableTextbooks.filter(
+        (tb) =>
+          languageFilter === "all" || tb.language === languageFilter
+      ),
+    [availableTextbooks, languageFilter]
+  );
+
+  const renderLangFilterChip = (
+    value: LanguageFilter,
+    label: string,
+    testId: string
+  ) => (
+    <TouchableOpacity
+      style={[
+        styles.filterChip,
+        languageFilter === value && styles.filterChipActive,
+      ]}
+      onPress={() => setLanguageFilter(value)}
+      testID={testId}
+    >
+      <Text
+        style={[
+          styles.filterChipText,
+          languageFilter === value && styles.filterChipTextActive,
+        ]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+
   const renderMyQuestionSetItem = ({ item }: { item: QuestionSet }) => (
     <TouchableOpacity
       style={[
@@ -271,6 +327,10 @@ export default function MyQuestionSetsScreen() {
         style={[styles.textbookCardType, { fontSize: isSmallScreen ? 11 : 14 }]}
       >
         {item.type === "markdown" ? "📄 Markdown" : "📕 PDF"}
+        {" · "}
+        {item.language === "en"
+          ? "English"
+          : t("Japanese", "日本語")}
       </Text>
     </View>
   );
@@ -352,6 +412,20 @@ export default function MyQuestionSetsScreen() {
 
         <AdBanner />
 
+        <View style={styles.filterRow} nativeID="my-qs-lang-filter">
+          {renderLangFilterChip(
+            "all",
+            t("All languages", "すべて"),
+            "my-qs-filter-all"
+          )}
+          {renderLangFilterChip(
+            "ja",
+            t("Japanese", "日本語"),
+            "my-qs-filter-ja"
+          )}
+          {renderLangFilterChip("en", "English", "my-qs-filter-en")}
+        </View>
+
         {/* My Question Sets Section */}
         <View style={styles.section} nativeID="my-qs-section">
           <Text style={[styles.sectionTitle, { fontSize: isSmallScreen ? 18 : 20 }]}>
@@ -369,8 +443,17 @@ export default function MyQuestionSetsScreen() {
                 )}
               </Text>
             </View>
+          ) : filteredMyQuestionSets.length === 0 ? (
+            <View style={styles.emptyContainer} nativeID="my-qs-filter-empty">
+              <Text style={styles.emptyText}>
+                {t(
+                  "No question sets match this language filter",
+                  "この言語に一致する問題集がありません"
+                )}
+              </Text>
+            </View>
           ) : (
-            myQuestionSets.map((item) => (
+            filteredMyQuestionSets.map((item) => (
               <View key={item.id}>{renderMyQuestionSetItem({ item })}</View>
             ))
           )}
@@ -382,9 +465,20 @@ export default function MyQuestionSetsScreen() {
             <Text style={styles.sectionTitle}>
               {t("Purchased Question Sets", "購入済み問題集")}
             </Text>
-            {purchasedQuestionSets.map((item) => (
-              <View key={item.id}>{renderPurchasedItem({ item })}</View>
-            ))}
+            {filteredPurchasedQuestionSets.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>
+                  {t(
+                    "No purchased sets match this language filter",
+                    "この言語に一致する購入済み問題集がありません"
+                  )}
+                </Text>
+              </View>
+            ) : (
+              filteredPurchasedQuestionSets.map((item) => (
+                <View key={item.id}>{renderPurchasedItem({ item })}</View>
+              ))
+            )}
           </View>
         )}
 
@@ -399,8 +493,17 @@ export default function MyQuestionSetsScreen() {
                 {t("No textbooks available", "利用可能な教科書がありません")}
               </Text>
             </View>
+          ) : filteredTextbooks.length === 0 ? (
+            <View style={styles.emptyContainer} nativeID="textbooks-filter-empty">
+              <Text style={styles.emptyText}>
+                {t(
+                  "No textbooks match this language filter",
+                  "この言語に一致する教科書がありません"
+                )}
+              </Text>
+            </View>
           ) : (
-            availableTextbooks.map((item) => (
+            filteredTextbooks.map((item) => (
               <View key={item.path}>{renderTextbookItem({ item })}</View>
             ))
           )}
@@ -455,6 +558,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#fff",
     opacity: 0.9,
+  },
+  filterRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 16,
+    gap: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: "#007AFF",
+    backgroundColor: "transparent",
+  },
+  filterChipActive: {
+    backgroundColor: "#007AFF",
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#007AFF",
+  },
+  filterChipTextActive: {
+    color: "#fff",
   },
   section: {
     marginBottom: 24,

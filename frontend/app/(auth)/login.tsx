@@ -236,7 +236,10 @@ export default function LoginScreen() {
           >
             {t("Privacy Policy", "プライバシーポリシー")}
           </Text>
-          {t(".", "に同意したものとみなします。")}
+          {t(
+            ". You agree not to post content that infringes third-party copyrights, as further described in the Terms.",
+            "に同意したものとみなします。第三者の著作権を侵害するコンテンツの投稿は禁止です（詳細は利用規約）。"
+          )}
         </Text>
       </View>
     </View>

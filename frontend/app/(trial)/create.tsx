@@ -13,6 +13,7 @@ import {
 import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
 import { useLanguage } from "../../src/contexts/LanguageContext";
+import { ContentLanguage } from "../../src/api/questionSets";
 import {
   localStorageService,
   LocalQuestion,
@@ -46,7 +47,10 @@ export default function TrialCreateScreen() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [showCsvPromptModal, setShowCsvPromptModal] = useState(false);
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const [contentLanguage, setContentLanguage] = useState<ContentLanguage>(
+    () => (language === "ja" ? "ja" : "en")
+  );
   const router = useRouter();
 
   const downloadCSVSample = async () => {
@@ -217,6 +221,7 @@ export default function TrialCreateScreen() {
         title,
         description,
         questions: finalQuestions,
+        content_language: contentLanguage,
       });
 
       setSuccessMessage(
@@ -297,6 +302,44 @@ export default function TrialCreateScreen() {
           multiline
           numberOfLines={3}
         />
+
+        <Text style={styles.langLabel}>
+          {t("Content language", "問題の言語")}
+        </Text>
+        <View style={styles.langRow}>
+          <TouchableOpacity
+            style={[
+              styles.langChip,
+              contentLanguage === "ja" && styles.langChipActive,
+            ]}
+            onPress={() => setContentLanguage("ja")}
+          >
+            <Text
+              style={[
+                styles.langChipText,
+                contentLanguage === "ja" && styles.langChipTextActive,
+              ]}
+            >
+              {t("Japanese", "日本語")}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.langChip,
+              contentLanguage === "en" && styles.langChipActive,
+            ]}
+            onPress={() => setContentLanguage("en")}
+          >
+            <Text
+              style={[
+                styles.langChipText,
+                contentLanguage === "en" && styles.langChipTextActive,
+              ]}
+            >
+              English
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {/* タブ切り替え */}
         <View style={styles.tabRow}>
@@ -575,6 +618,37 @@ const styles = StyleSheet.create({
   textArea: {
     height: 80,
     textAlignVertical: "top",
+  },
+  langLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+  },
+  langRow: {
+    flexDirection: "row",
+    marginBottom: 16,
+  },
+  langChip: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    marginRight: 12,
+  },
+  langChipActive: {
+    backgroundColor: "#007AFF",
+    borderColor: "#007AFF",
+  },
+  langChipText: {
+    fontSize: 15,
+    color: "#333",
+    fontWeight: "600",
+  },
+  langChipTextActive: {
+    color: "#fff",
   },
   questionCard: {
     backgroundColor: "#fff",

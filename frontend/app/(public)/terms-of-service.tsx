@@ -188,6 +188,30 @@ export default function TermsOfServiceScreen() {
               "ユーザーは自身が作成したコンテンツの所有権を保持します。コンテンツを本サービスに投稿することで、本サービスの運営目的のみに限り、コンテンツを表示・配信するための非独占的・全世界的・無償のライセンスを当社に付与するものとします。"
             )}
           </Text>
+          <Text style={[styles.body, { marginTop: 10 }]}>
+            {t(
+              "You additionally agree to the following regarding user-posted question sets and similar content:",
+              "問題集などユーザー投稿コンテンツについて、以下の点にあわせて同意するものとします。"
+            )}
+          </Text>
+          <BulletItem
+            text={t(
+              "Copyright in content you post remains with you as the poster.",
+              "投稿コンテンツの著作権は、投稿者であるあなたに帰属します。"
+            )}
+          />
+          <BulletItem
+            text={t(
+              "You must not post content that infringes third-party copyrights, including wholesale copying of commercial question books, full past-exam reproductions, or unauthorized excerpts from paid courses.",
+              "市販の問題集の丸写し、過去問の全文転載、有料教材からの無断の大量複製など、第三者の著作権を侵害するコンテンツを投稿してはなりません。"
+            )}
+          />
+          <BulletItem
+            text={t(
+              "We may remove violating content or suspend accounts without prior notice where appropriate.",
+              "違反が判明した場合、事前の通知なく当該コンテンツを削除したり、アカウントを停止することがあります。"
+            )}
+          />
         </Section>
 
         <Section title={t("6. Disclaimer of Warranties", "第6条（免責事項）")}>

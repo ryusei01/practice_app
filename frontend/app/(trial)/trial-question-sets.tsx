@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,10 @@ import {
   LocalQuestionSet,
 } from "../../src/services/localStorageService";
 import {
+  LanguageFilter,
+  resolvedContentLanguage,
+} from "../../src/api/questionSets";
+import {
   getAvailableTextbooks,
   Textbook,
 } from "../../src/services/textbookService";
@@ -31,6 +35,7 @@ export default function TrialQuestionSetsScreen() {
   const isLoadingRef = useRef(false); // 重複読み込み防止用
   const [showDefaultSets, setShowDefaultSets] = useState(true);
   const [showTextbooks, setShowTextbooks] = useState(true);
+  const [languageFilter, setLanguageFilter] = useState<LanguageFilter>("all");
   const [dueCounts, setDueCounts] = useState<Record<string, number>>({});
   const { user } = useAuth();
   const { t, language } = useLanguage();
@@ -308,6 +313,27 @@ export default function TrialQuestionSetsScreen() {
     );
   };
 
+  const visibleQuestionSets = useMemo(() => {
+    return questionSets
+      .filter((item) =>
+        showDefaultSets ? true : !item.id.startsWith("default_")
+      )
+      .filter(
+        (item) =>
+          languageFilter === "all" ||
+          resolvedContentLanguage(item.content_language) === languageFilter
+      );
+  }, [questionSets, showDefaultSets, languageFilter]);
+
+  const visibleTextbooks = useMemo(
+    () =>
+      availableTextbooks.filter(
+        (tb) =>
+          languageFilter === "all" || tb.language === languageFilter
+      ),
+    [availableTextbooks, languageFilter]
+  );
+
   const handleTextbookPress = (textbook: Textbook) => {
     const encodedPath = encodeURIComponent(textbook.path);
     router.push(`/(trial)/textbook/${encodedPath}?type=${textbook.type}`);
@@ -324,6 +350,10 @@ export default function TrialQuestionSetsScreen() {
       </View>
       <Text style={styles.textbookCardType}>
         {item.type === "markdown" ? "📄 Markdown" : "📕 PDF"}
+        {" · "}
+        {item.language === "en"
+          ? "English"
+          : t("Japanese", "日本語")}
       </Text>
     </TouchableOpacity>
   );
@@ -401,6 +431,60 @@ export default function TrialQuestionSetsScreen() {
           )}
         </View>
 
+        <View style={styles.filterRow} nativeID="trial-lang-filter-row">
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              languageFilter === "all" && styles.filterChipActive,
+            ]}
+            onPress={() => setLanguageFilter("all")}
+            testID="trial-filter-lang-all"
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                languageFilter === "all" && styles.filterChipTextActive,
+              ]}
+            >
+              {t("All languages", "すべて")}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              languageFilter === "ja" && styles.filterChipActive,
+            ]}
+            onPress={() => setLanguageFilter("ja")}
+            testID="trial-filter-lang-ja"
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                languageFilter === "ja" && styles.filterChipTextActive,
+              ]}
+            >
+              {t("Japanese", "日本語")}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              languageFilter === "en" && styles.filterChipActive,
+            ]}
+            onPress={() => setLanguageFilter("en")}
+            testID="trial-filter-lang-en"
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                languageFilter === "en" && styles.filterChipTextActive,
+              ]}
+            >
+              English
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* ジャンプボタン（教科書セクションへ） */}
         {availableTextbooks.length > 0 && showTextbooks && (
           <View
@@ -443,14 +527,21 @@ export default function TrialQuestionSetsScreen() {
               )}
             </Text>
           </View>
+        ) : visibleQuestionSets.length === 0 && !isLoading ? (
+          <View style={styles.emptyState} nativeID="trial-sets-filter-empty">
+            <Text
+              style={[styles.emptyText, { fontSize: isSmallScreen ? 14 : 16 }]}
+            >
+              {t(
+                "No question sets match this language filter",
+                "この言語に一致する問題セットがありません"
+              )}
+            </Text>
+          </View>
         ) : (
-          questionSets
-            .filter((item) =>
-              showDefaultSets ? true : !item.id.startsWith("default_")
-            )
-            .map((item) => (
-              <View key={item.id}>{renderQuestionSet({ item })}</View>
-            ))
+          visibleQuestionSets.map((item) => (
+            <View key={item.id}>{renderQuestionSet({ item })}</View>
+          ))
         )}
 
         {/* 教科書セクション */}
@@ -470,9 +561,18 @@ export default function TrialQuestionSetsScreen() {
             >
               {t("Available Textbooks", "利用可能な教科書")}
             </Text>
-            {availableTextbooks.map((item) => (
-              <View key={item.path}>{renderTextbookItem({ item })}</View>
-            ))}
+            {visibleTextbooks.length === 0 ? (
+              <Text style={[styles.emptyText, { marginBottom: 12 }]}>
+                {t(
+                  "No textbooks match this language filter",
+                  "この言語に一致する教科書がありません"
+                )}
+              </Text>
+            ) : (
+              visibleTextbooks.map((item) => (
+                <View key={item.path}>{renderTextbookItem({ item })}</View>
+              ))
+            )}
           </View>
         )}
 

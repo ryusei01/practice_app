@@ -1,5 +1,6 @@
 """
-有料プラン（550円）の購入・Webhook 処理
+有料プラン（一回払い Stripe Checkout）の購入・Webhook 処理。
+表示用の価格・日数は settings と GET /plan-display でフロントと共有する。
 """
 import stripe
 import logging
@@ -23,8 +24,6 @@ stripe.api_key = settings.STRIPE_SECRET_KEY
 
 router = APIRouter()
 
-PREMIUM_PLAN_DAYS = 365  # 1年間有効
-
 
 class CreateCheckoutResponse(BaseModel):
     checkout_url: str
@@ -37,6 +36,22 @@ class PremiumStatusResponse(BaseModel):
     account_credit_jpy: int
 
 
+class PlanDisplayResponse(BaseModel):
+    price_jpy: int
+    credit_jpy: int
+    validity_days: int
+
+
+@router.get("/plan-display", response_model=PlanDisplayResponse)
+async def get_plan_display():
+    """プレミアム画面用の表示データ（認証不要）"""
+    return PlanDisplayResponse(
+        price_jpy=settings.PREMIUM_PLAN_PRICE_JPY,
+        credit_jpy=settings.PREMIUM_PLAN_CREDIT_JPY,
+        validity_days=settings.PREMIUM_PLAN_VALIDITY_DAYS,
+    )
+
+
 @router.post("/create-checkout", response_model=CreateCheckoutResponse)
 async def create_premium_checkout(
     success_url: str,
@@ -45,7 +60,7 @@ async def create_premium_checkout(
     db: Session = Depends(get_db),
 ):
     """
-    550円有料プランの Stripe Checkout セッションを作成する。
+    有料プランの Stripe Checkout セッション（一回払い）を作成する。
     フロントエンドはレスポンスの checkout_url へリダイレクトする。
     """
     if not settings.STRIPE_PREMIUM_PRICE_ID or settings.STRIPE_PREMIUM_PRICE_ID == "price_placeholder":
@@ -111,7 +126,7 @@ async def get_premium_status(current_user: User = Depends(get_current_active_use
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     """
     Stripe Webhook: checkout.session.completed を受け取り
-    is_premium を有効化して 200円クレジットを付与する。
+    is_premium を有効化し PREMIUM_PLAN_CREDIT_JPY 分のクレジットを付与する。
     冪等処理のため processed_checkout_sessions で重複チェックする。
     """
     payload = await request.body()
@@ -171,11 +186,12 @@ def _handle_checkout_completed(session: dict, db: Session) -> None:
         logger.error(f"Webhook: ユーザーが見つかりません user_id={user_id}")
         return
 
-    # プレミアム有効化（1年間）
+    # プレミアム有効化（settings で定義した日数倍）
     user.is_premium = True
-    user.premium_expires_at = datetime.utcnow() + timedelta(days=PREMIUM_PLAN_DAYS)
+    user.premium_expires_at = datetime.utcnow() + timedelta(
+        days=settings.PREMIUM_PLAN_VALIDITY_DAYS
+    )
 
-    # 200円クレジット付与
     user.account_credit_jpy = (user.account_credit_jpy or 0) + settings.PREMIUM_PLAN_CREDIT_JPY
 
     # 処理済みとして記録

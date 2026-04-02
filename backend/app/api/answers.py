@@ -343,6 +343,7 @@ class LocalQuestionSetData(BaseModel):
     price: int = 0
     is_published: bool = False
     questions: List[LocalQuestionData] = []
+    content_language: str = "ja"
 
 
 class MigrateLocalDataRequest(BaseModel):
@@ -408,6 +409,9 @@ async def migrate_local_data(
             ).first()
 
             if not existing_qs:
+                lang = qs_data.content_language
+                if lang not in ("ja", "en"):
+                    lang = "ja"
                 new_qs = QuestionSet(
                     id=str(uuid.uuid4()),
                     title=qs_data.title,
@@ -416,7 +420,8 @@ async def migrate_local_data(
                     tags=qs_data.tags,
                     price=qs_data.price,
                     is_published=qs_data.is_published,
-                    creator_id=current_user.id
+                    creator_id=current_user.id,
+                    content_language=lang,
                 )
                 db.add(new_qs)
                 db.flush()  # IDを取得するため

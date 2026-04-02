@@ -11,9 +11,13 @@ import {
   Switch,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { questionSetsApi } from "../../../src/api/questionSets";
+import { questionSetsApi, ContentLanguage } from "../../../src/api/questionSets";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
+import {
+  copyrightApi,
+  CopyrightCheckResult,
+} from "../../../src/api/reports";
 
 export default function EditQuestionSetScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -23,6 +27,10 @@ export default function EditQuestionSetScreen() {
   const [tags, setTags] = useState("");
   const [price, setPrice] = useState("0");
   const [isPublished, setIsPublished] = useState(false);
+  const [creatorId, setCreatorId] = useState<string | null>(null);
+  const [latestCopyright, setLatestCopyright] =
+    useState<CopyrightCheckResult | null>(null);
+  const [contentLanguage, setContentLanguage] = useState<ContentLanguage>("ja");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const router = useRouter();
@@ -31,7 +39,7 @@ export default function EditQuestionSetScreen() {
 
   useEffect(() => {
     loadQuestionSet();
-  }, [id]);
+  }, [id, user?.id]);
 
   const loadQuestionSet = async () => {
     try {
@@ -42,6 +50,21 @@ export default function EditQuestionSetScreen() {
       setTags(questionSet.tags ? questionSet.tags.join(", ") : "");
       setPrice(questionSet.price.toString());
       setIsPublished(questionSet.is_published);
+      setCreatorId(questionSet.creator_id);
+      setContentLanguage(
+        questionSet.content_language === "en" ? "en" : "ja"
+      );
+
+      if (user?.id === questionSet.creator_id) {
+        try {
+          const latest = await copyrightApi.getLatest(id);
+          setLatestCopyright(latest);
+        } catch {
+          setLatestCopyright(null);
+        }
+      } else {
+        setLatestCopyright(null);
+      }
     } catch (error) {
       console.error("Failed to load question set:", error);
       Alert.alert(
@@ -102,6 +125,7 @@ export default function EditQuestionSetScreen() {
         tags: tagsArray.length > 0 ? tagsArray : undefined,
         price: isPublished ? parseInt(price) || 0 : 0,
         is_published: isPublished,
+        content_language: contentLanguage,
       };
 
       console.log("Updating question set data:", questionSetData);
@@ -130,6 +154,26 @@ export default function EditQuestionSetScreen() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const isOwner = Boolean(user?.id && creatorId && user.id === creatorId);
+  const canPublishByCopyright =
+    latestCopyright != null &&
+    (latestCopyright.risk_level === "low" ||
+      latestCopyright.risk_level === "medium");
+
+  const onPublishToggle = (next: boolean) => {
+    if (next && !isPublished && !canPublishByCopyright) {
+      Alert.alert(
+        t("Copyright check required", "著作権チェックが必要です"),
+        t(
+          "Run the copyright check on the question set detail screen. Publishing is allowed only when risk is low or medium.",
+          "問題集詳細画面で著作権チェックを実行してください。リスクが「低」または「中」のときのみ公開できます。"
+        )
+      );
+      return;
+    }
+    setIsPublished(next);
   };
 
   if (isLoading) {
@@ -171,6 +215,46 @@ export default function EditQuestionSetScreen() {
           placeholderTextColor="#999"
           editable={!isSaving}
         />
+
+        <Text style={styles.label}>
+          {t("Content language", "問題の言語")}
+        </Text>
+        <View style={styles.langRow}>
+          <TouchableOpacity
+            style={[
+              styles.langChip,
+              contentLanguage === "ja" && styles.langChipActive,
+            ]}
+            onPress={() => setContentLanguage("ja")}
+            disabled={isSaving}
+          >
+            <Text
+              style={[
+                styles.langChipText,
+                contentLanguage === "ja" && styles.langChipTextActive,
+              ]}
+            >
+              {t("Japanese", "日本語")}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.langChip,
+              contentLanguage === "en" && styles.langChipActive,
+            ]}
+            onPress={() => setContentLanguage("en")}
+            disabled={isSaving}
+          >
+            <Text
+              style={[
+                styles.langChipText,
+                contentLanguage === "en" && styles.langChipTextActive,
+              ]}
+            >
+              English
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         <Text style={styles.label}>{t("Description", "説明")}</Text>
         <TextInput
@@ -220,10 +304,18 @@ export default function EditQuestionSetScreen() {
           </Text>
           <Switch
             value={isPublished}
-            onValueChange={setIsPublished}
+            onValueChange={onPublishToggle}
             disabled={isSaving}
           />
         </View>
+        {isOwner && !isPublished && !canPublishByCopyright && (
+          <Text style={styles.copyrightHint}>
+            {t(
+              "Turn on publishing after running a copyright check (low or medium risk) on the detail screen.",
+              "公開するには、問題集詳細で著作権チェックを実行し、リスクが「低」または「中」である必要があります。"
+            )}
+          </Text>
+        )}
 
         <TouchableOpacity
           style={[styles.button, isSaving && styles.buttonDisabled]}
@@ -277,6 +369,31 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: "center",
   },
+  langRow: {
+    flexDirection: "row",
+    marginBottom: 4,
+  },
+  langChip: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    marginRight: 12,
+  },
+  langChipActive: {
+    backgroundColor: "#007AFF",
+    borderColor: "#007AFF",
+  },
+  langChipText: {
+    fontSize: 15,
+    color: "#333",
+    fontWeight: "600",
+  },
+  langChipTextActive: {
+    color: "#fff",
+  },
   label: {
     fontSize: 16,
     fontWeight: "600",
@@ -304,6 +421,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginTop: 16,
+  },
+  copyrightHint: {
+    fontSize: 13,
+    color: "#856404",
+    backgroundColor: "#fff3cd",
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 8,
+    lineHeight: 20,
   },
   button: {
     backgroundColor: "#007AFF",

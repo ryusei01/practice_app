@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { ContentLanguage } from "../api/questionSets";
 
 export interface LocalQuestionSet {
   id: string;
@@ -10,6 +11,8 @@ export interface LocalQuestionSet {
   redSheetEnabled?: boolean; // 赤シート機能の有効/無効
   textbook_path?: string; // 教科書ファイルのパス
   textbook_type?: string; // "markdown" または "pdf"
+  /** 未設定はフィルタ時に ja とみなす */
+  content_language?: ContentLanguage;
 }
 
 export interface LocalQuestion {
@@ -175,6 +178,10 @@ export const localStorageService = {
           existingSet.description = defaultSet.description;
           existingSet.questions = defaultSet.questions;
           existingSet.isTrial = true;
+          existingSet.content_language =
+            defaultSet.content_language ??
+            existingSet.content_language ??
+            "ja";
           // 教科書は自動割り当てしない - 既存の教科書情報は保持するが、新規作成時は設定しない
           // 誤って設定された英語名のパスを削除
           if (existingSet.textbook_path === "Decision Trees and Random Forests Textbook.md" || 
@@ -196,6 +203,7 @@ export const localStorageService = {
             // 教科書は自動割り当てしない（明示的に設定されていない場合は未設定）
             textbook_path: undefined,
             textbook_type: undefined,
+            content_language: defaultSet.content_language ?? "ja",
           };
           existingSets.push(newSet);
         }

@@ -26,7 +26,8 @@ import {
 import Modal from "../../../src/components/Modal";
 import { commonStyles } from "../../../src/styles/questionSetDetailStyles";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import { copyrightApi, reportsApi, CopyrightCheckResult } from "../../../src/api/reports";
+import { copyrightApi, CopyrightCheckResult } from "../../../src/api/reports";
+import { paymentsApi } from "../../../src/api/payments";
 import ReportModal from "../../../src/components/ReportModal";
 import { srsService, SRSMap } from "../../../src/services/srsService";
 
@@ -54,6 +55,10 @@ export default function QuestionSetDetailScreen() {
   const [copyrightCheckResult, setCopyrightCheckResult] =
     useState<CopyrightCheckResult | null>(null);
   const [isCopyrightChecking, setIsCopyrightChecking] = useState(false);
+
+  // 購入関連
+  const [isPurchased, setIsPurchased] = useState(false);
+  const [isPurchasing, setIsPurchasing] = useState(false);
 
   // 通報モーダル
   const [reportModalVisible, setReportModalVisible] = useState(false);
@@ -118,6 +123,16 @@ export default function QuestionSetDetailScreen() {
       setQuestionSet(setData);
       setQuestions(questionsData);
       setQuestionCountInput(String(questionCount));
+
+      // 購入済みかチェック（他ユーザーの問題集の場合）
+      if (user && setData.creator_id !== user.id) {
+        try {
+          const purchased = await questionSetsApi.getPurchased();
+          setIsPurchased(purchased.some((p) => p.id === id));
+        } catch {
+          // 未ログインやエラー時は無視
+        }
+      }
 
       // カテゴリグループを取得
       try {
@@ -680,6 +695,78 @@ ${t("Important notes", "注意事項")}:
     router.push(`/(app)/quiz/${id}?questionIds=${reviewIds.join(",")}`);
   };
 
+  const handlePurchase = async () => {
+    if (!questionSet) return;
+
+    setIsPurchasing(true);
+    try {
+      const result = await paymentsApi.createPaymentIntent({
+        question_set_id: questionSet.id,
+      });
+
+      if (result.client_secret === "free") {
+        setIsPurchased(true);
+        showModal(
+          t("Success", "成功"),
+          t(
+            "You have successfully obtained this question set!",
+            "この問題集を入手しました！"
+          ),
+          [{ text: t("OK", "OK"), onPress: () => loadData() }]
+        );
+      } else {
+        // 有料: confirmPurchase で購入確定
+        // 実際のStripe決済はclient_secretを使って行われるが、
+        // 現時点ではバックエンドのPaymentIntentが成功扱いになるまで待つ
+        showModal(
+          t("Payment", "決済"),
+          t(
+            `Payment of ¥${result.amount.toLocaleString()} is being processed. Platform fee: ¥${result.platform_fee.toLocaleString()}`,
+            `¥${result.amount.toLocaleString()} の決済を処理中です。プラットフォーム手数料: ¥${result.platform_fee.toLocaleString()}`
+          ),
+          [
+            {
+              text: t("Confirm Purchase", "購入を確定"),
+              onPress: async () => {
+                try {
+                  await paymentsApi.confirmPurchase(result.payment_intent_id);
+                  setIsPurchased(true);
+                  showModal(
+                    t("Purchase Complete", "購入完了"),
+                    t(
+                      "You can now access this question set!",
+                      "この問題集にアクセスできるようになりました！"
+                    ),
+                    [{ text: t("OK", "OK"), onPress: () => loadData() }]
+                  );
+                } catch (err: any) {
+                  const msg =
+                    err?.response?.data?.detail ||
+                    t("Purchase failed", "購入に失敗しました");
+                  showModal(t("Error", "エラー"), msg, [
+                    { text: t("OK", "OK") },
+                  ]);
+                }
+              },
+            },
+            { text: t("Cancel", "キャンセル"), style: "cancel" },
+          ]
+        );
+      }
+    } catch (error: any) {
+      const msg =
+        error?.response?.data?.detail ||
+        t("Failed to process purchase", "購入処理に失敗しました");
+      showModal(t("Error", "エラー"), msg, [{ text: t("OK", "OK") }]);
+    } finally {
+      setIsPurchasing(false);
+    }
+  };
+
+  const isOwner = user?.id === questionSet?.creator_id;
+  const canPurchase =
+    user && !isOwner && questionSet?.is_published && !isPurchased;
+
   if (isLoading) {
     return (
       <View style={styles.centerContainer}>
@@ -898,6 +985,41 @@ question_text,correct_answer,category,difficulty`;
         </TouchableOpacity>
       )}
 
+      {/* 購入セクション */}
+      {canPurchase && (
+        <View style={styles.purchaseSection}>
+          <TouchableOpacity
+            style={[
+              styles.purchaseButton,
+              isPurchasing && styles.buttonDisabled,
+            ]}
+            onPress={handlePurchase}
+            disabled={isPurchasing}
+            activeOpacity={0.7}
+          >
+            {isPurchasing ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.purchaseButtonText}>
+                {questionSet.price === 0
+                  ? t("Get for Free", "無料で入手")
+                  : t(
+                      `Purchase ¥${questionSet.price.toLocaleString()}`,
+                      `¥${questionSet.price.toLocaleString()} で購入する`
+                    )}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+      {!isOwner && isPurchased && (
+        <View style={styles.purchasedSection}>
+          <Text style={styles.purchasedText}>
+            {t("Purchased", "購入済み")}
+          </Text>
+        </View>
+      )}
+
       {/* カテゴリ別にグループ化して表示 */}
       {questionGroups.length > 0 ? (
         <FlatList
@@ -1106,7 +1228,6 @@ question_text,correct_answer,category,difficulty`;
           </TouchableOpacity>
         </View>
 
-        {/* 著作権チェックセクション（作成者のみ） */}
         {user?.id === questionSet?.creator_id && (
           <View style={styles.copyrightCheckSection}>
             <Text style={styles.copyrightCheckTitle}>
@@ -1925,5 +2046,38 @@ const styles = StyleSheet.create({
   },
   selectionOptionTitleActive: {
     color: "#007AFF",
+  },
+  purchaseSection: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  purchaseButton: {
+    backgroundColor: "#FF9500",
+    borderRadius: 10,
+    padding: 16,
+    alignItems: "center",
+    shadowColor: "#FF9500",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  purchaseButtonText: {
+    color: "#fff",
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  purchasedSection: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: "#E8F5E9",
+    borderRadius: 10,
+    padding: 12,
+    alignItems: "center",
+  },
+  purchasedText: {
+    color: "#2E7D32",
+    fontSize: 15,
+    fontWeight: "700",
   },
 });

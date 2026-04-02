@@ -54,6 +54,7 @@ export default function RootLayout() {
             />
             <Stack.Screen name="(app)/quiz/[id]" />
             <Stack.Screen name="(app)/ai-dashboard" />
+            <Stack.Screen name="(app)/store" />
             <Stack.Screen name="(app)/seller-dashboard" />
             <Stack.Screen name="(app)/admin/index" />
             <Stack.Screen name="(app)/settings" />

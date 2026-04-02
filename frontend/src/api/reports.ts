@@ -65,4 +65,14 @@ export const copyrightApi = {
     );
     return response.data;
   },
+
+  /** 作成者向け。未チェック時は null */
+  getLatest: async (
+    questionSetId: string
+  ): Promise<CopyrightCheckResult | null> => {
+    const response = await apiClient.get(
+      `/question-sets/${questionSetId}/copyright-check/latest`
+    );
+    return response.data;
+  },
 };

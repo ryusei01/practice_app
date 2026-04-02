@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { questionSetsApi } from "../../../src/api/questionSets";
+import { questionSetsApi, ContentLanguage } from "../../../src/api/questionSets";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
 
@@ -17,7 +17,10 @@ export default function CreateQuestionSetScreen() {
   const [agreedToCopyright, setAgreedToCopyright] = useState(false);
   const router = useRouter();
   const { user } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const [contentLanguage, setContentLanguage] = useState<ContentLanguage>(
+    () => (language === "ja" ? "ja" : "en")
+  );
 
   const handleCreate = async () => {
     console.log("handleCreate called");
@@ -59,6 +62,7 @@ export default function CreateQuestionSetScreen() {
         tags: undefined,
         price: 0,
         is_published: false,
+        content_language: contentLanguage,
       };
 
       const result = await questionSetsApi.create(questionSetData);
@@ -103,6 +107,46 @@ export default function CreateQuestionSetScreen() {
               "問題集を作成後、CSVで問題を追加できます"
             )}
           </Text>
+        </View>
+
+        <Text style={styles.langLabel}>
+          {t("Content language", "問題の言語")}
+        </Text>
+        <View style={styles.langRow}>
+          <TouchableOpacity
+            style={[
+              styles.langChip,
+              contentLanguage === "ja" && styles.langChipActive,
+            ]}
+            onPress={() => setContentLanguage("ja")}
+            accessibilityRole="button"
+          >
+            <Text
+              style={[
+                styles.langChipText,
+                contentLanguage === "ja" && styles.langChipTextActive,
+              ]}
+            >
+              {t("Japanese", "日本語")}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.langChip,
+              contentLanguage === "en" && styles.langChipActive,
+            ]}
+            onPress={() => setContentLanguage("en")}
+            accessibilityRole="button"
+          >
+            <Text
+              style={[
+                styles.langChipText,
+                contentLanguage === "en" && styles.langChipTextActive,
+              ]}
+            >
+              English
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.infoContainer}>
@@ -208,6 +252,39 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     lineHeight: 20,
+  },
+  langLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 10,
+    alignSelf: "center",
+  },
+  langRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  langChip: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    marginHorizontal: 6,
+  },
+  langChipActive: {
+    backgroundColor: "#007AFF",
+    borderColor: "#007AFF",
+  },
+  langChipText: {
+    fontSize: 15,
+    color: "#333",
+    fontWeight: "600",
+  },
+  langChipTextActive: {
+    color: "#fff",
   },
   infoContainer: {
     backgroundColor: "#fff",

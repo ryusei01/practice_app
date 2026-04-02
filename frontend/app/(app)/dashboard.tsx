@@ -199,6 +199,16 @@ export default function DashboardScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
+              style={[styles.menuButton, styles.storeButton]}
+              onPress={() => router.push("/(app)/store")}
+              nativeID="menu-btn-store"
+            >
+              <Text style={styles.menuButtonText} nativeID="menu-text-store">
+                {t("Question Set Store", "問題集ストア")}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={[styles.menuButton, styles.sellerButton]}
               onPress={() => router.push("/(app)/seller-dashboard")}
               nativeID="menu-btn-seller"
@@ -368,6 +378,9 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  storeButton: {
+    backgroundColor: "#FF9500",
   },
   sellerButton: {
     backgroundColor: "#34C759",

@@ -9,7 +9,7 @@ import uuid
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, model_validator, field_validator
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db
@@ -35,6 +35,14 @@ class QuestionSetCreate(BaseModel):
     textbook_path: Optional[str] = None
     textbook_type: Optional[str] = None
     textbook_content: Optional[str] = None
+    content_language: str = "ja"
+
+    @field_validator("content_language")
+    @classmethod
+    def validate_content_language_create(cls, v: str) -> str:
+        if v not in ("ja", "en"):
+            raise ValueError("content_language must be ja or en")
+        return v
 
 
 class QuestionSetUpdate(BaseModel):
@@ -47,6 +55,16 @@ class QuestionSetUpdate(BaseModel):
     textbook_path: Optional[str] = None
     textbook_type: Optional[str] = None
     textbook_content: Optional[str] = None
+    content_language: Optional[str] = None
+
+    @field_validator("content_language")
+    @classmethod
+    def validate_content_language_update(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        if v not in ("ja", "en"):
+            raise ValueError("content_language must be ja or en")
+        return v
 
 
 class QuestionSetResponse(BaseModel):
@@ -65,19 +83,22 @@ class QuestionSetResponse(BaseModel):
     textbook_path: Optional[str] = None
     textbook_type: Optional[str] = None
     textbook_content: Optional[str] = None
+    content_language: str = "ja"
     approval_status: str = "not_required"
 
     @model_validator(mode='before')
     @classmethod
     def convert_nulls(cls, data):
         if isinstance(data, dict):
+            if data.get("content_language") is None:
+                data = {**data, "content_language": "ja"}
             return data
         # ORM object
         if hasattr(data, '__dict__'):
             result = {}
             for key in ['id', 'title', 'description', 'category', 'tags', 'price', 'is_published', 'creator_id',
                        'total_questions', 'average_difficulty', 'total_purchases', 'average_rating',
-                       'textbook_path', 'textbook_type', 'textbook_content', 'approval_status']:
+                       'textbook_path', 'textbook_type', 'textbook_content', 'content_language', 'approval_status']:
                 val = getattr(data, key, None)
                 if key in ['total_questions', 'total_purchases'] and val is None:
                     result[key] = 0
@@ -87,6 +108,8 @@ class QuestionSetResponse(BaseModel):
                     result[key] = 0.0
                 elif key == 'approval_status' and val is None:
                     result[key] = 'not_required'
+                elif key == 'content_language' and (val is None or val == ''):
+                    result[key] = 'ja'
                 else:
                     result[key] = val
             return result
@@ -124,7 +147,8 @@ async def create_question_set(
         creator_id=current_user.id,
         textbook_path=request.textbook_path,
         textbook_type=request.textbook_type,
-        textbook_content=request.textbook_content
+        textbook_content=request.textbook_content,
+        content_language=request.content_language,
     )
 
     db.add(new_question_set)
@@ -138,6 +162,9 @@ async def create_question_set(
 async def list_question_sets(
     category: Optional[str] = Query(None, description="カテゴリでフィルタ"),
     is_published: Optional[bool] = Query(None, description="公開状態でフィルタ"),
+    content_language: Optional[str] = Query(
+        None, description="コンテンツ言語でフィルタ（ja / en）"
+    ),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
     db: Session = Depends(get_db)
@@ -161,6 +188,8 @@ async def list_question_sets(
         query = query.filter(QuestionSet.category == category)
     if is_published is not None:
         query = query.filter(QuestionSet.is_published == is_published)
+    if content_language in ("ja", "en"):
+        query = query.filter(QuestionSet.content_language == content_language)
 
     question_sets = query.offset(skip).limit(limit).all()
 
@@ -179,7 +208,12 @@ async def list_question_sets(
             "total_questions": qs.total_questions if qs.total_questions is not None else 0,
             "average_difficulty": qs.average_difficulty if qs.average_difficulty is not None else 0.5,
             "total_purchases": qs.total_purchases if qs.total_purchases is not None else 0,
-            "average_rating": qs.average_rating if qs.average_rating is not None else 0.0
+            "average_rating": qs.average_rating if qs.average_rating is not None else 0.0,
+            "textbook_path": qs.textbook_path,
+            "textbook_type": qs.textbook_type,
+            "textbook_content": qs.textbook_content,
+            "content_language": getattr(qs, "content_language", None) or "ja",
+            "approval_status": getattr(qs, "approval_status", None) or "not_required",
         })
 
     return result
@@ -228,7 +262,9 @@ async def get_my_question_sets(
             "average_rating": qs.average_rating if qs.average_rating is not None else 0.0,
             "textbook_path": qs.textbook_path,
             "textbook_type": qs.textbook_type,
-            "textbook_content": qs.textbook_content
+            "textbook_content": qs.textbook_content,
+            "content_language": getattr(qs, "content_language", None) or "ja",
+            "approval_status": getattr(qs, "approval_status", None) or "not_required",
         })
 
     return result
@@ -284,7 +320,9 @@ async def get_purchased_question_sets(
             "average_rating": qs.average_rating if qs.average_rating is not None else 0.0,
             "textbook_path": qs.textbook_path,
             "textbook_type": qs.textbook_type,
-            "textbook_content": qs.textbook_content
+            "textbook_content": qs.textbook_content,
+            "content_language": getattr(qs, "content_language", None) or "ja",
+            "approval_status": getattr(qs, "approval_status", None) or "not_required",
         })
 
     return result
@@ -396,7 +434,12 @@ async def update_question_set(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="公開前に著作権チェックを実行してください。問題集の設定画面からチェックを実行できます。",
             )
-        if latest_check.risk_level == RiskLevel.HIGH.value:
+        _rv = (
+            latest_check.risk_level.value
+            if isinstance(latest_check.risk_level, RiskLevel)
+            else latest_check.risk_level
+        )
+        if _rv == RiskLevel.HIGH.value:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="著作権チェックの結果、高リスクと判定されたため公開できません。コンテンツを修正した後、再度チェックを実行してください。",
@@ -421,6 +464,8 @@ async def update_question_set(
         question_set.textbook_type = request.textbook_type
     if request.textbook_content is not None:
         question_set.textbook_content = request.textbook_content
+    if request.content_language is not None:
+        question_set.content_language = request.content_language
 
     db.commit()
     db.refresh(question_set)
@@ -489,6 +534,7 @@ class QuestionSetWithQuestionsResponse(BaseModel):
     price: int
     is_published: bool
     creator_id: str
+    content_language: str = "ja"
     questions: List[QuestionResponse]
 
     class Config:
@@ -548,6 +594,7 @@ async def download_question_set(
         price=question_set.price,
         is_published=question_set.is_published,
         creator_id=question_set.creator_id,
+        content_language=getattr(question_set, "content_language", None) or "ja",
         questions=[QuestionResponse.model_validate(q) for q in questions]
     )
 
@@ -563,6 +610,60 @@ class CopyrightCheckResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+def _copyright_record_to_response(
+    question_set_id: str,
+    record: CopyrightCheckRecord,
+    reasons_list: Optional[List[str]] = None,
+) -> CopyrightCheckResponse:
+    raw_reasons = reasons_list
+    if raw_reasons is None:
+        try:
+            raw_reasons = json.loads(record.reasons) if record.reasons else []
+        except json.JSONDecodeError:
+            raw_reasons = []
+    if not isinstance(raw_reasons, list):
+        raw_reasons = []
+    rv = (
+        record.risk_level.value
+        if isinstance(record.risk_level, RiskLevel)
+        else str(record.risk_level)
+    )
+    return CopyrightCheckResponse(
+        question_set_id=question_set_id,
+        risk_level=rv,
+        reasons=[str(x) for x in raw_reasons],
+        recommendation=record.recommendation or "",
+        checked_at=record.checked_at,
+    )
+
+
+@router.get(
+    "/{question_set_id}/copyright-check/latest",
+    response_model=Optional[CopyrightCheckResponse],
+)
+async def get_latest_copyright_check(
+    question_set_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """作成者が直近の著作権チェック結果を取得する（公開トグル制御などに使用）。"""
+    question_set = db.query(QuestionSet).filter(QuestionSet.id == question_set_id).first()
+    if not question_set:
+        raise HTTPException(status_code=404, detail="問題集が見つかりません")
+    if question_set.creator_id != current_user.id:
+        raise HTTPException(status_code=403, detail="この問題集のチェック結果を参照する権限がありません")
+
+    record = (
+        db.query(CopyrightCheckRecord)
+        .filter(CopyrightCheckRecord.question_set_id == question_set_id)
+        .order_by(CopyrightCheckRecord.checked_at.desc())
+        .first()
+    )
+    if not record:
+        return None
+    return _copyright_record_to_response(question_set_id, record)
 
 
 @router.post("/{question_set_id}/copyright-check", response_model=CopyrightCheckResponse)
@@ -599,6 +700,11 @@ async def run_copyright_check(
     question_texts = [q.question_text for q in questions if q.question_text]
 
     checker = get_copyright_checker()
+    if not await checker.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="著作権チェックサービス（Ollama）に接続できません。サーバーでOllamaが起動しているか確認してください。",
+        )
     try:
         result = await checker.check(
             title=question_set.title,
@@ -630,10 +736,8 @@ async def run_copyright_check(
     db.commit()
     db.refresh(record)
 
-    return CopyrightCheckResponse(
-        question_set_id=question_set_id,
-        risk_level=record.risk_level,
-        reasons=result.get("reasons", []),
-        recommendation=record.recommendation or "",
-        checked_at=record.checked_at,
+    return _copyright_record_to_response(
+        question_set_id,
+        record,
+        reasons_list=result.get("reasons", []),
     )

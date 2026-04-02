@@ -1,5 +1,16 @@
 import apiClient from './client';
 
+export type ContentLanguage = 'ja' | 'en';
+
+/** 一覧の言語絞り込み（すべて / 日本語 / 英語） */
+export type LanguageFilter = 'all' | ContentLanguage;
+
+export function resolvedContentLanguage(
+  v: ContentLanguage | undefined | null
+): ContentLanguage {
+  return v === 'en' ? 'en' : 'ja';
+}
+
 export interface QuestionSet {
   id: string;
   title: string;
@@ -16,6 +27,8 @@ export interface QuestionSet {
   textbook_path: string | null;
   textbook_type: string | null;
   textbook_content: string | null;
+  /** API 未更新時は未設定扱い（フィルタでは ja とみなす） */
+  content_language?: ContentLanguage;
 }
 
 export interface QuestionSetCreate {
@@ -28,6 +41,7 @@ export interface QuestionSetCreate {
   textbook_path?: string;
   textbook_type?: string;
   textbook_content?: string;
+  content_language?: ContentLanguage;
 }
 
 export interface QuestionSetUpdate {
@@ -40,6 +54,7 @@ export interface QuestionSetUpdate {
   textbook_path?: string;
   textbook_type?: string;
   textbook_content?: string;
+  content_language?: ContentLanguage;
 }
 
 export interface Question {
@@ -65,11 +80,12 @@ export interface QuestionSetWithQuestions {
   price: number;
   is_published: boolean;
   creator_id: string;
+  content_language?: ContentLanguage;
   questions: Question[];
 }
 
 export const questionSetsApi = {
-  getAll: async (params?: { category?: string; is_published?: boolean; skip?: number; limit?: number }): Promise<QuestionSet[]> => {
+  getAll: async (params?: { category?: string; is_published?: boolean; content_language?: ContentLanguage; skip?: number; limit?: number }): Promise<QuestionSet[]> => {
     const response = await apiClient.get('/question-sets/', { params });
     return response.data;
   },

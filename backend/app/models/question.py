@@ -37,6 +37,9 @@ class QuestionSet(Base):
     textbook_type = Column(String, nullable=True)
     textbook_content = Column(Text, nullable=True)
 
+    # 問題文・解説などの主言語（ja / en）
+    content_language = Column(String, nullable=False, default="ja", server_default="ja")
+
     # 管理者審査ステータス
     approval_status = Column(String, default=QuestionSetApprovalStatus.NOT_REQUIRED.value, nullable=False)
 

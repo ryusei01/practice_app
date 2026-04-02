@@ -557,8 +557,8 @@ export default function Home() {
                 </Text>
                 <Text style={styles.infoBoxText}>
                   {t(
-                    "Multi-device sync and backup via cloud storage is available with a paid plan (coming soon).",
-                    "複数デバイス対応・バックアップのクラウド保存は有料プランでご利用いただけます（準備中）。"
+                    "Sign in and subscribe to Premium to sync answers and question sets across devices via the cloud. Without Premium, data stays local to this device even after sign-in.",
+                    "ログイン後もデータは端末内（ローカル）のままです。プレミアムに加入すると回答・問題集をクラウド同期し、複数端末でバックアップ・学習を続けられます。"
                   )}
                 </Text>
               </View>

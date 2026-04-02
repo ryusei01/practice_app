@@ -26,8 +26,12 @@ class Settings(BaseSettings):
     STRIPE_PUBLISHABLE_KEY: str = "pk_test_placeholder"
     STRIPE_WEBHOOK_SECRET: Optional[str] = None
     PLATFORM_FEE_PERCENT: int = 20
-    # 有料プラン (550円) の Stripe Price ID
+    # 有料プランの Stripe Price ID（請求額は Stripe 側が正。表示用金額は下記と一致させること）
     STRIPE_PREMIUM_PRICE_ID: str = "price_placeholder"
+    # UI 表示用の税込価格（円）。Stripe Price の金額と揃える
+    PREMIUM_PLAN_PRICE_JPY: int = 550
+    # 一回払い購入後のプレミアム有効日数
+    PREMIUM_PLAN_VALIDITY_DAYS: int = 365
     # 有料プラン購入時に付与するクレジット（円）
     PREMIUM_PLAN_CREDIT_JPY: int = 200
 

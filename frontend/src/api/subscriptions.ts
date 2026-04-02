@@ -11,9 +11,24 @@ export interface CheckoutSession {
   session_id: string;
 }
 
+/** GET /subscriptions/plan-display（バックエンド settings 由来の表示用） */
+export interface PlanDisplay {
+  price_jpy: number;
+  credit_jpy: number;
+  validity_days: number;
+}
+
 export const subscriptionsApi = {
   /**
-   * 550円プランの Stripe Checkout URL を取得する。
+   * プレミアム画面向けの表示用価格・クレジット・有効日数を取得する。
+   */
+  getPlanDisplay: async (): Promise<PlanDisplay> => {
+    const response = await apiClient.get('/subscriptions/plan-display');
+    return response.data;
+  },
+
+  /**
+   * プレミアムプランの Stripe Checkout URL を取得する。
    * Web: window.location.href でリダイレクト
    * モバイル: expo-web-browser で開く
    */

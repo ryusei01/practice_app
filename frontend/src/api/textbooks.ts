@@ -1,9 +1,12 @@
 import apiClient from './client';
 
+export type TextbookLanguage = 'ja' | 'en';
+
 export interface Textbook {
   path: string;
   name: string;
   type: 'markdown' | 'pdf';
+  language: TextbookLanguage;
 }
 
 export const textbooksApi = {

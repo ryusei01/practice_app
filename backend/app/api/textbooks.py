@@ -16,12 +16,20 @@ _current_file = Path(__file__)
 _project_root = _current_file.parent.parent.parent.parent
 TEXTBOOK_BASE_DIR = _project_root / "docs" / "textbook"
 
+# ファイル追加時はここに path（ファイル名）と ja|en を追記。未登録は ja。
+TEXTBOOK_LANGUAGE_BY_PATH: dict[str, str] = {
+    "決定木・ランダムフォレスト超入門教科書.md": "ja",
+    "Decision Trees and Random Forests.md": "en",
+    "Machine Learning & Deep Learning for Practical Engineers.md": "en",
+}
+
 
 class TextbookInfo(BaseModel):
     """教科書情報"""
     path: str
     name: str
     type: str  # "markdown" or "pdf"
+    language: str = "ja"  # "ja" | "en"
 
 
 @router.get("/", response_model=List[TextbookInfo])
@@ -53,10 +61,14 @@ async def list_textbooks():
                 # ファイル名から拡張子を除いたものを名前として使用
                 name = file_path.stem
                 
+                lang = TEXTBOOK_LANGUAGE_BY_PATH.get(file_path.name, "ja")
+                if lang not in ("ja", "en"):
+                    lang = "ja"
                 textbooks.append(TextbookInfo(
                     path=file_path.name,
                     name=name,
-                    type=textbook_type
+                    type=textbook_type,
+                    language=lang,
                 ))
     
     return textbooks

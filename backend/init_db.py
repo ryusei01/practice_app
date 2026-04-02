@@ -1,6 +1,7 @@
 """Initialize database tables"""
 from app.core.database import Base, engine
-from app.models import user, question, marketplace, answer
+# 全モデルをメタデータに登録（copyright_check / content_reports 等を含む）
+import app.models  # noqa: F401
 
 def init_db():
     """Create all tables in the database"""

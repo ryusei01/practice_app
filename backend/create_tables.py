@@ -2,8 +2,7 @@
 データベーステーブルを作成するスクリプト
 """
 from app.core.database import Base, engine
-from app.models import User  # すべてのモデルをインポート
-from app.models.otp import OTPCode
+import app.models  # noqa: F401 — メタデータに全テーブルを登録
 
 def create_tables():
     """すべてのテーブルを作成"""

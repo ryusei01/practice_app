@@ -3,7 +3,7 @@
  * docs/textbook配下のファイルを管理
  */
 
-import { textbooksApi } from "../api/textbooks";
+import { textbooksApi, TextbookLanguage } from "../api/textbooks";
 
 /** 開発時の run-backend.cjs / client.ts と同じポート（/api/v1 は含めない） */
 const DEFAULT_TEXTBOOK_API_ORIGIN = "http://127.0.0.1:8003";
@@ -50,6 +50,7 @@ export interface Textbook {
   path: string;
   name: string;
   type: TextbookType;
+  language: TextbookLanguage;
 }
 
 /**
@@ -60,12 +61,20 @@ const FALLBACK_TEXTBOOKS: Textbook[] = [
     path: "決定木・ランダムフォレスト超入門教科書.md",
     name: "決定木・ランダムフォレスト超入門教科書",
     type: "markdown",
+    language: "ja",
+  },
+  {
+    path: "Decision Trees and Random Forests.md",
+    name: "Decision Trees and Random Forests",
+    type: "markdown",
+    language: "en",
   },
   {
     // docs/textbook 配下の実ファイル名に合わせる（表示名は日本語のままでもOK）
     path: "Machine Learning & Deep Learning for Practical Engineers.md",
     name: "機械学習・深層学習 教科書（基礎〜実装）",
     type: "markdown",
+    language: "en",
   },
 ];
 
@@ -91,6 +100,7 @@ export async function getAvailableTextbooks(): Promise<Textbook[]> {
       path: tb.path,
       name: tb.name,
       type: normalizeTextbookType(tb.type),
+      language: tb.language === "en" ? "en" : "ja",
     }));
     lastFetchTime = now;
     console.log(

@@ -72,6 +72,11 @@ ALTER TABLE question_sets ADD COLUMN IF NOT EXISTS approval_status VARCHAR DEFAU
 ALTER TABLE question_sets ADD COLUMN IF NOT EXISTS textbook_content TEXT;
 
 -- -------------------------------------------------------------
+-- question_sets テーブル: コンテンツ言語（ja / en）
+-- -------------------------------------------------------------
+ALTER TABLE question_sets ADD COLUMN IF NOT EXISTS content_language VARCHAR DEFAULT 'ja' NOT NULL;
+
+-- -------------------------------------------------------------
 -- processed_checkout_sessions テーブル（冪等処理用）
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS processed_checkout_sessions (
