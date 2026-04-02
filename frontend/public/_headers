@@ -1,0 +1,5 @@
+# Cloudflare Pages: OAuth ポップアップ完了時の window.close / postMessage が
+# Cross-Origin-Opener-Policy: same-origin だとブロックされることがある。
+# https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cross-Origin-Opener-Policy
+/*
+  Cross-Origin-Opener-Policy: same-origin-allow-popups

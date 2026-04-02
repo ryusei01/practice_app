@@ -8,7 +8,9 @@ import {
   ScrollView,
   ActivityIndicator,
   Platform,
+  Alert,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
 import { useLanguage } from "../../src/contexts/LanguageContext";
 import {
@@ -16,6 +18,8 @@ import {
   LocalQuestion,
 } from "../../src/services/localStorageService";
 import Header from "../../src/components/Header";
+import Modal from "../../src/components/Modal";
+import { QUESTION_SET_CSV_PROMPT_MARKDOWN } from "../../src/data/questionSetCsvPromptMarkdown";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 
@@ -41,6 +45,7 @@ export default function TrialCreateScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [showCsvPromptModal, setShowCsvPromptModal] = useState(false);
   const { t } = useLanguage();
   const router = useRouter();
 
@@ -128,6 +133,27 @@ export default function TrialCreateScreen() {
     }
   };
 
+  const handleCopyCsvPrompt = async () => {
+    try {
+      await Clipboard.setStringAsync(QUESTION_SET_CSV_PROMPT_MARKDOWN);
+      Alert.alert(
+        t("Copied", "コピーしました"),
+        t(
+          "Paste into your AI tool as the system or instruction prompt.",
+          "AIツールのシステムプロンプトや指示として貼り付けられます。"
+        )
+      );
+    } catch {
+      Alert.alert(
+        t("Copy failed", "コピーに失敗しました"),
+        t(
+          "Select the text in the preview and copy manually.",
+          "表示テキストを長押しして手動でコピーしてください。"
+        )
+      );
+    }
+  };
+
   const addQuestion = () => {
     setQuestions([...questions, { question: "", answer: "", difficulty: "medium", category: "", subcategory1: "", subcategory2: "" }]);
   };
@@ -210,6 +236,36 @@ export default function TrialCreateScreen() {
   return (
     <View style={styles.container}>
       <Header title={t("Create Question Set", "問題セットを作成")} />
+      <Modal
+        visible={showCsvPromptModal}
+        title={t(
+          "CSV generation prompt (Markdown)",
+          "問題集CSV生成プロンプト（Markdown）"
+        )}
+        onClose={() => setShowCsvPromptModal(false)}
+      >
+        <Text style={styles.csvPromptBody} selectable>
+          {QUESTION_SET_CSV_PROMPT_MARKDOWN}
+        </Text>
+        <View style={styles.csvPromptActions}>
+          <TouchableOpacity
+            style={styles.csvPromptCopyBtn}
+            onPress={handleCopyCsvPrompt}
+          >
+            <Text style={styles.csvPromptCopyBtnText}>
+              {t("Copy all", "全文をコピー")}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.csvPromptCloseBtn}
+            onPress={() => setShowCsvPromptModal(false)}
+          >
+            <Text style={styles.csvPromptCloseBtnText}>
+              {t("Close", "閉じる")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
       <ScrollView style={styles.content}>
         <Text style={styles.title}>
           {t("Create Question Set", "問題セットを作成")}
@@ -293,14 +349,24 @@ export default function TrialCreateScreen() {
                 <Text style={styles.csvFormatTitle}>
                   {t("CSV Format", "CSVフォーマット")}
                 </Text>
-                <TouchableOpacity
-                  style={styles.csvDownloadBtn}
-                  onPress={downloadCSVSample}
-                >
-                  <Text style={styles.csvDownloadBtnText}>
-                    ⬇ {t("Download Sample", "サンプルDL")}
-                  </Text>
-                </TouchableOpacity>
+                <View style={styles.csvFormatHeaderBtns}>
+                  <TouchableOpacity
+                    style={styles.csvPromptBtn}
+                    onPress={() => setShowCsvPromptModal(true)}
+                  >
+                    <Text style={styles.csvPromptBtnText}>
+                      {t("AI prompt", "プロンプト")}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.csvDownloadBtn}
+                    onPress={downloadCSVSample}
+                  >
+                    <Text style={styles.csvDownloadBtnText}>
+                      ⬇ {t("Download Sample", "サンプルDL")}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <Text style={styles.csvFormatSubtitle}>
@@ -625,11 +691,31 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 10,
+    flexWrap: "wrap",
+    gap: 8,
   },
   csvFormatTitle: {
     fontSize: 13,
     fontWeight: "700",
     color: "#333",
+    flexShrink: 1,
+  },
+  csvFormatHeaderBtns: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+  },
+  csvPromptBtn: {
+    backgroundColor: "#5856D6",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  csvPromptBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
   },
   csvDownloadBtn: {
     backgroundColor: "#007AFF",
@@ -739,5 +825,40 @@ const styles = StyleSheet.create({
     color: "#2E7D32",
     fontSize: 14,
     lineHeight: 20,
+  },
+  csvPromptBody: {
+    fontFamily: Platform.select({ ios: "Menlo", android: "monospace", default: "monospace" }),
+    fontSize: 11,
+    color: "#333",
+    lineHeight: 16,
+    marginBottom: 12,
+  },
+  csvPromptActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  csvPromptCopyBtn: {
+    flex: 1,
+    backgroundColor: "#007AFF",
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  csvPromptCopyBtnText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  csvPromptCloseBtn: {
+    flex: 1,
+    backgroundColor: "#E8E8E8",
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  csvPromptCloseBtnText: {
+    color: "#333",
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

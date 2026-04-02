@@ -24,6 +24,8 @@ export default function Home() {
   const isMediumScreen = width >= 600 && width < 1024;
 
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showTrialStartWarningModal, setShowTrialStartWarningModal] =
+    useState(false);
 
   // Web版の場合、動的にメタタグを設定
   useEffect(() => {
@@ -350,7 +352,7 @@ export default function Home() {
                   padding: isSmallScreen ? 14 : 16,
                 },
               ]}
-              onPress={() => router.push("/(trial)/trial-question-sets")}
+              onPress={() => setShowTrialStartWarningModal(true)}
               testID="btn-register"
             >
               <Text
@@ -389,6 +391,140 @@ export default function Home() {
             </TouchableOpacity>
           </View>
         </ScrollView>
+
+        <Modal
+          visible={showTrialStartWarningModal}
+          title={t(
+            "Before you start (saved on this device only)",
+            "始める前に（この端末だけに保存されます）"
+          )}
+          onClose={() => setShowTrialStartWarningModal(false)}
+        >
+          <View style={styles.modalBody}>
+            <View style={[styles.infoBox, styles.trialWarningBox]}>
+              <Text style={styles.infoBoxIcon}>⚠️</Text>
+              <View style={styles.infoBoxContent}>
+                <Text style={styles.infoBoxTitle}>
+                  {t("Local-only trial data", "お試しデータはローカル保存です")}
+                </Text>
+                <Text style={styles.infoBoxText}>
+                  {t(
+                    "Without signing in, your question sets and progress are stored only on this device. They are not backed up to our servers and cannot be synced to other devices.",
+                    "ログインしない場合、作成した問題集や学習の進捗はこの端末内にだけ保存され、サーバーへバックアップされません。他の端末とは同期されません。"
+                  )}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.trialWarningListTitle}>
+              {t(
+                "Your data may disappear if you:",
+                "次のようなとき、データが消える可能性があります。"
+              )}
+            </Text>
+            <View style={styles.trialWarningList}>
+              <Text style={styles.trialWarningBullet}>
+                {t(
+                  "Clear site data, storage, or cache in your browser or app settings",
+                  "ブラウザやアプリの設定でサイトデータ・ストレージ・キャッシュを削除したとき"
+                )}
+              </Text>
+              <Text style={styles.trialWarningBullet}>
+                {t(
+                  "Open the app on a different device or browser (no cloud sync)",
+                  "別の端末や別ブラウザで利用したとき（クラウド同期なしのため見えません）"
+                )}
+              </Text>
+              <Text style={styles.trialWarningBullet}>
+                {t(
+                  "Use private/incognito mode, or rely on temporary storage that may be cleared when tabs close",
+                  "シークレット／プライベート閲覧を使ったとき、またはタブを閉じると消える一時保存に頼っているとき"
+                )}
+              </Text>
+              <Text style={styles.trialWarningBullet}>
+                {t(
+                  "Uninstall the app or reset the device",
+                  "アプリをアンインストールしたとき、端末を初期化したとき"
+                )}
+              </Text>
+              <Text style={styles.trialWarningBullet}>
+                {t(
+                  "In rare cases: very low storage, OS/browser updates, or automated cleanup by the system",
+                  "まれに、ストレージ不足・OS／ブラウザの更新・端末側の自動クリーンアップなどで失われることがあります"
+                )}
+              </Text>
+            </View>
+
+            <View style={[styles.infoBox, styles.premiumBox]}>
+              <Text style={styles.infoBoxIcon}>☁️</Text>
+              <View style={styles.infoBoxContent}>
+                <Text style={[styles.infoBoxTitle, styles.premiumTitle]}>
+                  {t(
+                    "To keep data safe: sign in & premium",
+                    "データを守るには：ログインと有料プラン"
+                  )}
+                </Text>
+                <Text style={styles.infoBoxText}>
+                  {t(
+                    "Signing in lets you use cloud sync and backups on the Premium plan so your work is not tied to one browser tab.",
+                    "ログイン後、有料プランではクラウド同期・バックアップが利用でき、1つのブラウザに縛られず学習を続けられます。"
+                  )}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.googleSignInButton}
+              onPress={() => {
+                setShowTrialStartWarningModal(false);
+                setShowLoginModal(true);
+              }}
+              testID="btn-trial-warning-login"
+            >
+              <Text style={styles.googleSignInText}>
+                {t("Sign in", "ログインする")}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.button, styles.settingsButton, styles.modalFullWidthButton]}
+              onPress={() => {
+                setShowTrialStartWarningModal(false);
+                router.push("/(app)/premium-upgrade");
+              }}
+              testID="btn-trial-warning-premium"
+            >
+              <Text style={styles.buttonText}>
+                {t("View Premium plan", "有料プランを見る")}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.button, styles.trialButton, styles.modalFullWidthButton]}
+              onPress={() => {
+                setShowTrialStartWarningModal(false);
+                router.push("/(trial)/trial-question-sets");
+              }}
+              testID="btn-trial-warning-continue"
+            >
+              <Text style={styles.buttonText}>
+                {t(
+                  "I understand — continue with local trial",
+                  "理解したうえでお試しを続ける"
+                )}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.modalCancelButton}
+              onPress={() => setShowTrialStartWarningModal(false)}
+            >
+              <Text style={styles.modalCancelButtonText}>
+                {t("Close", "閉じる")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Modal>
 
         <Modal
           visible={showLoginModal}
@@ -621,6 +757,34 @@ const styles = StyleSheet.create({
   },
   trialButton: {
     backgroundColor: "#34C759",
+  },
+  trialWarningBox: {
+    backgroundColor: "#FFF4E5",
+    borderWidth: 1,
+    borderColor: "#E6C200",
+  },
+  trialWarningListTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  trialWarningList: {
+    marginBottom: 14,
+    gap: 8,
+  },
+  trialWarningBullet: {
+    fontSize: 13,
+    color: "#444",
+    lineHeight: 20,
+    marginBottom: 6,
+    paddingLeft: 4,
+  },
+  modalFullWidthButton: {
+    width: "100%",
+    marginVertical: 6,
+    maxWidth: undefined,
   },
   modalBody: {
     paddingBottom: 4,

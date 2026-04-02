@@ -22,7 +22,7 @@ import {
   useRootNavigationState,
   useNavigationContainerRef,
 } from "expo-router";
-import { CommonActions } from "@react-navigation/native";
+import { CommonActions, type NavigationState } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
 import {
@@ -48,21 +48,60 @@ interface QuestionStats {
   lastAnsweredAt: string | null;
 }
 
-const TRIAL_CREATE_ROUTE = "(trial)/create";
+/** お試し「作成」画面の route 名（ファイル・グループにより表記が変わる） */
+const TRIAL_CREATE_ROUTE_NAMES = new Set<string>(["create", "(trial)/create"]);
 
-/** 共有URLなどで /set/ に来たとき、履歴直下にお試し「作成」が残っているとブラウザ戻るで作成画面になるのを防ぐ */
+/**
+ * 共有URLや push 連鎖で /set/ を開いたとき、(trial) 内スタックの直下に「作成」が残っていると
+ * ブラウザ戻るで作成画面に戻る。ルートだけでなくネストしたスタックを辿って除去する。
+ */
+function stripTrialCreateBeforeFocusedRoute(
+  state: NavigationState
+): NavigationState | null {
+  const idx = state.index;
+  const routes = state.routes;
+
+  if (idx >= 1) {
+    const prev = routes[idx - 1];
+    if (prev && TRIAL_CREATE_ROUTE_NAMES.has(prev.name)) {
+      const newRoutes = routes.filter((_, i) => i !== idx - 1);
+      return {
+        ...state,
+        index: newRoutes.length - 1,
+        routes: newRoutes,
+      };
+    }
+  }
+
+  const focused = routes[idx];
+  if (focused?.state) {
+    const newChild = stripTrialCreateBeforeFocusedRoute(
+      focused.state as NavigationState
+    );
+    if (newChild) {
+      return {
+        ...state,
+        routes: routes.map((r, i) =>
+          i === idx ? { ...r, state: newChild } : r
+        ),
+      };
+    }
+  }
+
+  return null;
+}
+
 function resetRootStackIfPrevIsTrialCreate(
-  rootState: ReturnType<typeof useRootNavigationState>
+  rootState: ReturnType<typeof useRootNavigationState> | undefined
 ) {
-  const idx = rootState.index;
-  if (idx < 1) return null;
-  const prev = rootState.routes[idx - 1];
-  if (prev.name !== TRIAL_CREATE_ROUTE) return null;
-  const newRoutes = rootState.routes.filter((_, i) => i !== idx - 1);
-  // RN の ResetState 型は key/type 等を要求するが、リセット時は既存 route 配列をそのまま渡すのが意図どおり動作する
+  if (!rootState) return null;
+  const newState = stripTrialCreateBeforeFocusedRoute(
+    rootState as NavigationState
+  );
+  if (!newState) return null;
   return CommonActions.reset({
-    index: newRoutes.length - 1,
-    routes: newRoutes,
+    index: newState.index,
+    routes: newState.routes,
   } as never);
 }
 
