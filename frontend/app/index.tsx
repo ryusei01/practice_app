@@ -1,3 +1,4 @@
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -11,7 +12,7 @@ import { useRouter } from "expo-router";
 import { useAuth } from "../src/contexts/AuthContext";
 import { useLanguage } from "../src/contexts/LanguageContext";
 import Header from "../src/components/Header";
-import { useEffect } from "react";
+import Modal from "../src/components/Modal";
 import { Platform } from "react-native";
 
 export default function Home() {
@@ -21,6 +22,8 @@ export default function Home() {
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 600;
   const isMediumScreen = width >= 600 && width < 1024;
+
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   // Web版の場合、動的にメタタグを設定
   useEffect(() => {
@@ -48,16 +51,16 @@ export default function Home() {
       };
 
       // Linkタグを設定する関数
-      const setLinkTag = (rel: string, href: string, type?: string) => {
-        const selector = type
-          ? `link[rel="${rel}"][type="${type}"]`
+      const setLinkTag = (rel: string, href: string, hreflang?: string) => {
+        const selector = hreflang
+          ? `link[rel="${rel}"][hreflang="${hreflang}"]`
           : `link[rel="${rel}"]`;
         let link = document.querySelector(selector) as HTMLLinkElement;
         if (!link) {
           link = document.createElement("link");
           link.setAttribute("rel", rel);
-          if (type) {
-            link.setAttribute("type", type);
+          if (hreflang) {
+            link.setAttribute("hreflang", hreflang);
           }
           document.head.appendChild(link);
         }
@@ -72,32 +75,32 @@ export default function Home() {
         // タイトル設定（言語に応じて）
         const pageTitle =
           currentLang === "ja"
-            ? "AI Practice Book - AIが苦手分野を優先的に出題する学習プラットフォーム"
-            : "AI Practice Book - AI-Powered Learning Platform for Personalized Study";
+            ? "AI Practice Book - AIと一緒に間違えた問題を忘却曲線に沿って出題するAI単語帳・問題集学習プラットフォーム"
+            : "AI Practice Book - AI-Powered Flashcard & Quiz App with Spaced Repetition";
         document.title = pageTitle;
 
         // Description（160文字以内、言語に応じて）
         const description =
           currentLang === "ja"
-            ? "AIが苦手分野を優先的に出題し、最適な問題を推薦してスコアアップをサポート。あなたに合わせた適応型学習プラットフォーム。登録不要でお試し可能。"
-            : "AI-powered learning platform that prioritizes your weak areas and recommends optimal questions to boost your scores. Smart adaptive learning tailored to your needs. Try free without registration.";
+            ? "間違えた問題を分析・記録し集中的に苦手をつぶし、忘却曲線に沿って最適なタイミングで復習を提案。苦手克服に特化した、次世代のAI単語帳・問題集アプリ。登録不要でお試し可能。"
+            : "Analyze and track your wrong answers, then review them at the perfect moment using the forgetting curve. A next-gen flashcard & quiz app built to eliminate weak spots. Try free without registration.";
 
         // メタタグ設定
         setMetaTag("description", description);
         setMetaTag(
           "keywords",
-          "AI,learning,quiz,adaptive learning,weak areas,score improvement,personalized study,AI,学習,クイズ,適応型学習,苦手分野,スコアアップ,個別学習"
+          "AI,learning,quiz,flashcard,spaced repetition,forgetting curve,weak areas,score improvement,personalized study,AI,学習,クイズ,単語帳,問題集,忘却曲線,苦手克服,復習,適応型学習,苦手分野,スコアアップ,個別学習"
         );
 
         // Open Graph
         const ogTitle =
           currentLang === "ja"
-            ? "AI Practice Book - あなた専用のAI学習アシスタント"
-            : "AI Practice Book - Your Personal AI Study Assistant";
+            ? "AI Practice Book - 忘却曲線と誤り集計で苦手を克服するAI単語帳・問題集"
+            : "AI Practice Book - Master Your Weak Spots with Spaced Repetition";
         const ogDescription =
           currentLang === "ja"
-            ? "AIが苦手分野を優先し、最適な問題を推薦してスコアを改善。あなた専用の適応型学習。"
-            : "AI prioritizes your weak areas and recommends optimal questions to improve your scores. Adaptive learning personalized for you.";
+            ? "間違えた問題を分析・記録し、忘却曲線に沿った最適なタイミングで復習を提案。苦手克服に特化した次世代の単語帳・問題集アプリ。"
+            : "Track your mistakes, review at the right time with the forgetting curve, and turn weak spots into strengths. Your next-gen flashcard & quiz app.";
 
         setMetaTag("og:title", ogTitle, true);
         setMetaTag("og:description", ogDescription, true);
@@ -228,8 +231,8 @@ export default function Home() {
               nativeID="home-subtitle"
             >
               {t(
-                "Your Personal Study Assistant",
-                "あなた専用の学習アシスタント"
+                "Your mistakes. Your best teacher.",
+                "間違えた問題が、最強の教材になる。"
               )}
             </Text>
 
@@ -326,8 +329,7 @@ export default function Home() {
                   padding: isSmallScreen ? 14 : 16,
                 },
               ]}
-              onPress={() => router.push("/(auth)/register")}
-              disabled={false}
+              onPress={() => router.push("/(trial)/trial-question-sets")}
               testID="btn-register"
             >
               <Text
@@ -339,17 +341,6 @@ export default function Home() {
               >
                 {t("Get Started", "今すぐ始める")}
               </Text>
-              <View style={styles.overlay} nativeID="btn-register-overlay">
-                <Text
-                  style={[
-                    styles.overlayText,
-                    { fontSize: isSmallScreen ? 16 : 18 },
-                  ]}
-                  nativeID="btn-register-overlay-text"
-                >
-                  {t("Under Preparation", "準備中")}
-                </Text>
-              </View>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -361,21 +352,9 @@ export default function Home() {
                   padding: isSmallScreen ? 14 : 16,
                 },
               ]}
-              onPress={() => router.push("/(auth)/login")}
-              disabled={false}
+              onPress={() => setShowLoginModal(true)}
               testID="btn-login"
             >
-              <View style={styles.overlay} nativeID="btn-login-overlay">
-                <Text
-                  style={[
-                    styles.overlayText,
-                    { fontSize: isSmallScreen ? 16 : 18 },
-                  ]}
-                  nativeID="btn-login-overlay-text"
-                >
-                  {t("Under Preparation", "準備中")}
-                </Text>
-              </View>
               <Text
                 style={[
                   styles.buttonText,
@@ -389,6 +368,65 @@ export default function Home() {
             </TouchableOpacity>
           </View>
         </ScrollView>
+
+        <Modal
+          visible={showLoginModal}
+          title={t("Sign In", "ログイン")}
+          onClose={() => setShowLoginModal(false)}
+        >
+          <View style={styles.modalBody}>
+            <View style={styles.infoBox}>
+              <Text style={styles.infoBoxIcon}>💾</Text>
+              <View style={styles.infoBoxContent}>
+                <Text style={styles.infoBoxTitle}>
+                  {t("Local Storage", "ローカル保存")}
+                </Text>
+                <Text style={styles.infoBoxText}>
+                  {t(
+                    "Your data is stored only on this device. You can use all features without signing in.",
+                    "作成したデータはこのデバイスにのみ保存されます。ログインなしでもすべての機能をご利用いただけます。"
+                  )}
+                </Text>
+              </View>
+            </View>
+
+            <View style={[styles.infoBox, styles.premiumBox]}>
+              <Text style={styles.infoBoxIcon}>☁️</Text>
+              <View style={styles.infoBoxContent}>
+                <Text style={[styles.infoBoxTitle, styles.premiumTitle]}>
+                  {t("Cloud Storage (Paid Plan)", "クラウド保存（有料プラン）")}
+                </Text>
+                <Text style={styles.infoBoxText}>
+                  {t(
+                    "Multi-device sync and backup via cloud storage is available with a paid plan (coming soon).",
+                    "複数デバイス対応・バックアップのクラウド保存は有料プランでご利用いただけます（準備中）。"
+                  )}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.googleSignInButton}
+              onPress={() => {
+                setShowLoginModal(false);
+                router.push("/(auth)/login");
+              }}
+            >
+              <Text style={styles.googleSignInText}>
+                {t("Sign in with Google", "Googleでサインイン")}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.modalCancelButton}
+              onPress={() => setShowLoginModal(false)}
+            >
+              <Text style={styles.modalCancelButtonText}>
+                {t("Cancel", "キャンセル")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Modal>
       </View>
     );
   }
@@ -554,6 +592,75 @@ const styles = StyleSheet.create({
   },
   trialButton: {
     backgroundColor: "#34C759",
+  },
+  modalBody: {
+    paddingBottom: 4,
+  },
+  infoBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#F0F7FF",
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 12,
+    gap: 10,
+  },
+  premiumBox: {
+    backgroundColor: "#FFF8E7",
+  },
+  infoBoxIcon: {
+    fontSize: 22,
+    marginTop: 2,
+  },
+  infoBoxContent: {
+    flex: 1,
+  },
+  infoBoxTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 4,
+  },
+  premiumTitle: {
+    color: "#B8860B",
+  },
+  infoBoxText: {
+    fontSize: 13,
+    color: "#555",
+    lineHeight: 19,
+  },
+  googleSignInButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1.5,
+    borderColor: "#dadce0",
+    borderRadius: 8,
+    paddingVertical: 13,
+    paddingHorizontal: 24,
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  googleSignInText: {
+    color: "#3c4043",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  modalCancelButton: {
+    alignItems: "center",
+    paddingVertical: 11,
+    borderRadius: 8,
+    backgroundColor: "#E0E0E0",
+  },
+  modalCancelButtonText: {
+    color: "#333",
+    fontSize: 15,
+    fontWeight: "600",
   },
   featuresContainer: {
     width: "100%",
