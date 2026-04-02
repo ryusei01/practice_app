@@ -3,7 +3,7 @@
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel
 import uuid
@@ -13,8 +13,12 @@ from ..core.auth import get_current_active_user
 from ..models import Answer, User, QuestionSet, Question
 from ..ai import StatsUpdater
 from ..services.ai_evaluator import evaluate_text_answer
-from typing import List
-
+from ..services.embedding_grading import (
+    RubricItem,
+    MisconceptionItem,
+    evaluate_with_rubric_and_misconceptions,
+    to_legacy_evaluation_format,
+)
 router = APIRouter()
 
 
@@ -30,6 +34,25 @@ class SubmitAnswerRequest(BaseModel):
 class EvaluateTextAnswerRequest(BaseModel):
     question_id: str
     user_answer: str
+
+
+class RubricItemSchema(BaseModel):
+    id: str
+    text: str
+    weight: float = 1.0
+
+
+class MisconceptionItemSchema(BaseModel):
+    id: str
+    label: str
+    example_phrases: List[str]
+
+
+class EvaluateTextWithRubricRequest(BaseModel):
+    question_id: str
+    user_answer: str
+    rubrics: List[RubricItemSchema]
+    misconceptions: Optional[List[MisconceptionItemSchema]] = None
 
 
 class AnswerResponse(BaseModel):
@@ -80,6 +103,54 @@ async def evaluate_text_answer_endpoint(
 
         return evaluation
 
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/evaluate-text-with-rubric")
+async def evaluate_text_with_rubric_endpoint(
+    request: EvaluateTextWithRubricRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    記述式をルーブリック + 埋め込み類似度で採点（sentence-transformers）。
+
+    ルーブリック項目ごとに部分点を付け、誤概念があれば分類結果も返す。
+    既存の evaluate-text と同様の is_correct / confidence / feedback に加え、
+    embedding_grading で詳細（項目別スコア・誤概念）を返す。
+    """
+    try:
+        question = db.query(Question).filter(Question.id == request.question_id).first()
+        if not question:
+            raise HTTPException(status_code=404, detail="Question not found")
+        if question.question_type != "text_input":
+            raise HTTPException(
+                status_code=400,
+                detail="This endpoint is only for text_input questions",
+            )
+
+        rubrics = [
+            RubricItem(id=r.id, text=r.text, weight=r.weight) for r in request.rubrics
+        ]
+        misconceptions = None
+        if request.misconceptions:
+            misconceptions = [
+                MisconceptionItem(
+                    id=m.id, label=m.label, example_phrases=m.example_phrases
+                )
+                for m in request.misconceptions
+            ]
+
+        result = evaluate_with_rubric_and_misconceptions(
+            answer=request.user_answer,
+            rubrics=rubrics,
+            misconceptions=misconceptions,
+        )
+        return to_legacy_evaluation_format(result, pass_threshold=60.0)
     except HTTPException:
         raise
     except Exception as e:
@@ -212,16 +283,30 @@ async def recalculate_stats(
     user_id: str,
     db: Session = Depends(get_db)
 ):
-    """
-    ユーザーの統計を再計算
-
-    データの整合性が崩れた時に使用
-    """
+    """ユーザーの統計を再計算（データの整合性が崩れた時に使用）"""
     try:
         stats_updater = StatsUpdater(db)
         stats_updater.recalculate_all_stats(user_id)
-
         return {"message": "Stats recalculated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/recalculate-question-set-stats/{question_set_id}")
+async def recalculate_question_set_stats(
+    question_set_id: str,
+    db: Session = Depends(get_db)
+):
+    """問題集の集計カラムを再計算（total_questions, average_difficulty, total_purchases, average_rating）"""
+    try:
+        qs = db.query(QuestionSet).filter(QuestionSet.id == question_set_id).first()
+        if not qs:
+            raise HTTPException(status_code=404, detail="Question set not found")
+        stats_updater = StatsUpdater(db)
+        stats_updater.recalculate_question_set_stats(question_set_id)
+        return {"message": "Question set stats recalculated successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

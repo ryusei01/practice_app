@@ -1,0 +1,12 @@
+{
+  "name": "practice_app",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -k -n api,expo -c cyan,magenta \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "node scripts/run-backend.cjs",
+    "dev:frontend": "cd frontend && npx expo start --port 8082"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

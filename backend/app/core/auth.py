@@ -2,6 +2,7 @@
 認証関連のユーティリティ
 JWT トークン生成、パスワードハッシュなど
 """
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
@@ -13,6 +14,8 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .database import get_db
 from ..models import User
+
+logger = logging.getLogger(__name__)
 
 # パスワードハッシュ化 (argon2を使用)
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
@@ -111,25 +114,31 @@ async def get_current_user(
     )
 
     token = credentials.credentials
-    print(f"[Auth] Decoding token: {token[:20]}...")
+    if settings.DEBUG:
+        logger.debug(f"[Auth] Decoding token: {token[:20]}...")
     payload = decode_access_token(token)
 
     if payload is None:
-        print("[Auth] Token decode failed")
+        if settings.DEBUG:
+            logger.debug("[Auth] Token decode failed")
         raise credentials_exception
 
     user_id: str = payload.get("sub")
-    print(f"[Auth] Token payload user_id: {user_id}")
+    if settings.DEBUG:
+        logger.debug(f"[Auth] Token payload user_id: {user_id}")
     if user_id is None:
-        print("[Auth] No user_id in token payload")
+        if settings.DEBUG:
+            logger.debug("[Auth] No user_id in token payload")
         raise credentials_exception
 
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
-        print(f"[Auth] User not found for id: {user_id}")
+        if settings.DEBUG:
+            logger.debug(f"[Auth] User not found for id: {user_id}")
         raise credentials_exception
 
-    print(f"[Auth] User authenticated: {user.email}, is_active: {user.is_active}")
+    if settings.DEBUG:
+        logger.debug(f"[Auth] User authenticated: {user.email}, is_active: {user.is_active}")
     return user
 
 

@@ -20,7 +20,8 @@ export default function Header({ title, rightComponent }: HeaderProps) {
   const isSmallScreen = width < 600;
 
   // ホームページかどうかを判定（戻るボタンを非表示にする）
-  const isHomePage = pathname === "/" || pathname === "/index";
+  const ROOT_PAGES = ["/", "/index", "/dashboard", "/(app)/dashboard"];
+  const isHomePage = ROOT_PAGES.some(p => pathname === p) || pathname.endsWith("/dashboard");
   
   // マイページかどうかを判定
   const isMyPage = pathname === "/mypage" || pathname.includes("/mypage");
@@ -34,7 +35,7 @@ export default function Header({ title, rightComponent }: HeaderProps) {
         {!isHomePage && (
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={() => router.canGoBack() ? router.back() : router.replace("/")}
             testID="header-back-btn"
           >
             <Text style={styles.backButtonText} nativeID="header-back-text">

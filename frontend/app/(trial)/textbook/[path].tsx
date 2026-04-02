@@ -13,7 +13,10 @@ import { useLanguage } from "../../../src/contexts/LanguageContext";
 import { WebView } from "react-native-webview";
 import * as FileSystem from "expo-file-system";
 import Header from "../../../src/components/Header";
-import { normalizeTextbookPath } from "../../../src/services/textbookService";
+import {
+  getTextbookApiOrigin,
+  normalizeTextbookPath,
+} from "../../../src/services/textbookService";
 import { translateTextbook } from "../../../src/api/translate";
 
 export default function TextbookViewScreen() {
@@ -121,12 +124,7 @@ export default function TextbookViewScreen() {
 
       // 相対パスの場合（docs/textbook/など）
       // バックエンドAPIからファイルを取得
-      let apiBaseUrl =
-        process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
-      // /api/v1が既に含まれている場合は削除
-      if (apiBaseUrl.endsWith("/api/v1")) {
-        apiBaseUrl = apiBaseUrl.replace("/api/v1", "");
-      }
+      const apiBaseUrl = getTextbookApiOrigin();
       const fileUrl = `${apiBaseUrl}/api/v1/textbooks/${encodeURIComponent(
         filePath
       )}`;

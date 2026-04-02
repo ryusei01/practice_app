@@ -438,21 +438,17 @@ async def bulk_upload_questions(
     """
     CSVファイルから問題を一括登録
 
-    CSVフォーマット:
+    新フォーマット（推奨）:
+    question_text,question_type,option_1,option_2,option_3,option_4,correct_answer,explanation,difficulty,category,subcategory1,subcategory2
+
+    旧フォーマット（後方互換）:
     question_text,question_type,options,correct_answer,explanation,difficulty,category,subcategory1,subcategory2
 
-    例:
-    "What is 2+2?",multiple_choice,"2,3,4,5",4,"Basic addition",0.2,math,arithmetic,addition
-    "The sky is blue",true_false,,true,"Common knowledge",0.1,general,nature,sky
+    question_type は任意。未指定時は option 列の有無で自動判定。
 
-    Args:
-        question_set_id: 問題集ID
-        file: CSVファイル
-        current_user: 現在のユーザー
-        db: データベースセッション
-
-    Returns:
-        登録された問題数と詳細
+    例（新フォーマット）:
+    What is 2+2?,,2,3,4,5,4,Basic addition,0.2,math,arithmetic,addition
+    Capital of France?,,,,,,Paris,Paris is the capital,0.3,geography,europe,capitals
     """
     # 問題集の存在と権限を確認
     question_set = db.query(QuestionSet).filter(
@@ -487,12 +483,20 @@ async def bulk_upload_questions(
                     errors.append(f"Row {idx}: Missing required fields (question_text or correct_answer)")
                     continue
 
-                # question_typeのデフォルト値
-                question_type = row.get('question_type', 'text_input').strip()
+                # optionsの処理: 新フォーマット(option_1-4) vs 旧フォーマット(options)
+                if 'option_1' in row:
+                    opts = [row.get(f'option_{i}', '').strip() for i in range(1, 5)]
+                    options = [o for o in opts if o] or None
+                else:
+                    options_str = row.get('options', '').strip()
+                    options = [opt.strip() for opt in options_str.split(',')] if options_str else None
 
-                # optionsの処理（カンマ区切りの文字列をリストに変換）
-                options_str = row.get('options', '').strip()
-                options = [opt.strip() for opt in options_str.split(',')] if options_str else None
+                # question_type: 明示指定があればそのまま、なければ自動判定
+                question_type_raw = row.get('question_type', '').strip()
+                if question_type_raw:
+                    question_type = question_type_raw
+                else:
+                    question_type = 'multiple_choice' if options else 'text_input'
 
                 # difficultyの処理
                 difficulty_str = row.get('difficulty', '').strip()

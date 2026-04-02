@@ -29,6 +29,7 @@ export default function QuizResultScreen() {
   const total = parseInt(params.total as string) || 0;
   const totalTime = parseInt(params.totalTime as string) || 0;
   const answersJson = params.answers as string || '[]';
+  const questionSetId = params.questionSetId as string | undefined;
   const answers: AnswerResult[] = JSON.parse(answersJson);
 
   const correctAnswers = answers.filter(a => a.is_correct);
@@ -186,7 +187,15 @@ export default function QuizResultScreen() {
       <View style={styles.actionsContainer}>
         <TouchableOpacity
           style={styles.primaryButton}
-          onPress={() => router.back()}
+          onPress={() => {
+            if (questionSetId) {
+              router.replace(`/(app)/question-sets/${questionSetId}`);
+            } else if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace("/(app)/dashboard");
+            }
+          }}
         >
           <Text style={styles.primaryButtonText}>
             {t('Back to Question Sets', '問題集に戻る')}
@@ -196,9 +205,13 @@ export default function QuizResultScreen() {
         <TouchableOpacity
           style={styles.secondaryButton}
           onPress={() => {
-            router.back();
-            // 同じクイズを再度開始したい場合の処理
-            // router.replace(...)
+            if (questionSetId) {
+              router.replace(`/(app)/question-sets/${questionSetId}`);
+            } else if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace("/(app)/dashboard");
+            }
           }}
         >
           <Text style={styles.secondaryButtonText}>

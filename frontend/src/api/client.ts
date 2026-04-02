@@ -1,6 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import { tokenStorage } from "../utils/secureStorage";
 
 // 環境変数からAPI URLを取得（デフォルトは開発環境用）
 const API_URL =
@@ -33,17 +33,18 @@ const processQueue = (error: any = null) => {
   failedQueue = [];
 };
 
+const isDev = process.env.NODE_ENV === "development" || __DEV__;
+
 // リクエストインターセプター: トークンを自動的に付与
 apiClient.interceptors.request.use(
   async (config) => {
-    const token = await AsyncStorage.getItem("access_token");
-    console.log('[API Client] Request:', config.method?.toUpperCase(), config.url);
-    console.log('[API Client] Token exists:', !!token);
+    const token = await tokenStorage.getAccessToken();
+    if (isDev) {
+      console.log('[API Client] Request:', config.method?.toUpperCase(), config.url);
+      console.log('[API Client] Token exists:', !!token);
+    }
     if (token) {
-      console.log('[API Client] Token (first 20 chars):', token.substring(0, 20));
       config.headers.Authorization = `Bearer ${token}`;
-    } else {
-      console.log('[API Client] No access token found in AsyncStorage');
     }
     return config;
   },
@@ -79,12 +80,10 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshToken = await AsyncStorage.getItem("refresh_token");
+        const refreshToken = await tokenStorage.getRefreshToken();
 
         if (!refreshToken) {
-          // リフレッシュトークンがない場合はログアウト
-          await AsyncStorage.removeItem("access_token");
-          await AsyncStorage.removeItem("refresh_token");
+          await tokenStorage.clearAll();
           processQueue(new Error("No refresh token available"));
           return Promise.reject(error);
         }
@@ -103,22 +102,17 @@ apiClient.interceptors.response.use(
         const { access_token, refresh_token: new_refresh_token } =
           response.data;
 
-        // 新しいトークンを保存
-        await AsyncStorage.setItem("access_token", access_token);
-        await AsyncStorage.setItem("refresh_token", new_refresh_token);
+        await tokenStorage.setAccessToken(access_token);
+        await tokenStorage.setRefreshToken(new_refresh_token);
 
-        // 元のリクエストのヘッダーを更新
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
 
         processQueue(null);
         isRefreshing = false;
 
-        // 元のリクエストを再実行
         return apiClient(originalRequest);
       } catch (refreshError) {
-        // リフレッシュに失敗した場合はログアウト
-        await AsyncStorage.removeItem("access_token");
-        await AsyncStorage.removeItem("refresh_token");
+        await tokenStorage.clearAll();
         processQueue(refreshError);
         isRefreshing = false;
         return Promise.reject(refreshError);

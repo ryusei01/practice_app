@@ -103,11 +103,6 @@ async def update_user_role(
         )
 
     user.role = request.role
-
-    # ロールに応じてis_sellerフラグも更新
-    if request.role == UserRole.SELLER:
-        user.is_seller = True
-
     db.commit()
     db.refresh(user)
 
@@ -241,7 +236,7 @@ async def create_admin_user(
         hashed_password=hashed_password,
         is_active=True,
         role=request.role,
-        is_seller=(request.role == UserRole.SELLER)
+        is_seller=False
     )
 
     db.add(new_admin)

@@ -42,10 +42,13 @@ export default function QuizScreen() {
         return;
       }
 
-      // questionIdsパラメータがある場合、指定された問題のみをフィルタ
+      // questionIdsパラメータがある場合、指定された問題のみをフィルタ（順序を保持）
       if (questionIds) {
         const selectedIds = questionIds.split(',');
-        const filteredQuestions = data.filter(q => selectedIds.includes(q.id));
+        const questionMap = new Map(data.map(q => [q.id, q]));
+        const filteredQuestions = selectedIds
+          .map(qid => questionMap.get(qid))
+          .filter((q): q is Question => q !== undefined);
 
         if (filteredQuestions.length === 0) {
           Alert.alert("No Questions", "Selected questions not found.", [
@@ -119,6 +122,7 @@ export default function QuizScreen() {
           total: answers.length.toString(),
           totalTime: totalTime.toString(),
           answers: JSON.stringify(answersWithDetails),
+          questionSetId: id as string,
         },
       });
     } catch (error: any) {

@@ -257,12 +257,17 @@ export const localStorageService = {
       }
       values.push(currentValue.trim());
 
-      // question_text, correct_answer, explanation, difficulty, category
-      const question_text = values[0] || "";
-      const correct_answer = values[3] || "";
-      const explanation = values[4] || "";
-      const difficulty = parseFloat(values[5]) || 0.5;
-      const category = values[6] || "";
+      // ヘッダー名ベースで列を取得（新旧フォーマット両対応）
+      const col = (name: string) => {
+        const idx = headers.indexOf(name);
+        return idx >= 0 ? values[idx] || "" : "";
+      };
+
+      const question_text = col("question_text");
+      const correct_answer = col("correct_answer");
+      const explanation = col("explanation");
+      const difficulty = parseFloat(col("difficulty")) || 0.5;
+      const category = col("category");
 
       if (question_text && correct_answer) {
         questions.push({

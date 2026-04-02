@@ -13,6 +13,7 @@ import * as FileSystem from 'expo-file-system';
 import Markdown from 'react-native-markdown-display';
 import { questionSetsApi } from '../../../../src/api/questionSets';
 import { useLanguage } from '../../../../src/contexts/LanguageContext';
+import { getTextbookApiOrigin } from '../../../../src/services/textbookService';
 
 export default function TextbookScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -77,7 +78,7 @@ export default function TextbookScreen() {
 
       // 相対パスの場合（docs/textbook/など）
       // バックエンドAPIからファイルを取得
-      const apiBaseUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
+      const apiBaseUrl = getTextbookApiOrigin();
       const fileUrl = `${apiBaseUrl}/api/v1/textbooks/${encodeURIComponent(path)}`;
       
       try {

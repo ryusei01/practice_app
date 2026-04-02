@@ -6,11 +6,10 @@ from ..core.database import Base
 
 
 class UserRole(str, enum.Enum):
-    """ユーザーロール"""
-    USER = "user"           # 一般ユーザー
-    SELLER = "seller"       # 販売者
-    ADMIN = "admin"         # システム管理者
-    SUPER_ADMIN = "super_admin"  # 最高管理者
+    """アクセスレベル（is_seller とは独立）"""
+    USER = "user"
+    ADMIN = "admin"
+    SUPER_ADMIN = "super_admin"
 
 
 class User(Base):
@@ -19,26 +18,25 @@ class User(Base):
     id = Column(String, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     username = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=True)
+    google_id = Column(String, unique=True, index=True, nullable=True)
     is_active = Column(Boolean, default=True)
-    role = Column(Enum(UserRole, name="user_role", create_constraint=False, native_enum=False, values_callable=lambda x: [e.value for e in x]), default=UserRole.USER.value, nullable=False)  # ユーザーロール
-    is_seller = Column(Boolean, default=False)  # 後方互換性のため残す
-    is_premium = Column(Boolean, default=False)  # 課金ユーザーフラグ
-    premium_expires_at = Column(DateTime, nullable=True)  # サブスク期限
-    stripe_account_id = Column(String, nullable=True)  # Stripe Connect Account ID
-    stripe_customer_id = Column(String, nullable=True)  # Stripe Customer ID (課金用)
+    role = Column(Enum(UserRole, name="user_role", create_constraint=False, native_enum=False, values_callable=lambda x: [e.value for e in x]), default=UserRole.USER.value, nullable=False)
+    is_seller = Column(Boolean, default=False)  # 販売機能フラグ（role とは独立）
+    is_premium = Column(Boolean, default=False)
+    premium_expires_at = Column(DateTime, nullable=True)
+    stripe_account_id = Column(String, nullable=True)
+    stripe_customer_id = Column(String, nullable=True)
+    seller_terms_accepted_at = Column(DateTime, nullable=True)
 
     # セキュリティ関連
-    failed_login_attempts = Column(Integer, default=0)  # ログイン失敗回数
-    locked_until = Column(DateTime, nullable=True)  # アカウントロック解除時刻
-    refresh_token = Column(String, nullable=True)  # リフレッシュトークン（ハッシュ化）
+    failed_login_attempts = Column(Integer, default=0)
+    locked_until = Column(DateTime, nullable=True)
+    refresh_token = Column(String, nullable=True)
 
     # 2段階認証関連
-    two_factor_enabled = Column(Boolean, default=False)  # 2FA有効フラグ
-    two_factor_secret = Column(String, nullable=True)  # TOTPシークレット（将来の拡張用）
-    otp_code = Column(String, nullable=True)  # メールOTPコード（ハッシュ化）
-    otp_expires_at = Column(DateTime, nullable=True)  # OTPの有効期限
-    backup_codes = Column(String, nullable=True)  # バックアップコード（JSON形式、ハッシュ化）
+    two_factor_enabled = Column(Boolean, default=False)
+    backup_codes = Column(String, nullable=True)  # JSON形式、ハッシュ化
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -47,3 +45,4 @@ class User(Base):
     question_sets = relationship("QuestionSet", back_populates="creator")
     purchases = relationship("Purchase", back_populates="buyer")
     answers = relationship("Answer", back_populates="user")
+    reviews = relationship("Review", back_populates="user")

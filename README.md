@@ -59,6 +59,7 @@
 ### AI/ML
 
 - **scikit-learn** - 機械学習モデル
+- **sentence-transformers** - 記述式採点（埋め込み類似度 + ルーブリック・誤概念分類）。利用説明: [docs/SENTENCE_TRANSFORMERS_利用説明.md](docs/SENTENCE_TRANSFORMERS_利用説明.md)
 - **LightGBM** - 問題推薦システム
 - **pandas** - データ処理
 - **numpy** - 数値計算（コサイン類似度計算など）
@@ -80,17 +81,21 @@
 
 ### デプロイ
 
-- **Backend**: Render (Free tier) / Railway
-- **Frontend**: Expo (OTA 更新無料)
+- **Backend**: **Render**（Free tier）— API は Render でホスティング
+- **Frontend（Web）**: Cloudflare Pages（[デプロイ](#デプロイ) 節）
+- **モバイル**: Expo（OTA 更新無料）
 
 ## コスト構成
 
-| サービス       | プラン     | 月額        |
-| -------------- | ---------- | ----------- |
-| Supabase       | Free       | $0          |
-| Render/Railway | Free       | $0          |
-| Stripe         | 手数料のみ | 取引の 3.6% |
-| **合計**       |            | **$0/月**   |
+主要クラウド・SaaSの目安（無料枠想定・決済手数料は別）。詳細は各サービスの料金ページを参照。
+
+| サービス          | プラン     | 月額（目安） |
+| ----------------- | ---------- | ------------ |
+| Supabase          | Free       | $0           |
+| Render（API）     | Free       | $0           |
+| Cloudflare Pages  | Free       | $0           |
+| Stripe            | 手数料のみ | 取引の 3.6%  |
+| **固定費の合計**  |            | **$0/月**    |
 
 ## プロジェクト構造
 
@@ -127,7 +132,8 @@ practice_app/
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+#source venv/bin/activate   Windows: 
+venv\Scripts\activate
 pip install -r requirements.txt
 #cp .env.example .env
 # .env を編集して環境変数を設定
@@ -158,8 +164,7 @@ OLLAMA_TRANSLATION_MODEL=llama3.2:1b
 
 ```bash
 cd frontend
-npm install --legacy-peer
--deps
+npm install --legacy-peer-deps
 #cp .env.example .env
 # .env を編集WしてAPI URLを設定
 npx expo start
@@ -167,26 +172,50 @@ npx expo start
 
 ## デプロイ
 
-### Cloudflare Pages（フロントエンド）- 手動デプロイ
+### Cloudflare Pages（フロントエンド）- GitHub Actions 自動デプロイ
 
-```bash
-# Windows
-deploy-cloudflare.bat
+`main` / `master` ブランチへの push または手動実行（`workflow_dispatch`）をトリガーに、GitHub Actions が自動でビルド＆デプロイします。ワークフローファイル: `.github/workflows/deploy.yml`
 
-# Mac/Linux
-chmod +x deploy-cloudflare.sh
-./deploy-cloudflare.sh
+#### 必要な GitHub シークレット / 変数
+
+| 種別 | キー名 | 説明 |
+| ---- | ------ | ---- |
+| Secret または Variable | `EXPO_PUBLIC_API_URL` | Expo Web ビルド時に JS へ埋め込まれる公開 API URL |
+| Secret | `CF_API_TOKEN` | Cloudflare API トークン |
+| Secret | `CF_ACCOUNT_ID` | Cloudflare アカウント ID |
+
+> GitHub の **Settings → Secrets and variables → Actions** で設定してください。  
+> `EXPO_PUBLIC_API_URL` は Variables（公開）でも Secrets（非公開）でも構いません。
+
+#### デプロイ先
+
+| 項目 | 値 |
+| ---- | -- |
+| Cloudflare Pages プロジェクト名 | `aipracticebook` |
+| デプロイディレクトリ | `frontend/dist` |
+| Production ブランチ | `main` / `master`（push した branch 名を自動適用） |
+
+#### ビルドの流れ
+
+```
+1. actions/checkout@v3          — リポジトリをチェックアウト
+2. actions/setup-node@v3 (v20)  — Node.js 20 をセットアップ
+3. npm install --legacy-peer-deps  — 依存関係インストール（frontend/）
+4. npx expo export --platform web  — Expo Web ビルド → frontend/dist/
+5. cloudflare/pages-action@v1   — Cloudflare Pages へデプロイ
 ```
 
-その後、https://dash.cloudflare.com/ で `frontend/dist` をアップロード
+### Render（バックエンド）
 
-詳細は [DEPLOYMENT.md](DEPLOYMENT.md) を参照
+本プロジェクトの FastAPI は **Render** で動かす想定です。
 
-### Railway（バックエンド）
+1. [Render](https://render.com/) にログインし、GitHub リポジトリと連携
+2. **Web Service** を新規作成し、ルートディレクトリを `backend` に設定（リポジトリ構成に合わせて調整）
+3. ビルド／スタートコマンドを設定（例: `pip install -r requirements.txt` → `uvicorn app.main:app --host 0.0.0.0 --port $PORT`）
+4. 環境変数を設定（`backend/.env.example` 参照。`SUPABASE_*`・`STRIPE_*` など）
+5. デプロイ後、表示される URL をフロントの API ベース URL に設定
 
-1. https://railway.app/ で GitHub 連携
-2. 環境変数を設定（`.env.example` 参照）
-3. 自動デプロイ
+Railway 向けの手順・環境変数メモは `docs/RAILWAY_DEPLOYMENT_GUIDE.md` などに残していますが、**本番 API のホスティングは Render を前提**としています。
 
 ## 開発フェーズ
 

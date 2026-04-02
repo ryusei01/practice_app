@@ -64,6 +64,7 @@ export default function RootLayout() {
               <Stack.Screen name="(trial)/quiz/[id]" />
               <Stack.Screen name="(trial)/create" />
               <Stack.Screen name="(app)/flashcard/[id]" />
+              <Stack.Screen name="(public)/privacy-policy" />
             </Stack>
           </TrialModeProvider>
         </AuthProvider>

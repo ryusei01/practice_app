@@ -4,6 +4,7 @@ export default {
     slug: "quiz-marketplace",
     version: "1.0.0",
     orientation: "portrait",
+    scheme: "quizmarketplace",
     icon: "./assets/icon.png",
     userInterfaceStyle: "automatic",
     splash: {

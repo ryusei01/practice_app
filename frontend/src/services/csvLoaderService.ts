@@ -26,8 +26,8 @@ const CSV_FILES: CSVFile[] = [
   },
   {
     fileName: "business_english.csv",
-    title: "ビジネス英単語",
-    description: "ビジネス英単語",
+    title: "business english",
+    description: "business english",
     csvContent: BusinessEnglish_CSV,
   },
   {
@@ -44,10 +44,10 @@ const CSV_FILES: CSVFile[] = [
   },
   {
     fileName: "japanese_wordbook.csv",
-    title: "Japanese Vocabulary Book (N5-N1)",
+    title: "japanese wordbook",
     description: "japanese wordbook",
     csvContent: JapaneseWordbook_CSV,
-  },
+  }
 ];
 
 /**

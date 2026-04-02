@@ -59,4 +59,16 @@ export const paymentsApi = {
     const response = await apiClient.get('/payments/seller-dashboard');
     return response.data;
   },
+
+  acceptSellerTerms: async (): Promise<{ message: string; accepted_at: string }> => {
+    const response = await apiClient.post('/payments/accept-seller-terms');
+    return response.data;
+  },
+
+  exportSellerRevenue: async (): Promise<string> => {
+    const response = await apiClient.get('/payments/seller-revenue-export', {
+      responseType: 'text',
+    });
+    return response.data;
+  },
 };

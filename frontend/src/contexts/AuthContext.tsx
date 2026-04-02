@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { authApi, AuthResponse } from '../api/auth';
+import { tokenStorage } from '../utils/secureStorage';
 
 interface User {
   id: string;
@@ -12,18 +12,11 @@ interface User {
   premium_expires_at: string | null;
 }
 
-interface RegisterPendingResponse {
-  user_id: string;
-  email: string;
-  message: string;
-}
-
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, full_name: string) => Promise<RegisterPendingResponse>;
+  loginWithGoogle: (accessToken: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -47,52 +40,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const checkAuth = async () => {
     try {
-      // トークンがない場合は認証チェックをスキップ
-      const token = await AsyncStorage.getItem('access_token');
-      console.log('[AuthContext] Checking auth, token exists:', !!token);
+      const token = await tokenStorage.getAccessToken();
       if (!token) {
-        console.log('[AuthContext] No token found, user not authenticated');
         setUser(null);
         setIsLoading(false);
         return;
       }
 
-      // OTP検証ページではAPIを呼ばない
-      const currentPath = window.location.pathname;
-      if (currentPath.includes('verify-otp')) {
-        console.log('[AuthContext] On OTP verification page, skipping auth check');
-        setIsLoading(false);
-        return;
-      }
-
-      console.log('[AuthContext] Fetching current user data...');
       const userData = await authApi.getCurrentUser();
-      console.log('[AuthContext] User authenticated:', userData.email);
       setUser(userData);
     } catch (error) {
       console.error('Auth check failed:', error);
-      await AsyncStorage.removeItem('access_token');
-      await AsyncStorage.removeItem('refresh_token');
+      await tokenStorage.clearAll();
       setUser(null);
 
-      // indexページ以外でエラーが発生した場合のみリダイレクト
       try {
         const currentPath = window.location.pathname;
         const isPublicPath =
           currentPath === '/' ||
           currentPath.includes('login') ||
-          currentPath.includes('register') ||
-          currentPath.includes('verify-otp') ||
           currentPath === '/question-sets' ||
           currentPath === '/trial-question-sets' ||
           currentPath.startsWith('/set/') ||
           currentPath.startsWith('/textbook/');
 
-        // 公開ページではリダイレクトしない
-        if (isPublicPath) {
-          // 何もしない
-        } else {
-          // それ以外はログイン画面へ
+        if (!isPublicPath) {
           router.replace('/(auth)/login');
         }
       } catch (navError) {
@@ -103,21 +75,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const login = async (email: string, password: string) => {
-    try {
-      const response: AuthResponse = await authApi.login({ email, password });
-      setUser(response.user);
-      // ログイン成功後、ダッシュボードにリダイレクト
-      router.replace("/(app)/dashboard");
-    } catch (error) {
-      // エラーを再スローして、呼び出し元でキャッチできるようにする
-      throw error;
-    }
-  };
-
-  const register = async (email: string, password: string, full_name: string) => {
-    const response = await authApi.register({ email, password, full_name });
-    return response;
+  const loginWithGoogle = async (accessToken: string) => {
+    const response: AuthResponse = await authApi.googleLogin(accessToken);
+    setUser(response.user);
+    router.replace('/(app)/dashboard');
   };
 
   const logout = async () => {
@@ -131,8 +92,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         user,
         isLoading,
         isAuthenticated: !!user,
-        login,
-        register,
+        loginWithGoogle,
         logout,
       }}
     >

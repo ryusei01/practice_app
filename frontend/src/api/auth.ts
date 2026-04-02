@@ -1,16 +1,5 @@
 import apiClient from './client';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-export interface RegisterData {
-  email: string;
-  password: string;
-  full_name: string;
-}
-
-export interface LoginData {
-  email: string;
-  password: string;
-}
+import { tokenStorage } from '../utils/secureStorage';
 
 export interface AuthResponse {
   access_token: string;
@@ -26,47 +15,20 @@ export interface AuthResponse {
   };
 }
 
-export interface RegisterPendingResponse {
-  user_id: string;
-  email: string;
-  message: string;
-}
-
 export const authApi = {
-  register: async (data: RegisterData): Promise<RegisterPendingResponse> => {
-    const response = await apiClient.post('/auth/register', data);
-    return response.data;
-  },
-
-  verifyOTP: async (userId: string, otpCode: string): Promise<AuthResponse> => {
-    const response = await apiClient.post('/auth/verify-otp', {
-      user_id: userId,
-      otp_code: otpCode,
-    });
+  googleLogin: async (accessToken: string): Promise<AuthResponse> => {
+    const response = await apiClient.post('/auth/google', { access_token: accessToken });
     if (response.data.access_token) {
-      await AsyncStorage.setItem('access_token', response.data.access_token);
+      await tokenStorage.setAccessToken(response.data.access_token);
     }
     if (response.data.refresh_token) {
-      await AsyncStorage.setItem('refresh_token', response.data.refresh_token);
-    }
-    return response.data;
-  },
-
-  login: async (data: LoginData): Promise<AuthResponse> => {
-    const response = await apiClient.post('/auth/login', data);
-
-    if (response.data.access_token) {
-      await AsyncStorage.setItem('access_token', response.data.access_token);
-    }
-    if (response.data.refresh_token) {
-      await AsyncStorage.setItem('refresh_token', response.data.refresh_token);
+      await tokenStorage.setRefreshToken(response.data.refresh_token);
     }
     return response.data;
   },
 
   logout: async (): Promise<void> => {
-    await AsyncStorage.removeItem('access_token');
-    await AsyncStorage.removeItem('refresh_token');
+    await tokenStorage.clearAll();
   },
 
   getCurrentUser: async () => {

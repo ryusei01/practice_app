@@ -25,6 +25,9 @@ import {
 } from "../../../src/api/questions";
 import Modal from "../../../src/components/Modal";
 import { commonStyles } from "../../../src/styles/questionSetDetailStyles";
+import { useAuth } from "../../../src/contexts/AuthContext";
+import { copyrightApi, reportsApi, CopyrightCheckResult } from "../../../src/api/reports";
+import ReportModal from "../../../src/components/ReportModal";
 
 // 問題ごとの回答統計
 interface QuestionStats {
@@ -37,6 +40,7 @@ interface QuestionStats {
 export default function QuestionSetDetailScreen() {
   const { id, mode } = useLocalSearchParams<{ id: string; mode?: string }>();
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [questionSet, setQuestionSet] = useState<QuestionSet | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,6 +48,14 @@ export default function QuestionSetDetailScreen() {
   const [setupMode, setSetupMode] = useState(mode === "setup");
   const [setupStep, setSetupStep] = useState(1);
   const router = useRouter();
+
+  // 著作権チェック関連
+  const [copyrightCheckResult, setCopyrightCheckResult] =
+    useState<CopyrightCheckResult | null>(null);
+  const [isCopyrightChecking, setIsCopyrightChecking] = useState(false);
+
+  // 通報モーダル
+  const [reportModalVisible, setReportModalVisible] = useState(false);
   const [questionStats, setQuestionStats] = useState<
     Map<string, QuestionStats>
   >(new Map());
@@ -174,6 +186,41 @@ export default function QuestionSetDetailScreen() {
 
   const handleAddQuestion = () => {
     router.push(`/(app)/question-sets/${id}/add-question`);
+  };
+
+  const handleCopyrightCheck = async () => {
+    if (!id) return;
+    setIsCopyrightChecking(true);
+    try {
+      const result = await copyrightApi.runCheck(id);
+      setCopyrightCheckResult(result);
+      if (result.risk_level === "high") {
+        Alert.alert(
+          "⚠️ 著作権チェック：高リスク",
+          `このコンテンツは著作権侵害の可能性があるため公開できません。\n\n${result.recommendation}`,
+          [{ text: "OK" }]
+        );
+      } else if (result.risk_level === "medium") {
+        Alert.alert(
+          "⚠️ 著作権チェック：注意",
+          `一部注意が必要な箇所があります。内容をご確認ください。\n\n${result.recommendation}`,
+          [{ text: "OK" }]
+        );
+      } else {
+        Alert.alert(
+          "✅ 著作権チェック：問題なし",
+          "著作権上の問題は検出されませんでした。問題集を公開できます。",
+          [{ text: "OK" }]
+        );
+      }
+    } catch (error: any) {
+      const msg =
+        error?.response?.data?.detail ||
+        "著作権チェックに失敗しました。Ollamaサーバーが起動しているか確認してください。";
+      Alert.alert("エラー", msg);
+    } finally {
+      setIsCopyrightChecking(false);
+    }
   };
 
   const handleEditQuestionSet = () => {
@@ -329,7 +376,7 @@ ${t("csv.requiredFields")}:
 ${t("csv.optionalFields")}:
 • ${t("csv.questionType")}
   ${t("csv.questionTypeOptions")}
-• ${t("csv.options")}
+• option_1〜option_4 (${t("csv.options")})
 • ${t("csv.explanation")}
 • ${t("csv.difficulty")}
 • ${t("csv.category")}
@@ -337,15 +384,16 @@ ${t("csv.optionalFields")}:
 • subcategory2 (${t("csv.subcategory2")})
 
 ${t("csv.exampleCSV")}:
-question_text,question_type,options,correct_answer,explanation,difficulty,category,subcategory1,subcategory2
-"What is 2+2?",multiple_choice,"2,3,4,5",4,"Basic addition",0.2,math,arithmetic,addition
-"The sky is blue",true_false,,true,"Common knowledge",0.1,general,nature,sky
-"Capital of France?",text_input,,Paris,"Paris is the capital",0.3,geography,europe,capitals
+question_text,question_type,option_1,option_2,option_3,option_4,correct_answer,explanation,difficulty,category,subcategory1,subcategory2
+What is 2+2?,,2,3,4,5,4,Basic addition,0.2,math,arithmetic,addition
+The sky is blue,,,,,,true,Common knowledge,0.1,general,nature,sky
+Capital of France?,,,,,,Paris,Paris is the capital,0.3,geography,europe,capitals
 
 ${t("csv.importantNotes")}:
 • ${t("csv.note1")}
 • ${t("csv.note2")}
-• ${t("csv.note3")}`;
+• ${t("csv.note3")}
+• ${t("csv.note4")}`;
 
     showModal(t("csv.formatHelp"), helpMessage, [{ text: t("common.ok") }]);
   };
@@ -529,11 +577,11 @@ ${t("csv.importantNotes")}:
   const downloadCSVSample = () => {
     console.log("downloadCSVSample called");
 
-    const csvSample = `question_text,question_type,options,correct_answer,explanation,difficulty,category,subcategory1,subcategory2
-What is 2 + 2?,multiple_choice,"2,3,4,5",4,Basic addition,0.1,math,arithmetic,addition
-Is the sky blue?,true_false,,true,The sky appears blue due to Rayleigh scattering,0.1,science,physics,light
-What is the capital of Japan?,text_input,,Tokyo,Japan's capital is Tokyo,0.3,geography,asia,capitals
-What is the largest planet in our solar system?,text_input,,Jupiter,Jupiter is the largest planet,0.4,science,astronomy,planets`;
+    const csvSample = `question_text,question_type,option_1,option_2,option_3,option_4,correct_answer,explanation,difficulty,category,subcategory1,subcategory2
+What is 2 + 2?,,2,3,4,5,4,Basic addition,0.1,math,arithmetic,addition
+Is the sky blue?,,,,,,true,The sky appears blue due to Rayleigh scattering,0.1,science,physics,light
+What is the capital of Japan?,,,,,,Tokyo,Japan's capital is Tokyo,0.3,geography,asia,capitals
+What is the largest planet in our solar system?,,,,,,Jupiter,Jupiter is the largest planet,0.4,science,astronomy,planets`;
 
     const title = t("CSV Sample Format", "CSVサンプル形式");
     const message = `CSV format:
@@ -709,6 +757,18 @@ question_text,correct_answer,category,difficulty`;
           <Text style={styles.statLabel}>Price</Text>
         </View>
       </View>
+
+      {/* 特定商取引法リンク（価格表示がある場合のみ） */}
+      {questionSet.price > 0 && (
+        <TouchableOpacity
+          style={styles.tokushoLink}
+          onPress={() => router.push("/(app)/legal/tokusho")}
+        >
+          <Text style={styles.tokushoLinkText}>
+            特定商取引法に基づく表記
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* カテゴリ別にグループ化して表示 */}
       {questionGroups.length > 0 ? (
@@ -896,6 +956,76 @@ question_text,correct_answer,category,difficulty`;
             <Text style={styles.deleteButtonText}>{t("common.delete")}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* 著作権チェックセクション（作成者のみ） */}
+        {user?.id === questionSet?.creator_id && (
+          <View style={styles.copyrightCheckSection}>
+            <Text style={styles.copyrightCheckTitle}>
+              📋 著作権チェック（公開前必須）
+            </Text>
+            {copyrightCheckResult && (
+              <View
+                style={[
+                  styles.copyrightResultBox,
+                  copyrightCheckResult.risk_level === "low"
+                    ? styles.copyrightResultLow
+                    : copyrightCheckResult.risk_level === "medium"
+                    ? styles.copyrightResultMedium
+                    : styles.copyrightResultHigh,
+                ]}
+              >
+                <Text style={styles.copyrightResultLabel}>
+                  {copyrightCheckResult.risk_level === "low"
+                    ? "✅ 問題なし（公開可能）"
+                    : copyrightCheckResult.risk_level === "medium"
+                    ? "⚠️ 要注意"
+                    : "❌ 高リスク（公開不可）"}
+                </Text>
+                {copyrightCheckResult.reasons.length > 0 && (
+                  <Text style={styles.copyrightResultReasons}>
+                    {copyrightCheckResult.reasons.join("\n")}
+                  </Text>
+                )}
+                {copyrightCheckResult.recommendation ? (
+                  <Text style={styles.copyrightResultRec}>
+                    {copyrightCheckResult.recommendation}
+                  </Text>
+                ) : null}
+              </View>
+            )}
+            <TouchableOpacity
+              style={[
+                styles.copyrightCheckButton,
+                isCopyrightChecking && styles.buttonDisabled,
+              ]}
+              onPress={handleCopyrightCheck}
+              disabled={isCopyrightChecking}
+            >
+              {isCopyrightChecking ? (
+                <View style={styles.copyrightCheckButtonInner}>
+                  <ActivityIndicator size="small" color="#fff" />
+                  <Text style={styles.copyrightCheckButtonText}>
+                    {"  "}チェック中...（数秒〜数十秒かかります）
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.copyrightCheckButtonText}>
+                  🔍 著作権チェックを実行
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* 通報ボタン（他のユーザーのコンテンツのみ） */}
+        {user && user.id !== questionSet?.creator_id && (
+          <TouchableOpacity
+            style={styles.reportButton}
+            onPress={() => setReportModalVisible(true)}
+          >
+            <Text style={styles.reportButtonText}>🚩 この問題集を通報</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <Modal
@@ -905,6 +1035,15 @@ question_text,correct_answer,category,difficulty`;
         buttons={modalConfig.buttons}
         onClose={() => setModalVisible(false)}
       />
+
+      {questionSet && (
+        <ReportModal
+          visible={reportModalVisible}
+          questionSetId={questionSet.id}
+          questionSetTitle={questionSet.title}
+          onClose={() => setReportModalVisible(false)}
+        />
+      )}
 
       <Modal
         visible={selectionModalVisible}
@@ -1364,5 +1503,90 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 15,
     fontWeight: "600",
+  },
+  tokushoLink: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    alignSelf: "flex-end",
+  },
+  tokushoLinkText: {
+    fontSize: 12,
+    color: "#007AFF",
+    textDecorationLine: "underline",
+  },
+  copyrightCheckSection: {
+    marginTop: 12,
+    padding: 14,
+    backgroundColor: "#f7f7f7",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  copyrightCheckTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 8,
+  },
+  copyrightResultBox: {
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+  },
+  copyrightResultLow: {
+    backgroundColor: "#f0fff4",
+    borderColor: "#48bb78",
+  },
+  copyrightResultMedium: {
+    backgroundColor: "#fffaf0",
+    borderColor: "#ed8936",
+  },
+  copyrightResultHigh: {
+    backgroundColor: "#fff5f5",
+    borderColor: "#e53e3e",
+  },
+  copyrightResultLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 4,
+    color: "#1a1a1a",
+  },
+  copyrightResultReasons: {
+    fontSize: 12,
+    color: "#555",
+    marginBottom: 4,
+    lineHeight: 18,
+  },
+  copyrightResultRec: {
+    fontSize: 12,
+    color: "#666",
+    fontStyle: "italic",
+    lineHeight: 18,
+  },
+  copyrightCheckButton: {
+    backgroundColor: "#553C9A",
+    borderRadius: 8,
+    padding: 12,
+    alignItems: "center",
+  },
+  copyrightCheckButtonInner: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  copyrightCheckButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  reportButton: {
+    marginTop: 12,
+    padding: 10,
+    alignItems: "center",
+  },
+  reportButtonText: {
+    fontSize: 13,
+    color: "#e53e3e",
+    textDecorationLine: "underline",
   },
 });

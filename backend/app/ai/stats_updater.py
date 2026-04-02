@@ -3,8 +3,8 @@
 回答が記録されるたびに統計情報を更新
 """
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
-from ..models import Answer, UserQuestionStats, UserCategoryStats, Question
+from sqlalchemy import and_, func
+from ..models import Answer, UserQuestionStats, UserCategoryStats, Question, QuestionSet, Purchase, Review
 import logging
 from typing import Optional
 from datetime import datetime
@@ -300,7 +300,6 @@ class StatsUpdater:
         """
         logger.info(f"Recalculating all stats for user {user_id}")
 
-        # 既存の統計を削除
         self.db.query(UserQuestionStats).filter(
             UserQuestionStats.user_id == user_id
         ).delete()
@@ -309,7 +308,6 @@ class StatsUpdater:
             UserCategoryStats.user_id == user_id
         ).delete()
 
-        # 全回答を取得して再計算
         answers = self.db.query(Answer).filter(
             Answer.user_id == user_id
         ).order_by(Answer.answered_at).all()
@@ -324,3 +322,29 @@ class StatsUpdater:
 
         self.db.commit()
         logger.info(f"Recalculated {len(answers)} answers for user {user_id}")
+
+    def recalculate_question_set_stats(self, question_set_id: str):
+        """問題集の非正規化集計カラムを answers / questions / purchases / reviews から再計算"""
+        qs = self.db.query(QuestionSet).filter(QuestionSet.id == question_set_id).first()
+        if not qs:
+            return
+
+        questions = self.db.query(Question).filter(Question.question_set_id == question_set_id).all()
+        qs.total_questions = len(questions)
+        qs.average_difficulty = (
+            sum(q.difficulty or 0.5 for q in questions) / len(questions)
+            if questions else 0.5
+        )
+
+        qs.total_purchases = self.db.query(func.count(Purchase.id)).filter(
+            Purchase.question_set_id == question_set_id
+        ).scalar() or 0
+
+        avg_rating = self.db.query(func.avg(Review.rating)).filter(
+            Review.question_set_id == question_set_id
+        ).scalar()
+        qs.average_rating = float(avg_rating) if avg_rating else 0.0
+
+        qs.updated_at = datetime.utcnow()
+        self.db.commit()
+        logger.info(f"Recalculated question_set stats for {question_set_id}")

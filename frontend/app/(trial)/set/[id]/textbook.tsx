@@ -16,6 +16,7 @@ import Markdown from "react-native-markdown-display";
 import { localStorageService } from "../../../../src/services/localStorageService";
 import Header from "../../../../src/components/Header";
 import {
+  getTextbookApiOrigin,
   normalizeTextbookPath,
   normalizeTextbookType,
 } from "../../../../src/services/textbookService";
@@ -150,12 +151,7 @@ export default function TrialTextbookScreen() {
 
       // 相対パスの場合（docs/textbook/など）
       // バックエンドAPIからファイルを取得
-      let apiBaseUrl =
-        process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
-      // /api/v1が既に含まれている場合は削除
-      if (apiBaseUrl.endsWith("/api/v1")) {
-        apiBaseUrl = apiBaseUrl.replace("/api/v1", "");
-      }
+      const apiBaseUrl = getTextbookApiOrigin();
       const fileUrl = `${apiBaseUrl}/api/v1/textbooks/${encodeURIComponent(
         path
       )}`;

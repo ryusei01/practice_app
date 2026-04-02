@@ -1,4 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import {
   View,
   Text,
@@ -55,6 +60,10 @@ export default function TrialSetDetailScreen() {
     Array<{ category: string | null; questions: LocalQuestion[] }>
   >([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  /** カテゴリがある場合のみ: カテゴリ別 / 問題番号（配列順） */
+  const [listOrderMode, setListOrderMode] = useState<
+    "category" | "questionNumber"
+  >("category");
   const flatListRef = useRef<FlatList>(null);
 
   // エラーモーダル用のstate
@@ -78,6 +87,10 @@ export default function TrialSetDetailScreen() {
       loadData();
     }, [id])
   );
+
+  useEffect(() => {
+    setListOrderMode("category");
+  }, [id]);
 
   const showErrorModal = (title: string, message: string) => {
     setErrorModalConfig({ title, message });
@@ -527,8 +540,8 @@ export default function TrialSetDetailScreen() {
         </View>
 
         <View style={styles.descriptionRow} nativeID="description-row">
-          {/* カテゴリリンク */}
-          {questionGroups.length > 0 && (
+          {/* カテゴリリンク（問題番号順表示中は非表示） */}
+          {questionGroups.length > 0 && listOrderMode === "category" && (
             <View
               style={styles.categoryLinksContainer}
               nativeID="category-links-container"
@@ -581,8 +594,34 @@ export default function TrialSetDetailScreen() {
         </View>
       </View>
 
-      {/* カテゴリ別にグループ化して表示 */}
-      {questionGroups.length > 0 ? (
+      {questionGroups.length > 0 && (
+        <View
+          style={styles.listOrderToggleRow}
+          nativeID="list-order-toggle-row"
+        >
+          <TouchableOpacity
+            style={styles.listOrderToggleButton}
+            onPress={() =>
+              setListOrderMode((m) =>
+                m === "category" ? "questionNumber" : "category"
+              )
+            }
+            nativeID="list-order-toggle-button"
+          >
+            <Text
+              style={styles.listOrderToggleText}
+              nativeID="list-order-toggle-text"
+            >
+              {listOrderMode === "category"
+                ? t("View by question number", "問題番号順に表示")
+                : t("View by category", "カテゴリ別に表示")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* カテゴリ別にグループ化して表示 / 問題番号順はフラット一覧 */}
+      {questionGroups.length > 0 && listOrderMode === "category" ? (
         <FlatList
           ref={flatListRef}
           data={questionGroups}
@@ -1075,6 +1114,27 @@ const styles = StyleSheet.create({
   listContainer: {
     ...commonStyles.listContainer,
     paddingBottom: 180,
+  },
+  listOrderToggleRow: {
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  listOrderToggleButton: {
+    alignSelf: "flex-start",
+    backgroundColor: "#E8F4FF",
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "#007AFF",
+  },
+  listOrderToggleText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#007AFF",
   },
   difficulty: {
     fontSize: 14,

@@ -9,16 +9,29 @@ import {
   RefreshControl,
   Alert,
   Linking,
+  Platform,
+  Share,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { paymentsApi, SellerDashboard } from '../../src/api/payments';
 
 export default function SellerDashboardScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [dashboard, setDashboard] = useState<SellerDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  // 同意フロー状態
+  const [termsChecked, setTermsChecked] = useState(false);
+  const [tokushoChecked, setTokushoChecked] = useState(false);
+  const [taxChecked, setTaxChecked] = useState(false);
+  const [isAcceptingTerms, setIsAcceptingTerms] = useState(false);
+
+  const allChecked = termsChecked && tokushoChecked && taxChecked;
 
   useEffect(() => {
     if (user) {
@@ -32,7 +45,15 @@ export default function SellerDashboardScreen() {
       setDashboard(data);
     } catch (error: any) {
       if (error.response?.status === 403) {
-        Alert.alert('Error', 'You need to become a seller first');
+        // 販売者未登録 — 同意フローを表示するために空のダッシュボードをセット
+        setDashboard({
+          is_connected: false,
+          stripe_account_id: null,
+          total_sales: 0,
+          total_earnings: 0,
+          total_orders: 0,
+          question_sets_count: 0,
+        });
       } else {
         console.error('Failed to load seller dashboard:', error);
       }
@@ -47,38 +68,72 @@ export default function SellerDashboardScreen() {
     loadDashboard();
   };
 
+  const handleAcceptTermsAndConnect = async () => {
+    if (!allChecked) return;
+    setIsAcceptingTerms(true);
+    try {
+      await paymentsApi.acceptSellerTerms();
+      await handleConnectStripe();
+    } catch (error) {
+      Alert.alert('エラー', '同意の記録に失敗しました。もう一度お試しください。');
+    } finally {
+      setIsAcceptingTerms(false);
+    }
+  };
+
   const handleConnectStripe = async () => {
     setIsConnecting(true);
     try {
-      const returnUrl = 'exp://localhost:8081'; // Expo dev URL
+      const returnUrl = 'exp://localhost:8081';
       const refreshUrl = 'exp://localhost:8081';
-
-      const result = await paymentsApi.createConnectAccountLink(returnUrl, refreshUrl);
+      await paymentsApi.createConnectAccountLink(returnUrl, refreshUrl);
 
       Alert.alert(
         'Stripe Connect',
-        'Mock Stripe Connect setup initiated. In production, this would open Stripe Connect onboarding.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Reload dashboard after connection
-              loadDashboard();
-            },
-          },
-        ]
+        '販売者登録が完了しました。本番環境ではStripe Connectのオンボーディングページへ遷移します。',
+        [{ text: 'OK', onPress: () => loadDashboard() }]
       );
     } catch (error) {
-      Alert.alert('Error', 'Failed to initiate Stripe Connect setup');
+      Alert.alert('エラー', 'Stripe Connect の設定に失敗しました。');
     } finally {
       setIsConnecting(false);
+    }
+  };
+
+  const handleExportCSV = async () => {
+    setIsExporting(true);
+    try {
+      const csvData = await paymentsApi.exportSellerRevenue();
+
+      if (Platform.OS === 'web') {
+        // Web: BOMつきCSVをダウンロード
+        const bom = '\uFEFF';
+        const blob = new Blob([bom + csvData], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        a.href = url;
+        a.download = `revenue_${today}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        // モバイル: Shareシートで共有
+        await Share.share({
+          title: '売上データ（税務申告用）',
+          message: csvData,
+        });
+      }
+    } catch (error) {
+      Alert.alert('エラー', 'CSVのエクスポートに失敗しました。');
+    } finally {
+      setIsExporting(false);
     }
   };
 
   if (isLoading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color="#34C759" />
       </View>
     );
   }
@@ -86,7 +141,7 @@ export default function SellerDashboardScreen() {
   if (!dashboard) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.errorText}>Failed to load dashboard</Text>
+        <Text style={styles.errorText}>ダッシュボードの読み込みに失敗しました</Text>
       </View>
     );
   }
@@ -99,72 +154,171 @@ export default function SellerDashboardScreen() {
       }
     >
       <View style={styles.header}>
-        <Text style={styles.title}>Seller Dashboard</Text>
-        <Text style={styles.subtitle}>Manage your sales and earnings</Text>
+        <Text style={styles.title}>販売者ダッシュボード</Text>
+        <Text style={styles.subtitle}>売上・収益の管理</Text>
       </View>
 
       {!dashboard.is_connected ? (
-        <View style={styles.connectSection}>
-          <View style={styles.connectCard}>
-            <Text style={styles.connectTitle}>Connect with Stripe</Text>
-            <Text style={styles.connectDescription}>
-              Connect your Stripe account to start receiving payments for your question sets.
+        // 販売者登録前 — 同意フロー
+        <View style={styles.section}>
+          <View style={styles.onboardingCard}>
+            <Text style={styles.onboardingTitle}>販売者として登録する</Text>
+            <Text style={styles.onboardingDescription}>
+              問題集を販売するには、以下の規約・法令表示を確認の上、Stripe Connectアカウントを接続してください。
             </Text>
+
+            <View style={styles.divider} />
+
+            {/* 各規約確認項目 */}
+            <CheckItem
+              checked={termsChecked}
+              onToggle={() => setTermsChecked(!termsChecked)}
+              label="販売者向け利用規約を確認しました"
+              linkLabel="利用規約を読む"
+              onLinkPress={() => router.push('/(app)/legal/seller-terms')}
+            />
+
+            <CheckItem
+              checked={tokushoChecked}
+              onToggle={() => setTokushoChecked(!tokushoChecked)}
+              label="特定商取引法に基づく表記を確認しました"
+              linkLabel="特商法表記を読む"
+              onLinkPress={() => router.push('/(app)/legal/tokusho')}
+            />
+
+            <CheckItem
+              checked={taxChecked}
+              onToggle={() => setTaxChecked(!taxChecked)}
+              label="税務に関するご案内を確認しました"
+              linkLabel="税務案内を読む"
+              onLinkPress={() => router.push('/(app)/legal/tax-notice')}
+            />
+
+            <View style={styles.divider} />
+
+            <View style={styles.feeInfoBox}>
+              <Text style={styles.feeInfoTitle}>手数料について</Text>
+              <Text style={styles.feeInfoText}>
+                販売価格の <Text style={styles.feeHighlight}>10%</Text> がプラットフォーム手数料となり、
+                <Text style={styles.feeHighlight}> 90%</Text> が販売者の収益となります。
+              </Text>
+            </View>
+
             <TouchableOpacity
-              style={[styles.connectButton, isConnecting && styles.buttonDisabled]}
-              onPress={handleConnectStripe}
-              disabled={isConnecting}
+              style={[
+                styles.connectButton,
+                (!allChecked || isAcceptingTerms || isConnecting) && styles.buttonDisabled,
+              ]}
+              onPress={handleAcceptTermsAndConnect}
+              disabled={!allChecked || isAcceptingTerms || isConnecting}
             >
-              {isConnecting ? (
+              {isAcceptingTerms || isConnecting ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.connectButtonText}>Connect Stripe Account</Text>
+                <Text style={styles.connectButtonText}>
+                  {allChecked ? 'Stripeアカウントを接続する' : 'すべての項目を確認してください'}
+                </Text>
               )}
             </TouchableOpacity>
           </View>
         </View>
       ) : (
+        // 登録済み — ダッシュボード表示
         <>
           <View style={styles.statsContainer}>
             <View style={styles.statCard}>
               <Text style={styles.statValue}>¥{dashboard.total_sales.toLocaleString()}</Text>
-              <Text style={styles.statLabel}>Total Sales</Text>
+              <Text style={styles.statLabel}>総売上</Text>
             </View>
             <View style={styles.statCard}>
               <Text style={styles.statValue}>¥{dashboard.total_earnings.toLocaleString()}</Text>
-              <Text style={styles.statLabel}>Your Earnings</Text>
+              <Text style={styles.statLabel}>あなたの収益</Text>
             </View>
           </View>
 
           <View style={styles.statsContainer}>
             <View style={styles.statCard}>
               <Text style={styles.statValue}>{dashboard.total_orders}</Text>
-              <Text style={styles.statLabel}>Total Orders</Text>
+              <Text style={styles.statLabel}>総注文数</Text>
             </View>
             <View style={styles.statCard}>
               <Text style={styles.statValue}>{dashboard.question_sets_count}</Text>
-              <Text style={styles.statLabel}>Question Sets</Text>
+              <Text style={styles.statLabel}>問題集数</Text>
             </View>
           </View>
 
+          {/* Stripe接続情報 */}
           <View style={styles.section}>
             <View style={styles.connectedCard}>
-              <Text style={styles.connectedTitle}>Stripe Connected</Text>
-              <Text style={styles.connectedText}>
-                Account ID: {dashboard.stripe_account_id}
-              </Text>
-              <View style={styles.connectedBadge}>
-                <Text style={styles.connectedBadgeText}>Active</Text>
+              <View style={styles.connectedHeader}>
+                <Text style={styles.connectedTitle}>Stripe接続済み</Text>
+                <View style={styles.connectedBadge}>
+                  <Text style={styles.connectedBadgeText}>有効</Text>
+                </View>
               </View>
+              <Text style={styles.connectedText}>
+                アカウントID: {dashboard.stripe_account_id}
+              </Text>
             </View>
           </View>
 
+          {/* 手数料説明 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Platform Fee</Text>
+            <Text style={styles.sectionTitle}>手数料</Text>
             <View style={styles.infoCard}>
               <Text style={styles.infoText}>
-                The platform takes a 10% fee from each sale. You receive 90% of the sale price.
+                各販売から <Text style={styles.bold}>10%</Text> がプラットフォーム手数料として差し引かれ、
+                残り <Text style={styles.bold}>90%</Text> がStripeアカウントへ送金されます。
               </Text>
+            </View>
+          </View>
+
+          {/* 税務・売上エクスポート */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>税務申告用データ</Text>
+            <View style={styles.exportCard}>
+              <Text style={styles.exportDescription}>
+                確定申告や収益管理のために、全取引の明細をCSV形式でダウンロードできます。
+              </Text>
+              <TouchableOpacity
+                style={[styles.exportButton, isExporting && styles.buttonDisabled]}
+                onPress={handleExportCSV}
+                disabled={isExporting}
+              >
+                {isExporting ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.exportButtonText}>売上CSVをダウンロード</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.push('/(app)/legal/tax-notice')}
+                style={styles.taxLinkButton}
+              >
+                <Text style={styles.taxLinkText}>税務に関するご案内を読む →</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* 法的リンク */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>法令関連</Text>
+            <View style={styles.legalLinksCard}>
+              <TouchableOpacity
+                style={styles.legalLink}
+                onPress={() => router.push('/(app)/legal/seller-terms')}
+              >
+                <Text style={styles.legalLinkText}>販売者向け利用規約</Text>
+                <Text style={styles.legalLinkArrow}>→</Text>
+              </TouchableOpacity>
+              <View style={styles.linkDivider} />
+              <TouchableOpacity
+                style={styles.legalLink}
+                onPress={() => router.push('/(app)/legal/tokusho')}
+              >
+                <Text style={styles.legalLinkText}>特定商取引法に基づく表記</Text>
+                <Text style={styles.legalLinkArrow}>→</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </>
@@ -172,6 +326,79 @@ export default function SellerDashboardScreen() {
     </ScrollView>
   );
 }
+
+type CheckItemProps = {
+  checked: boolean;
+  onToggle: () => void;
+  label: string;
+  linkLabel: string;
+  onLinkPress: () => void;
+};
+
+function CheckItem({ checked, onToggle, label, linkLabel, onLinkPress }: CheckItemProps) {
+  return (
+    <View style={checkStyles.container}>
+      <TouchableOpacity onPress={onToggle} style={checkStyles.checkRow}>
+        <View style={[checkStyles.checkbox, checked && checkStyles.checkboxChecked]}>
+          {checked && <Text style={checkStyles.checkmark}>✓</Text>}
+        </View>
+        <Text style={[checkStyles.label, checked && checkStyles.labelChecked]}>{label}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={onLinkPress} style={checkStyles.link}>
+        <Text style={checkStyles.linkText}>{linkLabel}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const checkStyles = StyleSheet.create({
+  container: {
+    marginBottom: 14,
+  },
+  checkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#ccc',
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  checkboxChecked: {
+    backgroundColor: '#34C759',
+    borderColor: '#34C759',
+  },
+  checkmark: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  label: {
+    flex: 1,
+    fontSize: 14,
+    color: '#555',
+    lineHeight: 20,
+  },
+  labelChecked: {
+    color: '#222',
+    fontWeight: '500',
+  },
+  link: {
+    marginLeft: 32,
+  },
+  linkText: {
+    fontSize: 13,
+    color: '#007AFF',
+    textDecorationLine: 'underline',
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -199,43 +426,73 @@ const styles = StyleSheet.create({
     color: '#fff',
     opacity: 0.9,
   },
-  connectSection: {
+  section: {
     padding: 16,
+    paddingBottom: 0,
   },
-  connectCard: {
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+  },
+  onboardingCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 24,
-    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 3,
   },
-  connectTitle: {
+  onboardingTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
+    color: '#222',
+    marginBottom: 10,
   },
-  connectDescription: {
-    fontSize: 15,
+  onboardingDescription: {
+    fontSize: 14,
     color: '#666',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 22,
+    lineHeight: 21,
+    marginBottom: 16,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#eee',
+    marginVertical: 16,
+  },
+  feeInfoBox: {
+    backgroundColor: '#e8f5e9',
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 20,
+  },
+  feeInfoTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#2e7d32',
+    marginBottom: 6,
+  },
+  feeInfoText: {
+    fontSize: 13,
+    color: '#444',
+    lineHeight: 20,
+  },
+  feeHighlight: {
+    fontWeight: 'bold',
+    color: '#2e7d32',
   },
   connectButton: {
     backgroundColor: '#635BFF',
-    borderRadius: 8,
+    borderRadius: 10,
     padding: 16,
-    width: '100%',
     alignItems: 'center',
   },
   connectButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
   buttonDisabled: {
@@ -244,6 +501,7 @@ const styles = StyleSheet.create({
   statsContainer: {
     flexDirection: 'row',
     padding: 16,
+    paddingBottom: 0,
     gap: 12,
   },
   statCard: {
@@ -254,7 +512,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 3,
   },
@@ -265,17 +523,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#666',
-  },
-  section: {
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
   },
   connectedCard: {
     backgroundColor: '#fff',
@@ -283,27 +532,30 @@ const styles = StyleSheet.create({
     padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 3,
   },
-  connectedTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+  connectedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 8,
   },
+  connectedTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
+  },
   connectedText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#666',
-    marginBottom: 12,
   },
   connectedBadge: {
     backgroundColor: '#34C759',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    alignSelf: 'flex-start',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   connectedBadgeText: {
     color: '#fff',
@@ -316,17 +568,86 @@ const styles = StyleSheet.create({
     padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 3,
   },
   infoText: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 13,
+    color: '#555',
     lineHeight: 20,
   },
+  bold: {
+    fontWeight: 'bold',
+    color: '#222',
+  },
+  exportCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  exportDescription: {
+    fontSize: 13,
+    color: '#555',
+    lineHeight: 20,
+    marginBottom: 14,
+  },
+  exportButton: {
+    backgroundColor: '#FF9500',
+    borderRadius: 8,
+    padding: 14,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  exportButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  taxLinkButton: {
+    alignItems: 'flex-end',
+  },
+  taxLinkText: {
+    fontSize: 13,
+    color: '#007AFF',
+  },
+  legalLinksCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+    marginBottom: 24,
+  },
+  legalLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  legalLinkText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#333',
+  },
+  legalLinkArrow: {
+    fontSize: 14,
+    color: '#999',
+  },
+  linkDivider: {
+    height: 1,
+    backgroundColor: '#f0f0f0',
+    marginHorizontal: 16,
+  },
   errorText: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#666',
   },
 });

@@ -2,10 +2,13 @@
 Stripe Connect決済APIエンドポイント
 """
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 import uuid
+import csv
+import io
 from datetime import datetime
 
 from ..core.database import get_db
@@ -243,6 +246,76 @@ async def get_my_purchases(
     ).order_by(Purchase.purchased_at.desc()).all()
 
     return purchases
+
+
+@router.post("/accept-seller-terms")
+async def accept_seller_terms(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    販売者利用規約への同意を記録
+
+    販売者がStripe Connect登録前に利用規約・特定商取引法に同意したことを記録する
+    """
+    current_user.seller_terms_accepted_at = datetime.utcnow()
+    db.commit()
+    return {
+        "message": "販売者利用規約への同意を記録しました",
+        "accepted_at": current_user.seller_terms_accepted_at.isoformat()
+    }
+
+
+@router.get("/seller-revenue-export")
+async def export_seller_revenue(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    販売者の売上データをCSV形式でエクスポート
+
+    税務申告用の売上記録をCSVファイルとして提供する
+    """
+    if not current_user.is_seller:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="販売者権限が必要です"
+        )
+
+    question_sets = db.query(QuestionSet).filter(
+        QuestionSet.creator_id == current_user.id
+    ).all()
+    question_set_ids = [qs.id for qs in question_sets]
+    question_set_map = {qs.id: qs.title for qs in question_sets}
+
+    purchases = db.query(Purchase).filter(
+        Purchase.question_set_id.in_(question_set_ids)
+    ).order_by(Purchase.purchased_at.asc()).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "購入日時", "問題集名", "販売金額（円）",
+        "プラットフォーム手数料（円）", "販売者受取額（円）",
+        "Stripe決済ID"
+    ])
+    for p in purchases:
+        writer.writerow([
+            p.purchased_at.strftime("%Y-%m-%d %H:%M:%S"),
+            question_set_map.get(p.question_set_id, ""),
+            p.amount,
+            p.platform_fee,
+            p.seller_amount,
+            p.stripe_payment_intent_id or ""
+        ])
+
+    output.seek(0)
+    filename = f"revenue_{datetime.utcnow().strftime('%Y%m%d')}.csv"
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8-sig",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 @router.get("/seller-dashboard")

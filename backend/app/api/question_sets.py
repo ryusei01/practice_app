@@ -1,15 +1,24 @@
 """
 問題集CRUD APIエンドポイント
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
-from pydantic import BaseModel, model_validator
+import json
+import logging
+from datetime import datetime
 from typing import List, Optional
 import uuid
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from pydantic import BaseModel, model_validator
+from sqlalchemy.orm import Session
 
 from ..core.database import get_db
 from ..core.auth import get_current_active_user
 from ..models import User, QuestionSet, Purchase, Question
+from ..models.copyright_check import CopyrightCheckRecord, RiskLevel
+from ..services.copyright_checker import get_copyright_checker
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -336,6 +345,25 @@ async def update_question_set(
             detail="この問題集を編集する権限がありません"
         )
 
+    # 公開しようとしている場合は著作権チェック済みか確認
+    if request.is_published is True and not question_set.is_published:
+        latest_check = (
+            db.query(CopyrightCheckRecord)
+            .filter(CopyrightCheckRecord.question_set_id == question_set_id)
+            .order_by(CopyrightCheckRecord.checked_at.desc())
+            .first()
+        )
+        if latest_check is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="公開前に著作権チェックを実行してください。問題集の設定画面からチェックを実行できます。",
+            )
+        if latest_check.risk_level == RiskLevel.HIGH.value:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="著作権チェックの結果、高リスクと判定されたため公開できません。コンテンツを修正した後、再度チェックを実行してください。",
+            )
+
     # 更新処理
     if request.title is not None:
         question_set.title = request.title
@@ -481,4 +509,91 @@ async def download_question_set(
         is_published=question_set.is_published,
         creator_id=question_set.creator_id,
         questions=[QuestionResponse.model_validate(q) for q in questions]
+    )
+
+
+# --- 著作権チェック ---
+
+class CopyrightCheckResponse(BaseModel):
+    question_set_id: str
+    risk_level: str
+    reasons: List[str]
+    recommendation: str
+    checked_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.post("/{question_set_id}/copyright-check", response_model=CopyrightCheckResponse)
+async def run_copyright_check(
+    question_set_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    問題集の著作権リスクをGPT-OSS（Ollama経由）で評価する。
+    販売者が公開前に実行する必須チェック。
+
+    Returns:
+        risk_level: "low" | "medium" | "high"
+        reasons: リスク理由のリスト
+        recommendation: 推奨対応（日本語）
+
+    Raises:
+        403: 作成者以外が呼び出した場合
+        404: 問題集が見つからない場合
+        503: Ollama が起動していない場合
+    """
+    question_set = db.query(QuestionSet).filter(QuestionSet.id == question_set_id).first()
+    if not question_set:
+        raise HTTPException(status_code=404, detail="問題集が見つかりません")
+
+    if question_set.creator_id != current_user.id:
+        raise HTTPException(status_code=403, detail="この問題集の著作権チェックを実行する権限がありません")
+
+    # 問題文を収集
+    questions = db.query(Question).filter(
+        Question.question_set_id == question_set_id
+    ).order_by(Question.order).limit(30).all()
+    question_texts = [q.question_text for q in questions if q.question_text]
+
+    checker = get_copyright_checker()
+    try:
+        result = await checker.check(
+            title=question_set.title,
+            description=question_set.description,
+            question_texts=question_texts,
+        )
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503,
+            detail="著作権チェックサービス（Ollama）に接続できません。サーバーでOllamaが起動しているか確認してください。",
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=503,
+            detail="著作権チェックがタイムアウトしました。時間をおいて再試行してください。",
+        )
+
+    # 結果をDBに保存
+    record = CopyrightCheckRecord(
+        id=str(uuid.uuid4()),
+        question_set_id=question_set_id,
+        risk_level=result["risk_level"],
+        reasons=json.dumps(result.get("reasons", []), ensure_ascii=False),
+        recommendation=result.get("recommendation", ""),
+        raw_response=result.get("raw_response", ""),
+        checked_at=datetime.utcnow(),
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    return CopyrightCheckResponse(
+        question_set_id=question_set_id,
+        risk_level=record.risk_level,
+        reasons=result.get("reasons", []),
+        recommendation=record.recommendation or "",
+        checked_at=record.checked_at,
     )

@@ -1,174 +1,103 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Platform,
   useWindowDimensions,
+  Image,
 } from "react-native";
-import { useRouter } from "expo-router";
+import * as Google from "expo-auth-session/providers/google";
+import * as WebBrowser from "expo-web-browser";
+import { router } from "expo-router";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useLanguage } from "../../src/contexts/LanguageContext";
 
+WebBrowser.maybeCompleteAuthSession();
+
 export default function LoginScreen() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
-  const { login } = useAuth();
-  const { t, language, setLanguage } = useLanguage();
-  const router = useRouter();
+  const { loginWithGoogle, isLoading: authLoading } = useAuth();
+  const { t } = useLanguage();
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 600;
-  const isMediumScreen = width >= 600 && width < 1024;
 
-  // Web版の場合、動的にメタタグを設定
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+  });
+
+  // TODO: Google Cloud Console 設定後に削除する
+  React.useEffect(() => {
+    if (request) {
+      console.log("[OAuth] redirect_uri:", request.redirectUri);
+    }
+  }, [request]);
+
+
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [errorMessage, setErrorMessage] = React.useState("");
+
   useEffect(() => {
-    if (Platform.OS === "web") {
-      // タイトル設定
-      const pageTitle =
-        language === "ja"
-          ? "ログイン - AI Practice Book"
-          : "Sign In - AI Practice Book";
-      document.title = pageTitle;
-
-      // メタタグを設定する関数
-      const setMetaTag = (
-        name: string,
-        content: string,
-        property?: boolean
-      ) => {
-        const selector = property
-          ? `meta[property="${name}"]`
-          : `meta[name="${name}"]`;
-        let meta = document.querySelector(selector) as HTMLMetaElement;
-        if (!meta) {
-          meta = document.createElement("meta");
-          if (property) {
-            meta.setAttribute("property", name);
-          } else {
-            meta.setAttribute("name", name);
-          }
-          document.head.appendChild(meta);
-        }
-        meta.content = content;
-      };
-
-      const description =
-        language === "ja"
-          ? "AI Practice Bookにログインして、パーソナライズされた学習、AI推奨問題、進捗管理にアクセス。"
-          : "Sign in to AI Practice Book to access personalized learning, AI-powered question recommendations, and track your progress.";
-
-      const ogTitle =
-        language === "ja"
-          ? "ログイン - AI Practice Book"
-          : "Sign In - AI Practice Book";
-
-      const ogDescription =
-        language === "ja"
-          ? "パーソナライズされたAI学習にアクセスして進捗を管理。"
-          : "Sign in to access personalized AI-powered learning and track your progress.";
-
-      setMetaTag("description", description);
-      setMetaTag(
-        "keywords",
-        "login,sign in,AI Practice Book,learning platform,account,ログイン,サインイン,AI学習,アカウント"
-      );
-      setMetaTag("og:title", ogTitle, true);
-      setMetaTag("og:description", ogDescription, true);
-      setMetaTag("og:type", "website", true);
-      setMetaTag("robots", "noindex, nofollow"); // ログインページは検索エンジンにインデックスしない
-    }
-  }, [language]);
-
-  const handleLogin = async () => {
-    setErrorMessage(""); // エラーメッセージをクリア
-
-    if (!email || !password) {
-      setErrorMessage(
-        t("Please fill in all fields", "すべてのフィールドを入力してください")
-      );
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      await login(email, password);
-      // login関数内でダッシュボードにリダイレクトされるため、ここでは何もしない
-    } catch (error: any) {
-      console.error("[Login] Error:", error);
-      const message =
-        error.response?.data?.detail ||
-        error.message ||
-        t(
-          "Invalid email or password",
-          "メールアドレスまたはパスワードが無効です"
+    if (response?.type === "success") {
+      const accessToken = response.authentication?.accessToken;
+      if (accessToken) {
+        handleGoogleLogin(accessToken);
+      } else {
+        setErrorMessage(
+          t(
+            "Failed to get Google token",
+            "Googleトークンの取得に失敗しました"
+          )
         );
+      }
+    } else if (response?.type === "error") {
+      setErrorMessage(
+        t("Google sign-in failed", "Googleサインインに失敗しました")
+      );
+    }
+  }, [response]);
 
-      setErrorMessage(message);
+  const handleGoogleLogin = async (accessToken: string) => {
+    setIsLoading(true);
+    setErrorMessage("");
+    try {
+      await loginWithGoogle(accessToken);
+    } catch (error: any) {
+      console.error("[Login] Google login error:", error);
+      setErrorMessage(
+        error.response?.data?.detail ||
+          error.message ||
+          t("Sign-in failed", "サインインに失敗しました")
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
-  const navigateToRegister = () => {
-    router.push("/(auth)/register");
-  };
+  const loading = isLoading || authLoading;
 
   return (
     <View style={styles.container}>
       <View
         style={[
-          styles.formContainer,
+          styles.card,
           {
-            width: isSmallScreen ? "100%" : isMediumScreen ? "85%" : 400,
-            maxWidth: 500,
-            padding: isSmallScreen ? 20 : 24,
+            width: isSmallScreen ? "100%" : 400,
+            padding: isSmallScreen ? 28 : 36,
           },
         ]}
       >
         <Text style={[styles.title, { fontSize: isSmallScreen ? 24 : 28 }]}>
-          {t("Welcome Back", "おかえりなさい")}
+          {t("Welcome to AI Practice Book", "AI Practice Bookへようこそ")}
         </Text>
-        <Text style={[styles.subtitle, { fontSize: isSmallScreen ? 14 : 16 }]}>
-          {t("Sign in to continue", "ログインして続ける")}
+        <Text style={[styles.subtitle, { fontSize: isSmallScreen ? 14 : 15 }]}>
+          {t(
+            "Sign in with your Google account to continue",
+            "Googleアカウントでログインして続ける"
+          )}
         </Text>
-
-        <TextInput
-          style={[
-            styles.input,
-            {
-              padding: isSmallScreen ? 14 : 16,
-              fontSize: isSmallScreen ? 15 : 16,
-            },
-          ]}
-          placeholder={t("Email", "メールアドレス")}
-          placeholderTextColor="#999"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          editable={!isLoading}
-        />
-
-        <TextInput
-          style={[
-            styles.input,
-            {
-              padding: isSmallScreen ? 14 : 16,
-              fontSize: isSmallScreen ? 15 : 16,
-            },
-          ]}
-          placeholder={t("Password", "パスワード")}
-          placeholderTextColor="#999"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          editable={!isLoading}
-        />
 
         {errorMessage ? (
           <View style={styles.errorContainer}>
@@ -177,42 +106,37 @@ export default function LoginScreen() {
         ) : null}
 
         <TouchableOpacity
-          style={[
-            styles.button,
-            isLoading && styles.buttonDisabled,
-            { padding: isSmallScreen ? 14 : 16 },
-          ]}
-          onPress={handleLogin}
-          disabled={isLoading}
+          style={[styles.googleButton, loading && styles.buttonDisabled]}
+          onPress={() => {
+            setErrorMessage("");
+            promptAsync();
+          }}
+          disabled={!request || loading}
         >
-          {isLoading ? (
-            <ActivityIndicator color="#fff" />
+          {loading ? (
+            <ActivityIndicator color="#444" />
           ) : (
-            <Text
-              style={[styles.buttonText, { fontSize: isSmallScreen ? 15 : 16 }]}
-            >
-              {t("Sign In", "ログイン")}
-            </Text>
+            <>
+              <Image
+                source={{
+                  uri: "https://www.google.com/favicon.ico",
+                }}
+                style={styles.googleIcon}
+              />
+              <Text style={styles.googleButtonText}>
+                {t("Sign in with Google", "Googleでサインイン")}
+              </Text>
+            </>
           )}
         </TouchableOpacity>
-
-        <View style={styles.registerContainer}>
-          <Text
-            style={[styles.registerText, { fontSize: isSmallScreen ? 13 : 14 }]}
-          >
-            {t("Don't have an account? ", "アカウントをお持ちでない方 ")}
+        <TouchableOpacity
+          onPress={() => router.push("/(public)/privacy-policy")}
+          style={styles.privacyLink}
+        >
+          <Text style={styles.privacyLinkText}>
+            {t("Privacy Policy", "プライバシーポリシー")}
           </Text>
-          <TouchableOpacity onPress={navigateToRegister} disabled={isLoading}>
-            <Text
-              style={[
-                styles.registerLink,
-                { fontSize: isSmallScreen ? 13 : 14 },
-              ]}
-            >
-              {t("Sign Up", "新規登録")}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -223,42 +147,30 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f5f5f5",
     justifyContent: "center",
-    padding: 20,
     alignItems: "center",
+    padding: 20,
   },
-  formContainer: {
+  card: {
     backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 24,
+    borderRadius: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
-    width: "100%",
-    maxWidth: 500,
+    alignItems: "center",
   },
   title: {
-    fontSize: 28,
     fontWeight: "bold",
     color: "#333",
-    marginBottom: 8,
+    marginBottom: 10,
     textAlign: "center",
   },
   subtitle: {
-    fontSize: 16,
     color: "#666",
     marginBottom: 32,
     textAlign: "center",
-  },
-  input: {
-    backgroundColor: "#f8f8f8",
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
+    lineHeight: 22,
   },
   errorContainer: {
     backgroundColor: "#FFEBEE",
@@ -267,39 +179,49 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderLeftWidth: 4,
     borderLeftColor: "#F44336",
+    width: "100%",
   },
   errorText: {
     color: "#C62828",
     fontSize: 14,
-    lineHeight: 20,
   },
-  button: {
-    backgroundColor: "#007AFF",
-    borderRadius: 8,
-    padding: 16,
+  googleButton: {
+    flexDirection: "row",
     alignItems: "center",
-    marginTop: 8,
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1.5,
+    borderColor: "#dadce0",
+    borderRadius: 8,
+    paddingVertical: 13,
+    paddingHorizontal: 24,
+    width: "100%",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
   },
   buttonDisabled: {
-    backgroundColor: "#B0B0B0",
+    opacity: 0.6,
   },
-  buttonText: {
-    color: "#fff",
+  googleIcon: {
+    width: 20,
+    height: 20,
+    marginRight: 12,
+  },
+  googleButtonText: {
+    color: "#3c4043",
     fontSize: 16,
     fontWeight: "600",
   },
-  registerContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginTop: 24,
+  privacyLink: {
+    marginTop: 20,
+    padding: 4,
   },
-  registerText: {
-    fontSize: 14,
-    color: "#666",
-  },
-  registerLink: {
-    fontSize: 14,
-    color: "#007AFF",
-    fontWeight: "600",
+  privacyLinkText: {
+    color: "#888",
+    fontSize: 12,
+    textDecorationLine: "underline",
   },
 });

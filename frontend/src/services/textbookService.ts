@@ -5,6 +5,29 @@
 
 import { textbooksApi } from "../api/textbooks";
 
+/** 開発時の run-backend.cjs / client.ts と同じポート（/api/v1 は含めない） */
+const DEFAULT_TEXTBOOK_API_ORIGIN = "http://127.0.0.1:8003";
+
+/**
+ * 教科書ファイル取得用の API オリジン（/api/v1 は含めない）。
+ * EXPO_PUBLIC_API_URL が .../api/v1 形式でも二重にならないよう正規化する。
+ */
+export function getTextbookApiOrigin(): string {
+  let base = (
+    process.env.EXPO_PUBLIC_API_URL || DEFAULT_TEXTBOOK_API_ORIGIN
+  ).trim();
+  while (base.endsWith("/")) {
+    base = base.slice(0, -1);
+  }
+  if (base.endsWith("/api/v1")) {
+    base = base.slice(0, -"/api/v1".length);
+  }
+  while (base.endsWith("/")) {
+    base = base.slice(0, -1);
+  }
+  return base;
+}
+
 export type TextbookType = "markdown" | "pdf";
 
 /**

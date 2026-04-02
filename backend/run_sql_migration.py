@@ -1,41 +1,51 @@
 """
 SQLマイグレーション実行スクリプト
+
+Usage:
+    python run_sql_migration.py                          # デフォルト: combined_migration.sql
+    python run_sql_migration.py migrations/some_file.sql # 指定ファイル
 """
 import os
+import sys
 from dotenv import load_dotenv
 import psycopg2
 
 load_dotenv()
 
-def run_sql_migration():
-    """
-    SQLマイグレーションファイルを実行
-    """
-    database_url = os.getenv("DATABASE_URL")
+DEFAULT_FILE = "migrations/combined_migration.sql"
 
+
+def run_sql_migration(sql_file: str):
+    database_url = os.getenv("DATABASE_URL")
     if not database_url:
         print("ERROR: DATABASE_URL not found in .env")
-        return
+        sys.exit(1)
 
-    # Read SQL file
-    with open("migrations/add_premium_fields.sql", "r") as f:
+    if not os.path.exists(sql_file):
+        print(f"ERROR: File not found: {sql_file}")
+        sys.exit(1)
+
+    with open(sql_file, "r", encoding="utf-8") as f:
         sql = f.read()
 
-    # Connect and execute
-    print("Connecting to database...")
+    print(f"Connecting to database...")
     conn = psycopg2.connect(database_url)
-    conn.autocommit = True
 
     try:
         cursor = conn.cursor()
-        print("Executing migration...")
+        print(f"Executing: {sql_file}")
         cursor.execute(sql)
+        conn.commit()
         print("Migration completed successfully!")
     except Exception as e:
+        conn.rollback()
         print(f"Error during migration: {e}")
+        sys.exit(1)
     finally:
         cursor.close()
         conn.close()
 
+
 if __name__ == "__main__":
-    run_sql_migration()
+    sql_file = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_FILE
+    run_sql_migration(sql_file)

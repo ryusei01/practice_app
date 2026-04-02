@@ -327,7 +327,7 @@ export default function Home() {
                 },
               ]}
               onPress={() => router.push("/(auth)/register")}
-              disabled={true}
+              disabled={false}
               nativeID="btn-register"
             >
               <Text
@@ -362,7 +362,7 @@ export default function Home() {
                 },
               ]}
               onPress={() => router.push("/(auth)/login")}
-              disabled={true}
+              disabled={false}
               nativeID="btn-login"
             >
               <View style={styles.overlay} nativeID="btn-login-overlay">
