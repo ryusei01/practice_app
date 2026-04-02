@@ -59,12 +59,22 @@ export const LanguageProvider = ({ children }: { children: ReactNode }) => {
 
   const loadLanguage = async () => {
     try {
+      // 1. Web環境でURLの ?lang= パラメータを最優先で確認
+      if (Platform.OS === 'web') {
+        const urlLang = new URLSearchParams(window.location.search).get('lang');
+        if (urlLang === 'en' || urlLang === 'ja') {
+          setLanguageState(urlLang);
+          return;
+        }
+      }
+
+      // 2. AsyncStorageの保存済み設定を確認
       const savedLanguage = await AsyncStorage.getItem('app_language');
       if (savedLanguage === 'en' || savedLanguage === 'ja') {
         // 保存された言語設定がある場合はそれを使用
         setLanguageState(savedLanguage);
       } else {
-        // 保存された設定がない場合はシステム言語を検出
+        // 3. 保存された設定がない場合はシステム言語を検出
         const systemLang = getSystemLanguage();
         console.log('[LanguageContext] Detected system language:', systemLang);
         setLanguageState(systemLang);

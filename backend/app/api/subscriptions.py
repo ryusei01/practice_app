@@ -10,10 +10,12 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timedelta
 
+import uuid
+
 from ..core.database import get_db
 from ..core.auth import get_current_active_user
 from ..core.config import settings
-from ..models import User
+from ..models import User, Purchase, QuestionSet
 from ..models.processed_checkout import ProcessedCheckoutSession
 
 logger = logging.getLogger(__name__)
@@ -139,6 +141,9 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
         _handle_checkout_completed(session, db)
+    elif event["type"] == "payment_intent.succeeded":
+        pi = event["data"]["object"]
+        _handle_payment_intent_succeeded(pi, db)
 
     return JSONResponse(content={"status": "ok"})
 
@@ -183,3 +188,49 @@ def _handle_checkout_completed(session: dict, db: Session) -> None:
     logger.info(
         f"プレミアム有効化 & {settings.PREMIUM_PLAN_CREDIT_JPY}円クレジット付与: user_id={user_id}"
     )
+
+
+def _handle_payment_intent_succeeded(pi: dict, db: Session) -> None:
+    """payment_intent.succeeded の冪等ハンドラ（問題集マーケットプレイス購入）"""
+    pi_id = pi.get("id", "")
+    metadata = pi.get("metadata") or {}
+    question_set_id = metadata.get("question_set_id")
+    buyer_id = metadata.get("buyer_id")
+
+    if not question_set_id or not buyer_id:
+        return
+
+    # 冪等チェック
+    already = db.query(Purchase).filter(
+        Purchase.stripe_payment_intent_id == pi_id
+    ).first()
+    if already:
+        logger.info(f"既に処理済みの PaymentIntent: {pi_id}")
+        return
+
+    question_set = db.query(QuestionSet).filter(QuestionSet.id == question_set_id).first()
+    if not question_set:
+        logger.error(f"Webhook: 問題集が見つかりません question_set_id={question_set_id}")
+        return
+
+    buyer = db.query(User).filter(User.id == buyer_id).first()
+    if not buyer:
+        logger.error(f"Webhook: 購入者が見つかりません buyer_id={buyer_id}")
+        return
+
+    amount = pi.get("amount", 0)
+    platform_fee = pi.get("application_fee_amount") or int(amount * settings.PLATFORM_FEE_PERCENT / 100)
+    seller_amount = amount - platform_fee
+
+    new_purchase = Purchase(
+        id=str(uuid.uuid4()),
+        buyer_id=buyer_id,
+        question_set_id=question_set_id,
+        amount=amount,
+        platform_fee=platform_fee,
+        seller_amount=seller_amount,
+        stripe_payment_intent_id=pi_id,
+    )
+    db.add(new_purchase)
+    db.commit()
+    logger.info(f"問題集購入完了: question_set_id={question_set_id}, buyer_id={buyer_id}, amount={amount}")

@@ -36,7 +36,7 @@ const TOKUSHO_ITEMS: SectionItem[] = [
   },
   {
     label: 'サービス名',
-    value: 'QuizMarketplace',
+    value: 'AI Practice Book',
   },
   {
     label: '商品の販売価格',

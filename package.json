@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "concurrently -k -n api,expo -c cyan,magenta \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "node scripts/run-backend.cjs",
-    "dev:frontend": "cd frontend && npx expo start --port 8082"
+    "dev:frontend": "node scripts/run-frontend.cjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

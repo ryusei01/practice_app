@@ -15,6 +15,7 @@ export interface QuestionSet {
   average_rating: number;
   textbook_path: string | null;
   textbook_type: string | null;
+  textbook_content: string | null;
 }
 
 export interface QuestionSetCreate {
@@ -26,6 +27,7 @@ export interface QuestionSetCreate {
   is_published?: boolean;
   textbook_path?: string;
   textbook_type?: string;
+  textbook_content?: string;
 }
 
 export interface QuestionSetUpdate {
@@ -37,6 +39,7 @@ export interface QuestionSetUpdate {
   is_published?: boolean;
   textbook_path?: string;
   textbook_type?: string;
+  textbook_content?: string;
 }
 
 export interface Question {

@@ -12,6 +12,14 @@ class UserRole(str, enum.Enum):
     SUPER_ADMIN = "super_admin"
 
 
+class SellerApplicationStatus(str, enum.Enum):
+    """販売者申請ステータス"""
+    NONE = "none"
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -23,6 +31,9 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     role = Column(Enum(UserRole, name="user_role", create_constraint=False, native_enum=False, values_callable=lambda x: [e.value for e in x]), default=UserRole.USER.value, nullable=False)
     is_seller = Column(Boolean, default=False)  # 販売機能フラグ（role とは独立）
+    seller_application_status = Column(String, default=SellerApplicationStatus.NONE.value, nullable=False)
+    seller_application_submitted_at = Column(DateTime, nullable=True)
+    seller_application_admin_note = Column(String, nullable=True)
     is_premium = Column(Boolean, default=False)
     premium_expires_at = Column(DateTime, nullable=True)
     account_credit_jpy = Column(Integer, default=0, nullable=False)

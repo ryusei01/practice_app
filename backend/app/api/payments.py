@@ -1,6 +1,8 @@
 """
 Stripe Connect決済APIエンドポイント
 """
+import stripe
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -13,7 +15,11 @@ from datetime import datetime
 
 from ..core.database import get_db
 from ..core.auth import get_current_active_user
+from ..core.config import settings
 from ..models import User, QuestionSet, Purchase
+from ..services.stripe_service import stripe_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -107,45 +113,35 @@ async def create_payment_intent(
             platform_fee=0
         )
 
-    # プラットフォーム手数料を計算（10%）
-    platform_fee = int(question_set.price * 0.1)
-    seller_amount = question_set.price - platform_fee
+    creator = db.query(User).filter(User.id == question_set.creator_id).first()
+    if not creator or not creator.stripe_account_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="販売者のStripeアカウントが未設定です"
+        )
 
-    # 実際のStripe統合はここで行う
-    # 今回はモック実装
-    payment_intent_id = f"pi_mock_{uuid.uuid4().hex[:24]}"
-    client_secret = f"pi_mock_{uuid.uuid4().hex[:24]}_secret_{uuid.uuid4().hex[:16]}"
-
-    # NOTE: 実際のStripe統合では以下のようなコードになります
-    # import stripe
-    # stripe.api_key = settings.STRIPE_SECRET_KEY
-    #
-    # creator = db.query(User).filter(User.id == question_set.creator_id).first()
-    # if not creator.stripe_account_id:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_400_BAD_REQUEST,
-    #         detail="販売者のStripeアカウントが未設定です"
-    #     )
-    #
-    # payment_intent = stripe.PaymentIntent.create(
-    #     amount=question_set.price,
-    #     currency="jpy",
-    #     application_fee_amount=platform_fee,
-    #     transfer_data={
-    #         "destination": creator.stripe_account_id,
-    #     },
-    #     metadata={
-    #         "question_set_id": request.question_set_id,
-    #         "buyer_id": current_user.id,
-    #     }
-    # )
+    try:
+        result = stripe_service.create_payment_intent(
+            amount=question_set.price,
+            seller_account_id=creator.stripe_account_id,
+            metadata={
+                "question_set_id": request.question_set_id,
+                "buyer_id": current_user.id,
+            }
+        )
+    except Exception as e:
+        logger.error(f"PaymentIntent作成エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="決済の開始に失敗しました。しばらくしてから再試行してください。"
+        )
 
     return CreatePaymentIntentResponse(
-        client_secret=client_secret,
-        payment_intent_id=payment_intent_id,
-        amount=question_set.price,
-        seller_amount=seller_amount,
-        platform_fee=platform_fee
+        client_secret=result["client_secret"],
+        payment_intent_id=result["payment_intent_id"],
+        amount=result["amount"],
+        seller_amount=result["seller_amount"],
+        platform_fee=result["platform_fee"],
     )
 
 
@@ -158,15 +154,8 @@ async def confirm_purchase(
     """
     決済完了後に購入記録を作成
 
-    WebhookまたはフロントエンドからのCallbackで呼ばれる
+    フロントエンドの支払い完了後に呼ばれる。Webhook でも同じ処理が行われるため冪等に実装する。
     """
-    # 実際のStripe統合では、Payment Intentのステータスを確認
-    # payment_intent = stripe.PaymentIntent.retrieve(payment_intent_id)
-    # if payment_intent.status != "succeeded":
-    #     raise HTTPException(status_code=400, detail="Payment not completed")
-
-    # メタデータから情報を取得（モックでは直接クエリ）
-    # 既存の購入記録があるかチェック
     existing = db.query(Purchase).filter(
         Purchase.stripe_payment_intent_id == payment_intent_id
     ).first()
@@ -174,12 +163,52 @@ async def confirm_purchase(
     if existing:
         return {"message": "Purchase already recorded", "purchase_id": existing.id}
 
-    # モック実装: payment_intent_idからデータを取得できないため、
-    # 実際の実装ではStripe APIから取得する
-    return {
-        "message": "Purchase confirmed (mock)",
-        "payment_intent_id": payment_intent_id
-    }
+    try:
+        pi = stripe.PaymentIntent.retrieve(payment_intent_id)
+    except stripe.error.StripeError as e:
+        logger.error(f"PaymentIntent取得エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="決済状態の確認に失敗しました。"
+        )
+
+    if pi.status != "succeeded":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"決済が完了していません (status: {pi.status})"
+        )
+
+    metadata = pi.get("metadata") or {}
+    question_set_id = metadata.get("question_set_id")
+    buyer_id_meta = metadata.get("buyer_id")
+
+    if not question_set_id or buyer_id_meta != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="決済情報が不正です"
+        )
+
+    question_set = db.query(QuestionSet).filter(QuestionSet.id == question_set_id).first()
+    if not question_set:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="問題集が見つかりません")
+
+    amount = pi.amount
+    platform_fee = pi.application_fee_amount or int(amount * settings.PLATFORM_FEE_PERCENT / 100)
+    seller_amount = amount - platform_fee
+
+    new_purchase = Purchase(
+        id=str(uuid.uuid4()),
+        buyer_id=current_user.id,
+        question_set_id=question_set_id,
+        amount=amount,
+        platform_fee=platform_fee,
+        seller_amount=seller_amount,
+        stripe_payment_intent_id=payment_intent_id,
+    )
+    db.add(new_purchase)
+    db.commit()
+
+    return {"message": "Purchase confirmed", "purchase_id": new_purchase.id}
 
 
 @router.post("/create-connect-account-link")
@@ -193,44 +222,26 @@ async def create_connect_account_link(
 
     販売者がStripe Connectアカウントを作成・管理するためのリンク
     """
-    # 実際のStripe統合
-    # import stripe
-    #
-    # if not current_user.stripe_account_id:
-    #     # 新規アカウント作成
-    #     account = stripe.Account.create(
-    #         type="express",
-    #         country="JP",
-    #         email=current_user.email,
-    #         capabilities={
-    #             "card_payments": {"requested": True},
-    #             "transfers": {"requested": True},
-    #         },
-    #     )
-    #     current_user.stripe_account_id = account.id
-    #     current_user.is_seller = True
-    #     db.commit()
-    #
-    # account_link = stripe.AccountLink.create(
-    #     account=current_user.stripe_account_id,
-    #     refresh_url=request.refresh_url,
-    #     return_url=request.return_url,
-    #     type="account_onboarding",
-    # )
-    #
-    # return {"url": account_link.url}
+    try:
+        if not current_user.stripe_account_id:
+            result = stripe_service.create_connect_account(current_user.email)
+            current_user.stripe_account_id = result["account_id"]
+            current_user.is_seller = True
+            db.commit()
 
-    # モック実装
-    mock_account_id = f"acct_mock_{uuid.uuid4().hex[:16]}"
-    if not current_user.stripe_account_id:
-        current_user.stripe_account_id = mock_account_id
-        current_user.is_seller = True
-        db.commit()
+        url = stripe_service.create_account_link(
+            account_id=current_user.stripe_account_id,
+            return_url=request.return_url,
+            refresh_url=request.refresh_url,
+        )
+    except Exception as e:
+        logger.error(f"Connect アカウントリンク作成エラー: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Stripe Connect アカウントの設定に失敗しました。"
+        )
 
-    return {
-        "url": f"https://connect.stripe.com/setup/mock/{mock_account_id}",
-        "account_id": current_user.stripe_account_id
-    }
+    return {"url": url, "account_id": current_user.stripe_account_id}
 
 
 @router.get("/my-purchases", response_model=list[PurchaseResponse])

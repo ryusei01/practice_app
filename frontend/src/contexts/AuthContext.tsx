@@ -8,9 +8,14 @@ interface User {
   email: string;
   full_name: string;
   is_active: boolean;
+  is_seller: boolean;
   is_premium: boolean;
   premium_expires_at: string | null;
   account_credit_jpy: number;
+  role: string;
+  seller_application_status: string;
+  seller_application_admin_note: string | null;
+  created_at: string | null;
 }
 
 interface AuthContextType {

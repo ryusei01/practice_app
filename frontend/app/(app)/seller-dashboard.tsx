@@ -15,6 +15,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { paymentsApi, SellerDashboard } from '../../src/api/payments';
+import { authApi } from '../../src/api/auth';
 
 export default function SellerDashboardScreen() {
   const { user } = useAuth();
@@ -24,6 +25,8 @@ export default function SellerDashboardScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
+  const [localUser, setLocalUser] = useState(user);
 
   // 同意フロー状態
   const [termsChecked, setTermsChecked] = useState(false);
@@ -32,6 +35,10 @@ export default function SellerDashboardScreen() {
   const [isAcceptingTerms, setIsAcceptingTerms] = useState(false);
 
   const allChecked = termsChecked && tokushoChecked && taxChecked;
+
+  useEffect(() => {
+    setLocalUser(user);
+  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -100,6 +107,35 @@ export default function SellerDashboardScreen() {
     }
   };
 
+  const handleApplyAsSeller = async () => {
+    Alert.alert(
+      '販売者申請',
+      '管理者が問題集・教科書を審査します。承認後に販売が開始できます。申請しますか？',
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: '申請する',
+          onPress: async () => {
+            setIsApplying(true);
+            try {
+              const updated = await authApi.submitSellerApplication();
+              setLocalUser({ ...localUser!, ...updated });
+              Alert.alert(
+                '申請完了',
+                '販売者申請を送信しました。管理者の審査をお待ちください。'
+              );
+            } catch (error: any) {
+              const msg = error.response?.data?.detail || '申請に失敗しました。もう一度お試しください。';
+              Alert.alert('エラー', msg);
+            } finally {
+              setIsApplying(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleExportCSV = async () => {
     setIsExporting(true);
     try {
@@ -158,7 +194,74 @@ export default function SellerDashboardScreen() {
         <Text style={styles.subtitle}>売上・収益の管理</Text>
       </View>
 
-      {!dashboard.is_connected ? (
+      {!localUser?.is_seller ? (
+        // 販売者未登録 — 申請フロー
+        <View style={styles.section}>
+          <View style={styles.onboardingCard}>
+            <Text style={styles.onboardingTitle}>販売者として申請する</Text>
+
+            {localUser?.seller_application_status === 'pending' ? (
+              // 審査中
+              <>
+                <View style={styles.statusBadgePending}>
+                  <Text style={styles.statusBadgeText}>🕐 審査中</Text>
+                </View>
+                <Text style={styles.onboardingDescription}>
+                  申請を受け付けました。管理者が問題集・教科書を審査中です。{'\n'}
+                  承認されると販売者として登録されます。
+                </Text>
+              </>
+            ) : localUser?.seller_application_status === 'rejected' ? (
+              // 却下
+              <>
+                <View style={styles.statusBadgeRejected}>
+                  <Text style={styles.statusBadgeText}>✗ 申請却下</Text>
+                </View>
+                {localUser.seller_application_admin_note ? (
+                  <View style={styles.adminNoteBox}>
+                    <Text style={styles.adminNoteLabel}>管理者からのメッセージ：</Text>
+                    <Text style={styles.adminNoteText}>{localUser.seller_application_admin_note}</Text>
+                  </View>
+                ) : null}
+                <Text style={styles.onboardingDescription}>
+                  申請が却下されました。内容を修正の上、再度申請してください。
+                </Text>
+                <TouchableOpacity
+                  style={[styles.applyButton, isApplying && styles.buttonDisabled]}
+                  onPress={handleApplyAsSeller}
+                  disabled={isApplying}
+                >
+                  {isApplying ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.applyButtonText}>再申請する</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : (
+              // 未申請
+              <>
+                <Text style={styles.onboardingDescription}>
+                  問題集・教科書を販売するには、管理者による審査が必要です。{'\n'}
+                  申請後、管理者がコンテンツを確認し、承認後に販売を開始できます。
+                </Text>
+                <View style={styles.divider} />
+                <TouchableOpacity
+                  style={[styles.applyButton, isApplying && styles.buttonDisabled]}
+                  onPress={handleApplyAsSeller}
+                  disabled={isApplying}
+                >
+                  {isApplying ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.applyButtonText}>販売者として申請する</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      ) : !dashboard.is_connected ? (
         // 販売者登録前 — 同意フロー
         <View style={styles.section}>
           <View style={styles.onboardingCard}>
@@ -649,5 +752,57 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 15,
     color: '#666',
+  },
+  applyButton: {
+    backgroundColor: '#34C759',
+    borderRadius: 10,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  applyButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  statusBadgePending: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FF9500',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginBottom: 12,
+  },
+  statusBadgeRejected: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FF3B30',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginBottom: 12,
+  },
+  statusBadgeText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  adminNoteBox: {
+    backgroundColor: '#FFF3F3',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF3B30',
+  },
+  adminNoteLabel: {
+    fontSize: 12,
+    color: '#FF3B30',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  adminNoteText: {
+    fontSize: 13,
+    color: '#333',
+    lineHeight: 18,
   },
 });

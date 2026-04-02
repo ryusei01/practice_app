@@ -26,7 +26,7 @@ export default function TrialQuestionSetsScreen() {
   const [availableTextbooks, setAvailableTextbooks] = useState<Textbook[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const isLoadingRef = useRef(false); // 重複読み込み防止用
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const router = useRouter();
   const pathname = usePathname();
   const { width } = useWindowDimensions();
@@ -95,8 +95,6 @@ export default function TrialQuestionSetsScreen() {
   useEffect(() => {
     // Web版の場合、動的にメタタグを設定
     if (Platform.OS === "web") {
-      document.title = "AI Practice Book Ver.β";
-
       const setMetaTag = (name: string, content: string, property?: string) => {
         const selector = property
           ? `meta[property="${name}"]`
@@ -114,27 +112,42 @@ export default function TrialQuestionSetsScreen() {
         meta.content = content;
       };
 
+      const isJa = language === "ja";
+
+      document.title = isJa
+        ? "AI Practice Book - 無料お試し | 登録不要で問題セットを練習"
+        : "AI Practice Book - Free Trial | Practice Question Sets Without Sign Up";
+
       setMetaTag(
         "description",
-        "Create and practice with custom question sets without signing up. Try our AI-powered flashcard mode and quiz system for free. | 登録不要でカスタム問題セットを作成・練習。AI搭載の単語帳モードとクイズシステムを無料で試せます。"
+        isJa
+          ? "登録不要でカスタム問題セットを作成・練習。AI搭載の単語帳モードとクイズシステムを無料で試せます。"
+          : "Create and practice with custom question sets without signing up. Try our AI-powered flashcard mode and quiz system for free."
       );
       setMetaTag(
         "keywords",
-        "trial,free,no signup,flashcard,quiz,practice,demo,trial mode,無料,登録不要,お試し,単語帳,クイズ,練習"
+        isJa
+          ? "無料,登録不要,お試し,単語帳,クイズ,練習,AI学習,問題セット"
+          : "trial,free,no signup,flashcard,quiz,practice,demo,AI learning,question sets"
       );
       setMetaTag(
         "og:title",
-        "Try AI Practice Book Free - No Sign Up Required | AI Practice Book 無料お試し - 登録不要",
+        isJa
+          ? "AI Practice Book 無料お試し - 登録不要で体験"
+          : "Try AI Practice Book Free - No Sign Up Required",
         "property"
       );
       setMetaTag(
         "og:description",
-        "Experience AI-powered learning for free. Create quizzes and practice with flashcards without creating an account. | AI学習を無料で体験。アカウント作成不要でクイズと単語帳を試せます。",
+        isJa
+          ? "AI学習を無料で体験。アカウント作成不要でクイズと単語帳を試せます。"
+          : "Experience AI-powered learning for free. Create quizzes and practice with flashcards without creating an account.",
         "property"
       );
+      setMetaTag("og:locale", isJa ? "ja_JP" : "en_US", "property");
       setMetaTag("robots", "index, follow");
     }
-  }, []);
+  }, [language]);
 
   const handleDelete = async (id: string) => {
     showModal(

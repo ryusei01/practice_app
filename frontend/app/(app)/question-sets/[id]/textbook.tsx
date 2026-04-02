@@ -33,7 +33,19 @@ export default function TextbookScreen() {
       setError(null);
 
       const questionSet = await questionSetsApi.getById(id);
-      
+
+      // インラインコンテンツ（エディターで作成）の場合
+      if (questionSet.textbook_type === 'inline') {
+        if (questionSet.textbook_content) {
+          setContent(questionSet.textbook_content);
+          setTextbookType('inline');
+        } else {
+          setError(t('No textbook available', '教科書が設定されていません'));
+        }
+        setLoading(false);
+        return;
+      }
+
       if (!questionSet.textbook_path) {
         setError(t('No textbook available', '教科書が設定されていません'));
         setLoading(false);
@@ -64,7 +76,16 @@ export default function TextbookScreen() {
       // パスがURLの場合
       if (path.startsWith('http://') || path.startsWith('https://')) {
         const response = await fetch(path);
+        const contentType = response.headers.get('Content-Type') || '';
         const text = await response.text();
+        if (
+          contentType.includes('text/html') ||
+          text.trim().startsWith('<!DOCTYPE') ||
+          text.trim().startsWith('<html')
+        ) {
+          setError(t('Textbook file not found', '教科書ファイルが見つかりません'));
+          return;
+        }
         setContent(text);
         return;
       }
@@ -81,25 +102,39 @@ export default function TextbookScreen() {
       const apiBaseUrl = getTextbookApiOrigin();
       const fileUrl = `${apiBaseUrl}/api/v1/textbooks/${encodeURIComponent(path)}`;
       
+      const isHtmlContent = (text: string, ct: string) =>
+        ct.includes('text/html') ||
+        text.trim().startsWith('<!DOCTYPE') ||
+        text.trim().startsWith('<html');
+
       try {
         const response = await fetch(fileUrl);
         if (response.ok) {
+          const contentType = response.headers.get('Content-Type') || '';
           const text = await response.text();
-          setContent(text);
-        } else {
-          // フォールバック: 直接パスから読み込む（開発環境用）
-          if (Platform.OS === 'web') {
-            // Web版の場合、相対パスから直接読み込む
-            const response = await fetch(`/${path}`);
-            if (response.ok) {
-              const text = await response.text();
-              setContent(text);
-            } else {
+          if (isHtmlContent(text, contentType)) {
+            console.log('[Textbook] API returned HTML (SPA fallback), skipping');
+          } else {
+            setContent(text);
+            return;
+          }
+        }
+        // フォールバック: 直接パスから読み込む（開発環境用）
+        if (Platform.OS === 'web') {
+          const fallbackResponse = await fetch(`/${path}`);
+          if (fallbackResponse.ok) {
+            const contentType = fallbackResponse.headers.get('Content-Type') || '';
+            const text = await fallbackResponse.text();
+            if (isHtmlContent(text, contentType)) {
               setError(t('Textbook file not found', '教科書ファイルが見つかりません'));
+            } else {
+              setContent(text);
             }
           } else {
-            setError(t('Please configure textbook path', '教科書のパスを設定してください'));
+            setError(t('Textbook file not found', '教科書ファイルが見つかりません'));
           }
+        } else {
+          setError(t('Please configure textbook path', '教科書のパスを設定してください'));
         }
       } catch (fetchErr) {
         console.error('Failed to fetch from API:', fetchErr);
@@ -175,7 +210,9 @@ export default function TextbookScreen() {
 
   return (
     <View style={styles.container}>
-      {textbookType === 'markdown' ? renderMarkdown() : renderPDF()}
+      {textbookType === 'inline' || textbookType === 'markdown'
+        ? renderMarkdown()
+        : renderPDF()}
     </View>
   );
 }

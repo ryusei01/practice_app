@@ -9,6 +9,10 @@ from typing import Optional
 import uuid
 import httpx
 import re
+import traceback
+import logging
+
+logger = logging.getLogger(__name__)
 
 from ..core.limiter import limiter
 
@@ -23,6 +27,7 @@ from ..core.auth import (
 )
 from ..core.config import settings
 from ..models import User
+from ..models.user import SellerApplicationStatus
 
 router = APIRouter()
 
@@ -40,6 +45,10 @@ class UserResponse(BaseModel):
     is_premium: bool
     premium_expires_at: Optional[datetime]
     account_credit_jpy: int = 0
+    role: str = "user"
+    seller_application_status: str = "none"
+    seller_application_admin_note: Optional[str] = None
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -55,6 +64,10 @@ class UserResponse(BaseModel):
             is_premium=obj.is_premium,
             premium_expires_at=obj.premium_expires_at,
             account_credit_jpy=obj.account_credit_jpy or 0,
+            role=obj.role if obj.role else "user",
+            seller_application_status=obj.seller_application_status if obj.seller_application_status else "none",
+            seller_application_admin_note=obj.seller_application_admin_note,
+            created_at=obj.created_at,
         )
 
 
@@ -88,6 +101,16 @@ async def google_login(request: Request, body: GoogleAuthRequest, db: Session = 
     Returns:
         JWTトークンとユーザー情報
     """
+    try:
+        return await _google_login_impl(body, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("=== /auth/google 500 エラー詳細 ===\n%s", traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Internal error: {type(e).__name__}: {e}")
+
+
+async def _google_login_impl(body: GoogleAuthRequest, db: Session):
     # Google tokeninfo で aud（クライアントID）を検証してなりすましを防止
     async with httpx.AsyncClient() as client:
         tokeninfo_response = await client.get(
@@ -240,6 +263,45 @@ async def refresh_access_token(
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(current_user: User = Depends(get_current_active_user)):
     """現在のユーザー情報を取得"""
+    return UserResponse.from_orm(current_user)
+
+
+@router.post("/seller-application", response_model=UserResponse)
+async def submit_seller_application(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    販売者申請を送信する
+
+    - すでに is_seller=True の場合はエラー
+    - すでに pending / approved の場合はエラー
+    - rejected の場合は再申請可能
+    """
+    if current_user.is_seller:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="すでに販売者として登録されています"
+        )
+
+    current_status = current_user.seller_application_status or SellerApplicationStatus.NONE.value
+    if current_status == SellerApplicationStatus.PENDING.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="すでに申請中です。管理者の審査をお待ちください"
+        )
+    if current_status == SellerApplicationStatus.APPROVED.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="すでに承認済みです"
+        )
+
+    current_user.seller_application_status = SellerApplicationStatus.PENDING.value
+    current_user.seller_application_submitted_at = datetime.utcnow()
+    current_user.seller_application_admin_note = None
+    db.commit()
+    db.refresh(current_user)
+
     return UserResponse.from_orm(current_user)
 
 

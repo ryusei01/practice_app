@@ -137,6 +137,11 @@ async def get_current_user(
             logger.debug(f"[Auth] User not found for id: {user_id}")
         raise credentials_exception
 
+    if user.is_premium and user.premium_expires_at and user.premium_expires_at < datetime.utcnow():
+        user.is_premium = False
+        db.commit()
+        logger.info(f"[Auth] プレミアム期限切れ: user_id={user_id}")
+
     if settings.DEBUG:
         logger.debug(f"[Auth] User authenticated: {user.email}, is_active: {user.is_active}")
     return user

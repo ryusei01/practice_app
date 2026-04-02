@@ -1,19 +1,26 @@
 import apiClient from './client';
 import { tokenStorage } from '../utils/secureStorage';
 
+export interface UserData {
+  id: string;
+  email: string;
+  full_name: string;
+  is_active: boolean;
+  is_seller: boolean;
+  is_premium: boolean;
+  premium_expires_at: string | null;
+  account_credit_jpy: number;
+  role: string;
+  seller_application_status: string;
+  seller_application_admin_note: string | null;
+  created_at: string | null;
+}
+
 export interface AuthResponse {
   access_token: string;
   refresh_token: string;
   token_type: string;
-  user: {
-    id: string;
-    email: string;
-    full_name: string;
-    is_active: boolean;
-    is_premium: boolean;
-    premium_expires_at: string | null;
-    account_credit_jpy: number;
-  };
+  user: UserData;
 }
 
 export const authApi = {
@@ -32,8 +39,13 @@ export const authApi = {
     await tokenStorage.clearAll();
   },
 
-  getCurrentUser: async () => {
+  getCurrentUser: async (): Promise<UserData> => {
     const response = await apiClient.get('/auth/me');
+    return response.data;
+  },
+
+  submitSellerApplication: async (): Promise<UserData> => {
+    const response = await apiClient.post('/auth/seller-application');
     return response.data;
   },
 };

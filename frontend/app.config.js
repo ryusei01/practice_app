@@ -30,7 +30,18 @@ export default {
       bundler: "metro",
       output: "static",
     },
-    plugins: ["expo-router"],
+    plugins: [
+      "expo-router",
+      "expo-secure-store",
+      "expo-web-browser",
+      [
+        "react-native-google-mobile-ads",
+        {
+          androidAppId: process.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID || "ca-app-pub-3940256099942544~3347511713",
+          iosAppId: process.env.EXPO_PUBLIC_ADMOB_IOS_APP_ID || "ca-app-pub-3940256099942544~1458002511",
+        },
+      ],
+    ],
     extra: {
       apiUrl: process.env.EXPO_PUBLIC_API_URL || "http://localhost:8003/api/v1",
     },

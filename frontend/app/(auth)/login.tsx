@@ -132,14 +132,26 @@ export default function LoginScreen() {
             </>
           )}
         </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => router.push("/(public)/privacy-policy")}
-          style={styles.privacyLink}
-        >
-          <Text style={styles.privacyLinkText}>
+        <Text style={styles.consentText}>
+          {t(
+            "By signing in, you agree to our ",
+            "ログインすることで、"
+          )}
+          <Text
+            style={styles.linkInline}
+            onPress={() => router.push("/(public)/terms-of-service")}
+          >
+            {t("Terms of Service", "利用規約")}
+          </Text>
+          {t(" and ", "と")}
+          <Text
+            style={styles.linkInline}
+            onPress={() => router.push("/(public)/privacy-policy")}
+          >
             {t("Privacy Policy", "プライバシーポリシー")}
           </Text>
-        </TouchableOpacity>
+          {t(".", "に同意したものとみなします。")}
+        </Text>
       </View>
     </View>
   );
@@ -218,13 +230,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  privacyLink: {
+  consentText: {
     marginTop: 20,
-    padding: 4,
-  },
-  privacyLinkText: {
-    color: "#888",
     fontSize: 12,
+    color: "#888",
+    textAlign: "center",
+    lineHeight: 18,
+    paddingHorizontal: 8,
+  },
+  linkInline: {
+    color: "#4A90E2",
     textDecorationLine: "underline",
   },
 });

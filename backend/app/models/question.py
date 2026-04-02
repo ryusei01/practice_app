@@ -1,7 +1,16 @@
 from sqlalchemy import Column, String, Integer, Float, ForeignKey, DateTime, Text, Boolean, JSON, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
+import enum
 from ..core.database import Base
+
+
+class QuestionSetApprovalStatus(str, enum.Enum):
+    """問題集の管理者審査ステータス"""
+    NOT_REQUIRED = "not_required"   # 既存 is_seller ユーザーや審査不要ケース
+    PENDING_REVIEW = "pending_review"  # 管理者審査待ち
+    APPROVED = "approved"           # 承認済み（公開可能）
+    REJECTED = "rejected"           # 却下
 
 
 class QuestionSet(Base):
@@ -26,6 +35,10 @@ class QuestionSet(Base):
     # 教科書情報
     textbook_path = Column(String, nullable=True)
     textbook_type = Column(String, nullable=True)
+    textbook_content = Column(Text, nullable=True)
+
+    # 管理者審査ステータス
+    approval_status = Column(String, default=QuestionSetApprovalStatus.NOT_REQUIRED.value, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

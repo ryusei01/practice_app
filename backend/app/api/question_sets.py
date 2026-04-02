@@ -16,6 +16,8 @@ from ..core.database import get_db
 from ..core.auth import get_current_active_user
 from ..models import User, QuestionSet, Purchase, Question
 from ..models.copyright_check import CopyrightCheckRecord, RiskLevel
+from ..models.question import QuestionSetApprovalStatus
+from ..models.user import SellerApplicationStatus
 from ..services.copyright_checker import get_copyright_checker
 
 logger = logging.getLogger(__name__)
@@ -32,6 +34,7 @@ class QuestionSetCreate(BaseModel):
     is_published: bool = False
     textbook_path: Optional[str] = None
     textbook_type: Optional[str] = None
+    textbook_content: Optional[str] = None
 
 
 class QuestionSetUpdate(BaseModel):
@@ -43,6 +46,7 @@ class QuestionSetUpdate(BaseModel):
     is_published: Optional[bool] = None
     textbook_path: Optional[str] = None
     textbook_type: Optional[str] = None
+    textbook_content: Optional[str] = None
 
 
 class QuestionSetResponse(BaseModel):
@@ -60,6 +64,8 @@ class QuestionSetResponse(BaseModel):
     average_rating: float = 0.0
     textbook_path: Optional[str] = None
     textbook_type: Optional[str] = None
+    textbook_content: Optional[str] = None
+    approval_status: str = "not_required"
 
     @model_validator(mode='before')
     @classmethod
@@ -71,7 +77,7 @@ class QuestionSetResponse(BaseModel):
             result = {}
             for key in ['id', 'title', 'description', 'category', 'tags', 'price', 'is_published', 'creator_id',
                        'total_questions', 'average_difficulty', 'total_purchases', 'average_rating',
-                       'textbook_path', 'textbook_type']:
+                       'textbook_path', 'textbook_type', 'textbook_content', 'approval_status']:
                 val = getattr(data, key, None)
                 if key in ['total_questions', 'total_purchases'] and val is None:
                     result[key] = 0
@@ -79,6 +85,8 @@ class QuestionSetResponse(BaseModel):
                     result[key] = 0.5
                 elif key == 'average_rating' and val is None:
                     result[key] = 0.0
+                elif key == 'approval_status' and val is None:
+                    result[key] = 'not_required'
                 else:
                     result[key] = val
             return result
@@ -115,7 +123,8 @@ async def create_question_set(
         is_published=request.is_published,
         creator_id=current_user.id,
         textbook_path=request.textbook_path,
-        textbook_type=request.textbook_type
+        textbook_type=request.textbook_type,
+        textbook_content=request.textbook_content
     )
 
     db.add(new_question_set)
@@ -218,7 +227,8 @@ async def get_my_question_sets(
             "total_purchases": qs.total_purchases if qs.total_purchases is not None else 0,
             "average_rating": qs.average_rating if qs.average_rating is not None else 0.0,
             "textbook_path": qs.textbook_path,
-            "textbook_type": qs.textbook_type
+            "textbook_type": qs.textbook_type,
+            "textbook_content": qs.textbook_content
         })
 
     return result
@@ -273,7 +283,8 @@ async def get_purchased_question_sets(
             "total_purchases": qs.total_purchases if qs.total_purchases is not None else 0,
             "average_rating": qs.average_rating if qs.average_rating is not None else 0.0,
             "textbook_path": qs.textbook_path,
-            "textbook_type": qs.textbook_type
+            "textbook_type": qs.textbook_type,
+            "textbook_content": qs.textbook_content
         })
 
     return result
@@ -345,8 +356,35 @@ async def update_question_set(
             detail="この問題集を編集する権限がありません"
         )
 
-    # 公開しようとしている場合は著作権チェック済みか確認
+    # 公開しようとしている場合のチェック
     if request.is_published is True and not question_set.is_published:
+        # 非販売者の場合：管理者審査が必要
+        if not current_user.is_seller:
+            app_status = current_user.seller_application_status or SellerApplicationStatus.NONE.value
+            if app_status == SellerApplicationStatus.NONE.value:
+                # 未申請 → 問題集を審査待ちにセットして申請を促す
+                question_set.approval_status = QuestionSetApprovalStatus.PENDING_REVIEW.value
+                db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="販売者登録が必要です。販売者ダッシュボードから申請してください。問題集は審査待ち状態に設定されました。",
+                )
+            elif app_status == SellerApplicationStatus.PENDING.value:
+                # 申請中 → 審査待ちにセットして待機を促す
+                question_set.approval_status = QuestionSetApprovalStatus.PENDING_REVIEW.value
+                db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="販売者申請が審査中です。承認後に公開できます。問題集は審査待ち状態に設定されました。",
+                )
+            elif app_status == SellerApplicationStatus.REJECTED.value:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="販売者申請が却下されました。再申請するか、管理者にお問い合わせください。",
+                )
+            # APPROVED の場合は著作権チェックへ進む
+
+        # 著作権チェック済みか確認（販売者または承認済みの場合）
         latest_check = (
             db.query(CopyrightCheckRecord)
             .filter(CopyrightCheckRecord.question_set_id == question_set_id)
@@ -381,6 +419,8 @@ async def update_question_set(
         question_set.textbook_path = request.textbook_path
     if request.textbook_type is not None:
         question_set.textbook_type = request.textbook_type
+    if request.textbook_content is not None:
+        question_set.textbook_content = request.textbook_content
 
     db.commit()
     db.refresh(question_set)

@@ -48,14 +48,20 @@ export default function RootLayout() {
             <Stack.Screen name="(app)/question-sets/[id]" />
             <Stack.Screen name="(app)/question-sets/[id]/add-question" />
             <Stack.Screen name="(app)/question-sets/[id]/textbook" />
+            <Stack.Screen
+              name="(app)/question-sets/[id]/edit-textbook"
+              options={{ headerShown: true, title: "教科書を編集" }}
+            />
             <Stack.Screen name="(app)/quiz/[id]" />
             <Stack.Screen name="(app)/ai-dashboard" />
             <Stack.Screen name="(app)/seller-dashboard" />
+            <Stack.Screen name="(app)/admin/index" />
             <Stack.Screen name="(app)/settings" />
             <Stack.Screen name="(app)/verify-otp" />
             <Stack.Screen name="(trial)" />
             <Stack.Screen name="(app)/flashcard/[id]" />
             <Stack.Screen name="(public)/privacy-policy" />
+            <Stack.Screen name="(public)/terms-of-service" />
           </Stack>
         </AuthProvider>
       </LanguageProvider>

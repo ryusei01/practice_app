@@ -9,8 +9,9 @@ from datetime import datetime
 
 from ..core.database import get_db
 from ..core.auth import get_current_admin_user, get_current_super_admin_user, get_password_hash
-from ..models import User
-from ..models.user import UserRole
+from ..models import User, QuestionSet
+from ..models.user import UserRole, SellerApplicationStatus
+from ..models.question import QuestionSetApprovalStatus
 
 router = APIRouter()
 
@@ -41,6 +42,27 @@ class CreateAdminRequest(BaseModel):
     password: str
     username: str
     role: UserRole
+
+
+class SellerApplicationResponse(BaseModel):
+    """販売者申請レスポンス"""
+    id: str
+    email: str
+    username: str
+    seller_application_status: str
+    seller_application_submitted_at: Optional[datetime]
+    seller_application_admin_note: Optional[str]
+    is_seller: bool
+    created_at: datetime
+    pending_question_sets: List[dict] = []
+
+    class Config:
+        from_attributes = True
+
+
+class ReviewApplicationRequest(BaseModel):
+    """申請審査リクエスト"""
+    admin_note: Optional[str] = None
 
 
 @router.get("/users", response_model=List[UserListResponse])
@@ -244,3 +266,131 @@ async def create_admin_user(
     db.refresh(new_admin)
 
     return new_admin
+
+
+def _build_application_response(user: User, db: Session) -> SellerApplicationResponse:
+    """販売者申請レスポンスを構築（申請中の問題集も含む）"""
+    pending_qs = (
+        db.query(QuestionSet)
+        .filter(
+            QuestionSet.creator_id == user.id,
+            QuestionSet.approval_status == QuestionSetApprovalStatus.PENDING_REVIEW.value
+        )
+        .all()
+    )
+    pending_list = [
+        {
+            "id": qs.id,
+            "title": qs.title,
+            "category": qs.category,
+            "total_questions": qs.total_questions or 0,
+            "created_at": qs.created_at.isoformat() if qs.created_at else None,
+        }
+        for qs in pending_qs
+    ]
+    return SellerApplicationResponse(
+        id=user.id,
+        email=user.email,
+        username=user.username,
+        seller_application_status=user.seller_application_status or "none",
+        seller_application_submitted_at=user.seller_application_submitted_at,
+        seller_application_admin_note=user.seller_application_admin_note,
+        is_seller=user.is_seller,
+        created_at=user.created_at,
+        pending_question_sets=pending_list,
+    )
+
+
+@router.get("/seller-applications", response_model=List[SellerApplicationResponse])
+async def list_seller_applications(
+    status_filter: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 50,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    販売者申請一覧を取得（管理者専用）
+
+    status_filter: none / pending / approved / rejected（省略時は全件）
+    """
+    query = db.query(User).filter(
+        User.seller_application_status != SellerApplicationStatus.NONE.value
+    )
+    if status_filter:
+        query = query.filter(User.seller_application_status == status_filter)
+
+    users = query.order_by(User.seller_application_submitted_at.asc()).offset(skip).limit(limit).all()
+    return [_build_application_response(u, db) for u in users]
+
+
+@router.post("/seller-applications/{user_id}/approve", response_model=SellerApplicationResponse)
+async def approve_seller_application(
+    user_id: str,
+    request: ReviewApplicationRequest,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    販売者申請を承認（管理者専用）
+    - is_seller=True に昇格
+    - 申請中の問題集を approved に変更して公開可能にする
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ユーザーが見つかりません")
+
+    if user.seller_application_status != SellerApplicationStatus.PENDING.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="審査待ちの申請がありません"
+        )
+
+    user.is_seller = True
+    user.seller_application_status = SellerApplicationStatus.APPROVED.value
+    if request.admin_note:
+        user.seller_application_admin_note = request.admin_note
+
+    # 申請中の問題集をすべて承認済みにする
+    db.query(QuestionSet).filter(
+        QuestionSet.creator_id == user_id,
+        QuestionSet.approval_status == QuestionSetApprovalStatus.PENDING_REVIEW.value
+    ).update({"approval_status": QuestionSetApprovalStatus.APPROVED.value})
+
+    db.commit()
+    db.refresh(user)
+    return _build_application_response(user, db)
+
+
+@router.post("/seller-applications/{user_id}/reject", response_model=SellerApplicationResponse)
+async def reject_seller_application(
+    user_id: str,
+    request: ReviewApplicationRequest,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    販売者申請を却下（管理者専用）
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ユーザーが見つかりません")
+
+    if user.seller_application_status != SellerApplicationStatus.PENDING.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="審査待ちの申請がありません"
+        )
+
+    user.seller_application_status = SellerApplicationStatus.REJECTED.value
+    user.seller_application_admin_note = request.admin_note or ""
+
+    # 申請中の問題集も却下
+    db.query(QuestionSet).filter(
+        QuestionSet.creator_id == user_id,
+        QuestionSet.approval_status == QuestionSetApprovalStatus.PENDING_REVIEW.value
+    ).update({"approval_status": QuestionSetApprovalStatus.REJECTED.value})
+
+    db.commit()
+    db.refresh(user)
+    return _build_application_response(user, db)

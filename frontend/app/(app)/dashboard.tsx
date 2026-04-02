@@ -188,6 +188,18 @@ export default function DashboardScreen() {
                 {t("Security Settings", "セキュリティ設定")}
               </Text>
             </TouchableOpacity>
+
+            {(user?.role === 'admin' || user?.role === 'super_admin') && (
+              <TouchableOpacity
+                style={[styles.menuButton, styles.adminButton]}
+                onPress={() => router.push("/(app)/admin/index")}
+                nativeID="menu-btn-admin"
+              >
+                <Text style={styles.menuButtonText} nativeID="menu-text-admin">
+                  {t("Admin Panel", "管理者パネル")}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <TouchableOpacity
@@ -310,6 +322,9 @@ const styles = StyleSheet.create({
   },
   settingsButton: {
     backgroundColor: "#FF9500",
+  },
+  adminButton: {
+    backgroundColor: "#5856D6",
   },
   button: {
     backgroundColor: "#007AFF",

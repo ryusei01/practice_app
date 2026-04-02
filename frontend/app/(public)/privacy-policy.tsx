@@ -34,7 +34,7 @@ export default function PrivacyPolicyScreen() {
         ]}
       >
         <Text style={styles.lastUpdated}>
-          {t("Last updated: April 2025", "最終更新日：2025年4月")}
+          {t("Last updated: April 2026", "最終更新日：2026年4月")}
         </Text>
 
         <Section title={t("1. Introduction", "1. はじめに")}>

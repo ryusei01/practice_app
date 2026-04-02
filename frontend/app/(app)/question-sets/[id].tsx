@@ -939,7 +939,8 @@ question_text,correct_answer,category,difficulty`;
             </Text>
           </TouchableOpacity>
         </View>
-        {questionSet?.textbook_path && (
+        {/* 教科書ボタン */}
+        {(questionSet?.textbook_path || questionSet?.textbook_type === 'inline') && (
           <View style={styles.buttonRow}>
             <TouchableOpacity
               style={styles.textbookButton}
@@ -947,6 +948,19 @@ question_text,correct_answer,category,difficulty`;
             >
               <Text style={styles.textbookButtonText}>
                 📚 {t("View Textbook", "教科書を見る")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {/* 作成者向け：教科書編集ボタン */}
+        {user?.id === questionSet?.creator_id && (
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={styles.editTextbookButton}
+              onPress={() => router.push(`/(app)/question-sets/${id}/edit-textbook`)}
+            >
+              <Text style={styles.editTextbookButtonText}>
+                ✏️ {t("Edit Textbook", "教科書を編集")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1621,5 +1635,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#e53e3e",
     textDecorationLine: "underline",
+  },
+  editTextbookButton: {
+    flex: 1,
+    backgroundColor: "#34C759",
+    borderRadius: 8,
+    padding: 14,
+    alignItems: "center",
+  },
+  editTextbookButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
   },
 });
