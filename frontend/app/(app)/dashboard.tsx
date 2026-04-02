@@ -85,9 +85,30 @@ export default function DashboardScreen() {
     </View>
   );
 
+  const headerMyPageLink = (
+    <TouchableOpacity
+      style={styles.headerCornerButton}
+      onPress={() => router.push("/(app)/mypage")}
+      testID="header-btn-mypage"
+    >
+      <Text
+        style={[
+          styles.headerCornerButtonText,
+          { fontSize: isSmallScreen ? 14 : 16 },
+        ]}
+        nativeID="header-mypage-text"
+      >
+        {t("My Profile", "マイページ")}
+      </Text>
+    </TouchableOpacity>
+  );
+
   return (
     <View style={styles.wrapper} nativeID="dashboard-wrapper">
-      <Header rightComponent={languageSwitcherAuth} />
+      <Header
+        leftComponent={headerMyPageLink}
+        rightComponent={languageSwitcherAuth}
+      />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         nativeID="dashboard-scroll"
@@ -149,14 +170,6 @@ export default function DashboardScreen() {
               >
                 {t("AI Dashboard", "AIダッシュボード")}
               </Text>
-              <View style={styles.overlay} nativeID="menu-overlay-ai-dashboard">
-                <Text
-                  style={styles.overlayText}
-                  nativeID="menu-overlay-text-ai-dashboard"
-                >
-                  {t("Under Preparation", "準備中")}
-                </Text>
-              </View>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -281,6 +294,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 6,
     alignItems: "center",
+  },
+  headerCornerButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  headerCornerButtonText: {
+    color: "#fff",
+    fontWeight: "600",
   },
   langButtonHeader: {
     paddingHorizontal: 10,

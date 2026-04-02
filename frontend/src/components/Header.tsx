@@ -6,12 +6,13 @@ import { useLanguage } from "../contexts/LanguageContext";
 
 interface HeaderProps {
   title?: string;
+  leftComponent?: ReactNode;
   rightComponent?: ReactNode;
   // 既存画面との互換性のため（現状はHeader内部で未使用）
   showLanguageSwitcher?: boolean;
 }
 
-export default function Header({ title, rightComponent }: HeaderProps) {
+export default function Header({ title, leftComponent, rightComponent }: HeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated } = useAuth();
@@ -32,16 +33,26 @@ export default function Header({ title, rightComponent }: HeaderProps) {
   return (
     <View style={styles.header} nativeID="app-header">
       <View style={styles.headerContent}>
-        {!isHomePage && (
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.canGoBack() ? router.back() : router.replace("/")}
-            testID="header-back-btn"
+        {leftComponent ? (
+          <View
+            style={styles.leftComponent}
+            testID="header-left-component"
+            nativeID="header-left-component"
           >
-            <Text style={styles.backButtonText} nativeID="header-back-text">
-              ←
-            </Text>
-          </TouchableOpacity>
+            {leftComponent}
+          </View>
+        ) : (
+          !isHomePage && (
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => router.canGoBack() ? router.back() : router.replace("/")}
+              testID="header-back-btn"
+            >
+              <Text style={styles.backButtonText} nativeID="header-back-text">
+                ←
+              </Text>
+            </TouchableOpacity>
+          )
         )}
         <View style={styles.titleContainer}>
           <Text style={styles.appName} nativeID="app-name">
@@ -101,6 +112,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: "100%",
     position: "relative",
+  },
+  leftComponent: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    zIndex: 1,
+    justifyContent: "center",
   },
   backButton: {
     position: "absolute",

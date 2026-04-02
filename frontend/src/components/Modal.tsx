@@ -7,6 +7,7 @@ import {
   Modal as RNModal,
   ScrollView,
   useWindowDimensions,
+  Platform,
 } from "react-native";
 
 interface ModalProps {
@@ -147,6 +148,12 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
     maxHeight: "90%",
+    // 内側全体を TouchableOpacity で包んでいるため Web では親が pointer になりがち。
+    // 本文は矢印のままにし、子の TouchableOpacity だけ手のポインタにする。
+    ...Platform.select({
+      web: { cursor: "default" },
+      default: {},
+    }),
   },
   modalTitle: {
     fontSize: 20,

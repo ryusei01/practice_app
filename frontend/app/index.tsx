@@ -200,9 +200,30 @@ export default function Home() {
       </View>
     );
 
+    const headerLoginButton = (
+      <TouchableOpacity
+        style={styles.headerCornerButton}
+        onPress={() => setShowLoginModal(true)}
+        testID="header-btn-login"
+      >
+        <Text
+          style={[
+            styles.headerCornerButtonText,
+            { fontSize: isSmallScreen ? 14 : 16 },
+          ]}
+          nativeID="header-login-text"
+        >
+          {t("Sign In", "ログイン")}
+        </Text>
+      </TouchableOpacity>
+    );
+
     return (
       <View style={styles.wrapper} nativeID="home-wrapper-guest">
-        <Header rightComponent={languageSwitcher} />
+        <Header
+          leftComponent={headerLoginButton}
+          rightComponent={languageSwitcher}
+        />
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           nativeID="home-scroll-guest"
@@ -468,6 +489,14 @@ const styles = StyleSheet.create({
     gap: 6,
     alignItems: "center",
   },
+  headerCornerButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  headerCornerButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
   langButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -645,6 +674,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 3,
     elevation: 2,
+    ...Platform.select({
+      web: { cursor: "pointer" },
+      default: {},
+    }),
   },
   googleSignInText: {
     color: "#3c4043",

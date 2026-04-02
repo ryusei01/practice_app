@@ -214,37 +214,37 @@ class ScorePredictor:
         self,
         user_id: str,
         max_score: int = 100
-    ) -> Dict[str, Dict[str, any]]:
+    ) -> List[Dict[str, any]]:
         """
-        カテゴリ別の予想スコアを取得
+        カテゴリ別の予想スコアを取得（API・フロント向けはカテゴリごとの配列）
 
         Args:
             user_id: ユーザーID
             max_score: 満点スコア
 
         Returns:
-            カテゴリ名 -> 予想スコア情報
+            [{ category, predicted_score, confidence, max_score }, ...]
         """
         category_stats = self.db.query(UserCategoryStats).filter(
             UserCategoryStats.user_id == user_id
         ).all()
 
-        results = {}
+        results: List[Dict[str, any]] = []
         for stat in category_stats:
             if stat.total_questions == 0:
                 continue
 
-            predicted_score = stat.correct_rate * max_score
+            predicted_score = float(stat.correct_rate) * max_score
             confidence = self._calculate_confidence(stat.total_questions)
 
-            results[stat.category] = {
+            results.append({
+                "category": stat.category,
                 "predicted_score": round(predicted_score, 1),
                 "confidence": round(confidence, 2),
-                "correct_rate": round(stat.correct_rate, 3),
-                "total_questions": stat.total_questions,
-                "weakness_score": round(stat.weakness_score, 3)
-            }
+                "max_score": max_score,
+            })
 
+        results.sort(key=lambda x: x["category"])
         return results
 
     def get_improvement_suggestions(self, user_id: str) -> List[Dict[str, any]]:
@@ -255,33 +255,38 @@ class ScorePredictor:
             user_id: ユーザーID
 
         Returns:
-            改善提案のリスト
+            [{ category, suggestion, priority, type? }, ...]  priority は数値（大きいほど重要）
         """
-        suggestions = []
+        suggestions: List[Dict[str, any]] = []
 
-        # カテゴリ別統計を取得
         category_stats = self.db.query(UserCategoryStats).filter(
             UserCategoryStats.user_id == user_id
         ).filter(
             UserCategoryStats.weakness_score.is_not(None)
         ).order_by(UserCategoryStats.weakness_score.desc()).all()
 
-        for stat in category_stats[:3]:  # 上位3つの苦手分野
-            if stat.weakness_score is not None and stat.weakness_score > 0.3:  # 苦手判定
+        for stat in category_stats[:3]:
+            if stat.weakness_score is not None and stat.weakness_score > 0.3:
+                pct = float(stat.correct_rate) * 100
+                suggestion_text = (
+                    f"{stat.category}の正答率が{pct:.1f}%です。集中的に復習することをお勧めします。"
+                )
+                priority = 9 if stat.weakness_score > 0.5 else 6
                 suggestions.append({
                     "type": "weak_category",
                     "category": stat.category,
-                    "message": f"{stat.category}の正答率が{stat.correct_rate*100:.1f}%です。集中的に学習しましょう。",
-                    "priority": "high" if stat.weakness_score > 0.5 else "medium"
+                    "suggestion": suggestion_text,
+                    "priority": priority,
                 })
 
-        # 回答速度のチェック
         overall_stats = self._get_user_stats(user_id)
         if overall_stats["total_attempts"] > 0 and overall_stats["avg_time"] > 20:
             suggestions.append({
                 "type": "speed",
-                "message": "回答に時間がかかっています。基礎知識の定着を意識しましょう。",
-                "priority": "medium"
+                "category": "",
+                "suggestion": "回答に時間がかかっています。基礎知識の定着を意識しましょう。",
+                "priority": 5,
             })
 
+        suggestions.sort(key=lambda x: -x["priority"])
         return suggestions

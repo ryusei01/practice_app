@@ -1,8 +1,14 @@
 import { Stack } from "expo-router";
 import Head from "expo-router/head";
+import * as WebBrowser from "expo-web-browser";
 import { Platform } from "react-native";
 import { AuthProvider } from "../src/contexts/AuthContext";
 import { LanguageProvider } from "../src/contexts/LanguageContext";
+
+// Web: Google OAuth のポップアップは redirect が / などログイン画面以外に降りる。ここで完了処理しないと別ウィンドウだけがトップ表示のままになる。
+if (Platform.OS === "web") {
+  WebBrowser.maybeCompleteAuthSession();
+}
 
 export default function RootLayout() {
   return (
@@ -57,14 +63,9 @@ export default function RootLayout() {
             <Stack.Screen name="(app)/seller-dashboard" />
             <Stack.Screen name="(app)/admin/index" />
             <Stack.Screen name="(app)/settings" />
+            <Stack.Screen name="(app)/mypage" />
             <Stack.Screen name="(app)/verify-otp" />
-            <Stack.Screen name="(trial)/trial-question-sets" />
-            <Stack.Screen name="(trial)/create" />
-            <Stack.Screen name="(trial)/set/[id]" />
-            <Stack.Screen name="(trial)/set/[id]/textbook" />
-            <Stack.Screen name="(trial)/set/[id]/question/[questionIndex]" />
-            <Stack.Screen name="(trial)/quiz/[id]" />
-            <Stack.Screen name="(trial)/textbook/[path]" />
+            <Stack.Screen name="(trial)" />
             <Stack.Screen name="(app)/flashcard/[id]" />
             <Stack.Screen name="(public)/privacy-policy" />
             <Stack.Screen name="(public)/terms-of-service" />

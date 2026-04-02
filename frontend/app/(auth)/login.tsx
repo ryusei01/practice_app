@@ -9,13 +9,10 @@ import {
   Image,
 } from "react-native";
 import * as Google from "expo-auth-session/providers/google";
-import * as WebBrowser from "expo-web-browser";
 import { makeRedirectUri } from "expo-auth-session";
 import { router } from "expo-router";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useLanguage } from "../../src/contexts/LanguageContext";
-
-WebBrowser.maybeCompleteAuthSession();
 
 /** 未設定・プレースホルダーは web 用 ID にフォールバック（ネイティブでも Web クライアント ID で開発可能） */
 function resolveGoogleClientId(
