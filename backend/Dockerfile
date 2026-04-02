@@ -15,12 +15,11 @@ RUN pip install --no-cache-dir -r requirements-prod.txt
 # アプリケーションコードをコピー
 COPY app/ ./app/
 
-# Cloud Run はポート 8080 を使用
-ENV PORT=8080
+# Cloud Run は PORT 環境変数でポートを指定する
 EXPOSE 8080
 
 # 非rootユーザーで実行（セキュリティ）
 RUN adduser --disabled-password --gecos "" appuser
 USER appuser
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1"]
