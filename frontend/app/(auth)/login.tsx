@@ -12,7 +12,6 @@ import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import { makeRedirectUri } from "expo-auth-session";
 import { router } from "expo-router";
-import Constants from "expo-constants";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useLanguage } from "../../src/contexts/LanguageContext";
 
@@ -26,19 +25,10 @@ export default function LoginScreen() {
 
   const redirectUri = makeRedirectUri({ native: "quizmarketplace://redirect" });
 
-  const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, any>;
-  const googleWebClientId =
-    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? extra.googleWebClientId;
-  const googleIosClientId =
-    process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? extra.googleIosClientId;
-  const googleAndroidClientId =
-    process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ??
-    extra.googleAndroidClientId;
-
   const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: googleWebClientId,
-    iosClientId: googleIosClientId,
-    androidClientId: googleAndroidClientId,
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
     redirectUri,
   });
 
