@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -7,12 +7,16 @@ import {
   ActivityIndicator,
   useWindowDimensions,
   Image,
+  Platform,
 } from "react-native";
 import * as Google from "expo-auth-session/providers/google";
 import { makeRedirectUri } from "expo-auth-session";
 import { router } from "expo-router";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useLanguage } from "../../src/contexts/LanguageContext";
+
+/** Web 同一タブ OAuth 用。リロード後も state を照合する */
+const GOOGLE_OAUTH_STATE_KEY = "quizmarketplace_google_oauth_state";
 
 /** 未設定・プレースホルダーは web 用 ID にフォールバック（ネイティブでも Web クライアント ID で開発可能） */
 function resolveGoogleClientId(
@@ -32,7 +36,11 @@ export default function LoginScreen() {
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 600;
 
-  const redirectUri = makeRedirectUri({ native: "quizmarketplace://redirect" });
+  // Web は同一タブで /login に戻す（ポップアップ不要）。GCP の「承認済みリダイレクト URI」に https://あなたのドメイン/login を追加すること。
+  const redirectUri =
+    Platform.OS === "web"
+      ? makeRedirectUri({ path: "login" })
+      : makeRedirectUri({ native: "quizmarketplace://redirect" });
 
   const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
   const [request, response, promptAsync] = Google.useAuthRequest({
@@ -48,21 +56,77 @@ export default function LoginScreen() {
     redirectUri,
   });
 
-  React.useEffect(() => {
-    if (request) {
-      console.log("[OAuth] redirect_uri:", request.redirectUri);
-    }
-  }, [request]);
-
-
   const [isLoading, setIsLoading] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState("");
+  /** Strict Mode で useEffect が二重に走るのを同期で防ぐ */
+  const webOAuthReturnHandledRef = useRef(false);
+
+  const handleGoogleLogin = useCallback(
+    async (accessToken: string) => {
+      setIsLoading(true);
+      setErrorMessage("");
+      try {
+        await loginWithGoogle(accessToken);
+      } catch (error: any) {
+        console.error("[Login] Google login error:", error);
+        setErrorMessage(
+          error.response?.data?.detail ||
+            error.message ||
+            t("Sign-in failed", "サインインに失敗しました")
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [loginWithGoogle, t]
+  );
+
+  // Web: Google から同一タブで戻ったとき（#access_token=...）
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") {
+      return;
+    }
+    if (webOAuthReturnHandledRef.current) {
+      return;
+    }
+    const hash = window.location.hash?.replace(/^#/, "") ?? "";
+    if (!hash) {
+      return;
+    }
+    const params = new URLSearchParams(hash);
+    const oauthError = params.get("error");
+    if (oauthError) {
+      webOAuthReturnHandledRef.current = true;
+      const desc = params.get("error_description") ?? oauthError;
+      setErrorMessage(desc);
+      window.history.replaceState(
+        {},
+        document.title,
+        window.location.pathname + window.location.search
+      );
+      return;
+    }
+    const accessToken = params.get("access_token");
+    const returnedState = params.get("state");
+    const savedState = sessionStorage.getItem(GOOGLE_OAUTH_STATE_KEY);
+    if (!accessToken || !returnedState || !savedState || returnedState !== savedState) {
+      return;
+    }
+    webOAuthReturnHandledRef.current = true;
+    sessionStorage.removeItem(GOOGLE_OAUTH_STATE_KEY);
+    window.history.replaceState(
+      {},
+      document.title,
+      window.location.pathname + window.location.search
+    );
+    void handleGoogleLogin(accessToken);
+  }, [handleGoogleLogin]);
 
   useEffect(() => {
     if (response?.type === "success") {
       const accessToken = response.authentication?.accessToken;
       if (accessToken) {
-        handleGoogleLogin(accessToken);
+        void handleGoogleLogin(accessToken);
       } else {
         setErrorMessage(
           t(
@@ -76,23 +140,32 @@ export default function LoginScreen() {
         t("Google sign-in failed", "Googleサインインに失敗しました")
       );
     }
-  }, [response]);
+  }, [response, handleGoogleLogin, t]);
 
-  const handleGoogleLogin = async (accessToken: string) => {
-    setIsLoading(true);
+  const startGoogleAuth = () => {
     setErrorMessage("");
-    try {
-      await loginWithGoogle(accessToken);
-    } catch (error: any) {
-      console.error("[Login] Google login error:", error);
-      setErrorMessage(
-        error.response?.data?.detail ||
-          error.message ||
-          t("Sign-in failed", "サインインに失敗しました")
-      );
-    } finally {
-      setIsLoading(false);
+    if (!request?.url) {
+      return;
     }
+    if (Platform.OS === "web") {
+      if (!request.state) {
+        setErrorMessage(
+          t("Sign-in is not ready yet", "ログインの準備ができていません。しばらく待って再度お試しください。")
+        );
+        return;
+      }
+      try {
+        sessionStorage.setItem(GOOGLE_OAUTH_STATE_KEY, request.state);
+        window.location.assign(request.url);
+      } catch (e) {
+        console.error("[Login] Web redirect failed:", e);
+        setErrorMessage(
+          t("Could not start sign-in", "サインインを開始できませんでした")
+        );
+      }
+      return;
+    }
+    void promptAsync();
   };
 
   const loading = isLoading || authLoading;
@@ -126,10 +199,7 @@ export default function LoginScreen() {
 
         <TouchableOpacity
           style={[styles.googleButton, loading && styles.buttonDisabled]}
-          onPress={() => {
-            setErrorMessage("");
-            promptAsync();
-          }}
+          onPress={startGoogleAuth}
           disabled={!request || loading}
         >
           {loading ? (

@@ -24,6 +24,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   loginWithGoogle: (accessToken: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** サーバーの最新ユーザー情報を再取得（決済完了直後の is_premium 反映など） */
+  refreshUser: () => Promise<User | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -92,6 +94,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
   };
 
+  const refreshUser = async (): Promise<User | null> => {
+    try {
+      const token = await tokenStorage.getAccessToken();
+      if (!token) {
+        setUser(null);
+        return null;
+      }
+      const userData = await authApi.getCurrentUser();
+      setUser(userData);
+      return userData;
+    } catch (error) {
+      console.error('refreshUser failed:', error);
+      return null;
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -100,6 +118,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isAuthenticated: !!user,
         loginWithGoogle,
         logout,
+        refreshUser,
       }}
     >
       {children}
