@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     STRIPE_PUBLISHABLE_KEY: str = "pk_test_placeholder"
     STRIPE_WEBHOOK_SECRET: Optional[str] = None
     PLATFORM_FEE_PERCENT: int = 20
+    # 有料プラン (550円) の Stripe Price ID
+    STRIPE_PREMIUM_PRICE_ID: str = "price_placeholder"
+    # 有料プラン購入時に付与するクレジット（円）
+    PREMIUM_PLAN_CREDIT_JPY: int = 200
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""

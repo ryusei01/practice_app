@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useLanguage } from '../../../src/contexts/LanguageContext';
+import AdBanner from '../../../src/components/AdBanner';
 
 interface AnswerResult {
   question_id: string;
@@ -67,6 +68,7 @@ export default function QuizResultScreen() {
 
   return (
     <ScrollView style={styles.container}>
+      <AdBanner />
       {/* 総合結果カード */}
       <View style={styles.summaryCard}>
         <Text style={styles.performanceEmoji}>{performance.emoji}</Text>

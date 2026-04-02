@@ -39,6 +39,7 @@ class UserResponse(BaseModel):
     is_seller: bool
     is_premium: bool
     premium_expires_at: Optional[datetime]
+    account_credit_jpy: int = 0
 
     class Config:
         from_attributes = True
@@ -52,7 +53,8 @@ class UserResponse(BaseModel):
             is_active=obj.is_active,
             is_seller=obj.is_seller,
             is_premium=obj.is_premium,
-            premium_expires_at=obj.premium_expires_at
+            premium_expires_at=obj.premium_expires_at,
+            account_credit_jpy=obj.account_credit_jpy or 0,
         )
 
 

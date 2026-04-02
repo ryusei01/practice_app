@@ -88,7 +88,7 @@ async def health():
 
 
 # APIルーターを追加
-from .api import ai_router, answers_router, auth_router, question_sets_router, questions_router, payments_router, admin_router, two_factor_router, translate_router, textbooks_router, reports_router
+from .api import ai_router, answers_router, auth_router, question_sets_router, questions_router, payments_router, admin_router, two_factor_router, translate_router, textbooks_router, reports_router, subscriptions_router
 
 app.include_router(auth_router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 app.include_router(question_sets_router, prefix=f"{settings.API_V1_STR}/question-sets", tags=["question-sets"])
@@ -101,6 +101,7 @@ app.include_router(two_factor_router, prefix=f"{settings.API_V1_STR}/2fa", tags=
 app.include_router(translate_router, prefix=f"{settings.API_V1_STR}/translate", tags=["translate"])
 app.include_router(textbooks_router, prefix=f"{settings.API_V1_STR}/textbooks", tags=["textbooks"])
 app.include_router(reports_router, prefix=f"{settings.API_V1_STR}/reports", tags=["reports"])
+app.include_router(subscriptions_router, prefix=f"{settings.API_V1_STR}/subscriptions", tags=["subscriptions"])
 
 # TODO: 他のルーターを追加
 # from .api import users, questions, marketplace

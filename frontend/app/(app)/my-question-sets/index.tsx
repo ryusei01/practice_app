@@ -23,6 +23,7 @@ import {
 } from "../../../src/services/textbookService";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
+import AdBanner from "../../../src/components/AdBanner";
 
 export default function MyQuestionSetsScreen() {
   const [myQuestionSets, setMyQuestionSets] = useState<QuestionSet[]>([]);
@@ -326,6 +327,8 @@ export default function MyQuestionSetsScreen() {
             </Text>
           </TouchableOpacity>
         )}
+
+        <AdBanner />
 
         {/* My Question Sets Section */}
         <View style={styles.section} nativeID="my-qs-section">

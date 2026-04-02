@@ -403,13 +403,22 @@ export default function MyPageScreen() {
             </View>
 
             {userInfo.is_premium ? (
-              <View style={[styles.badge, { backgroundColor: "#FF9800" }]}>
-                <Text style={styles.badgeText}>
-                  {t("Premium", "プレミアム")}
-                  {userInfo.premium_expires_at
-                    ? ` (${formatDate(userInfo.premium_expires_at)})`
-                    : ""}
-                </Text>
+              <View>
+                <View style={[styles.badge, { backgroundColor: "#FF9800" }]}>
+                  <Text style={styles.badgeText}>
+                    {t("Premium", "プレミアム")}
+                    {userInfo.premium_expires_at
+                      ? ` (${formatDate(userInfo.premium_expires_at)})`
+                      : ""}
+                  </Text>
+                </View>
+                {(userInfo.account_credit_jpy ?? 0) > 0 && (
+                  <View style={[styles.badge, { backgroundColor: "#007AFF", marginTop: 6 }]}>
+                    <Text style={styles.badgeText}>
+                      {t("Credit", "クレジット")}: ¥{(userInfo.account_credit_jpy ?? 0).toLocaleString()}
+                    </Text>
+                  </View>
+                )}
               </View>
             ) : (
               <TouchableOpacity

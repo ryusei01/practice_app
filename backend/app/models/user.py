@@ -25,6 +25,7 @@ class User(Base):
     is_seller = Column(Boolean, default=False)  # 販売機能フラグ（role とは独立）
     is_premium = Column(Boolean, default=False)
     premium_expires_at = Column(DateTime, nullable=True)
+    account_credit_jpy = Column(Integer, default=0, nullable=False)
     stripe_account_id = Column(String, nullable=True)
     stripe_customer_id = Column(String, nullable=True)
     seller_terms_accepted_at = Column(DateTime, nullable=True)

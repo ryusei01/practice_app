@@ -9,5 +9,6 @@ from .two_factor import router as two_factor_router
 from .translate import router as translate_router
 from .textbooks import router as textbooks_router
 from .reports import router as reports_router
+from .subscriptions import router as subscriptions_router
 
-__all__ = ["ai_router", "answers_router", "auth_router", "question_sets_router", "questions_router", "payments_router", "admin_router", "two_factor_router", "translate_router", "textbooks_router", "reports_router"]
+__all__ = ["ai_router", "answers_router", "auth_router", "question_sets_router", "questions_router", "payments_router", "admin_router", "two_factor_router", "translate_router", "textbooks_router", "reports_router", "subscriptions_router"]

@@ -10,6 +10,7 @@ import { useRouter } from "expo-router";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useLanguage } from "../../src/contexts/LanguageContext";
 import Header from "../../src/components/Header";
+import AdBanner from "../../src/components/AdBanner";
 import { useEffect } from "react";
 
 export default function DashboardScreen() {
@@ -208,6 +209,7 @@ export default function DashboardScreen() {
               {t("Logout", "ログアウト")}
             </Text>
           </TouchableOpacity>
+          <AdBanner />
         </View>
       </ScrollView>
     </View>

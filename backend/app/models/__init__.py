@@ -5,6 +5,7 @@ from .marketplace import Purchase, Review
 from .otp import OTPCode
 from .copyright_check import CopyrightCheckRecord, RiskLevel
 from .report import ContentReport, ReportReason, ReportStatus
+from .processed_checkout import ProcessedCheckoutSession
 
 __all__ = [
     "User",
@@ -21,4 +22,5 @@ __all__ = [
     "ContentReport",
     "ReportReason",
     "ReportStatus",
+    "ProcessedCheckoutSession",
 ]

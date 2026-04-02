@@ -164,7 +164,7 @@ export default function Home() {
             language === "en" && styles.langButtonActiveHeader,
           ]}
           onPress={() => setLanguage("en")}
-          nativeID="lang-btn-en"
+          testID="lang-btn-en"
         >
           <Text
             style={[
@@ -182,7 +182,7 @@ export default function Home() {
             language === "ja" && styles.langButtonActiveHeader,
           ]}
           onPress={() => setLanguage("ja")}
-          nativeID="lang-btn-ja"
+          testID="lang-btn-ja"
         >
           <Text
             style={[
@@ -305,7 +305,7 @@ export default function Home() {
                 },
               ]}
               onPress={() => router.push("/(trial)/trial-question-sets")}
-              nativeID="btn-trial"
+              testID="btn-trial"
             >
               <Text
                 style={[
@@ -328,7 +328,7 @@ export default function Home() {
               ]}
               onPress={() => router.push("/(auth)/register")}
               disabled={false}
-              nativeID="btn-register"
+              testID="btn-register"
             >
               <Text
                 style={[
@@ -363,7 +363,7 @@ export default function Home() {
               ]}
               onPress={() => router.push("/(auth)/login")}
               disabled={false}
-              nativeID="btn-login"
+              testID="btn-login"
             >
               <View style={styles.overlay} nativeID="btn-login-overlay">
                 <Text
