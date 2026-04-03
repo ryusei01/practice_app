@@ -17,8 +17,8 @@ from ..models import User
 
 logger = logging.getLogger(__name__)
 
-# パスワードハッシュ化 (argon2を使用)
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+# 新規は bcrypt（本番イメージに必ず含まれる）。既存の argon2 ハッシュは検証のみ互換（開発用・argon2-cffi 要）
+pwd_context = CryptContext(schemes=["bcrypt", "argon2"], deprecated="auto")
 
 # HTTPベアラートークン
 security = HTTPBearer()

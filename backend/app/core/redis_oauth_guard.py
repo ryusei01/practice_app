@@ -32,7 +32,11 @@ async def check_oauth_ip_blocked(ip: str) -> None:
     r = _redis_client()
     if r is None:
         return
-    blocked = await r.get(f"oauth:block:{ip}")
+    try:
+        blocked = await r.get(f"oauth:block:{ip}")
+    except Exception:
+        logger.warning("Redis check_oauth_ip_blocked failed; fail-open ip=%s", ip, exc_info=True)
+        return
     if blocked:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -44,31 +48,37 @@ async def record_oauth_failure(ip: str, reason_code: str) -> None:
     r = _redis_client()
     if r is None:
         return
-    key = f"oauth:fail:{ip}"
-    n = await r.incr(key)
-    if n == 1:
-        await r.expire(key, settings.OAUTH_FAIL_WINDOW_SEC)
-    logger.info(
-        "oauth failure ip=%s count=%s reason=%s",
-        ip,
-        n,
-        reason_code,
-    )
-    if n >= settings.OAUTH_FAIL_THRESHOLD:
-        await r.setex(
-            f"oauth:block:{ip}",
-            settings.OAUTH_BLOCK_DURATION_SEC,
-            "1",
-        )
-        logger.warning(
-            "oauth temp_block ip=%s threshold=%s",
+    try:
+        key = f"oauth:fail:{ip}"
+        n = await r.incr(key)
+        if n == 1:
+            await r.expire(key, settings.OAUTH_FAIL_WINDOW_SEC)
+        logger.info(
+            "oauth failure ip=%s count=%s reason=%s",
             ip,
-            settings.OAUTH_FAIL_THRESHOLD,
+            n,
+            reason_code,
         )
+        if n >= settings.OAUTH_FAIL_THRESHOLD:
+            await r.setex(
+                f"oauth:block:{ip}",
+                settings.OAUTH_BLOCK_DURATION_SEC,
+                "1",
+            )
+            logger.warning(
+                "oauth temp_block ip=%s threshold=%s",
+                ip,
+                settings.OAUTH_FAIL_THRESHOLD,
+            )
+    except Exception:
+        logger.warning("Redis record_oauth_failure failed ip=%s", ip, exc_info=True)
 
 
 async def clear_oauth_failure_counter(ip: str) -> None:
     r = _redis_client()
     if r is None:
         return
-    await r.delete(f"oauth:fail:{ip}")
+    try:
+        await r.delete(f"oauth:fail:{ip}")
+    except Exception:
+        logger.warning("Redis clear_oauth_failure_counter failed ip=%s", ip, exc_info=True)
