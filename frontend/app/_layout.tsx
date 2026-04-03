@@ -41,6 +41,7 @@ export default function RootLayout() {
             <Stack.Screen name="(app)/flashcard/[id]" />
             <Stack.Screen name="(public)/privacy-policy" />
             <Stack.Screen name="(public)/terms-of-service" />
+            <Stack.Screen name="(public)/tokusho" />
             <Stack.Screen name="premium-success" />
             <Stack.Screen name="premium-cancel" />
           </Stack>

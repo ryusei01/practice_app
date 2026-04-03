@@ -985,7 +985,7 @@ question_text,correct_answer,category,difficulty`;
       {questionSet.price > 0 && (
         <TouchableOpacity
           style={styles.tokushoLink}
-          onPress={() => router.push("/(app)/legal/tokusho")}
+          onPress={() => router.push("/(public)/tokusho")}
         >
           <Text style={styles.tokushoLinkText}>
             特定商取引法に基づく表記

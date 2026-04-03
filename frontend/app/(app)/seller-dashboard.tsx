@@ -287,7 +287,7 @@ export default function SellerDashboardScreen() {
               onToggle={() => setTokushoChecked(!tokushoChecked)}
               label="特定商取引法に基づく表記を確認しました"
               linkLabel="特商法表記を読む"
-              onLinkPress={() => router.push('/(app)/legal/tokusho')}
+              onLinkPress={() => router.push('/(public)/tokusho')}
             />
 
             <CheckItem
@@ -418,7 +418,7 @@ export default function SellerDashboardScreen() {
               <View style={styles.linkDivider} />
               <TouchableOpacity
                 style={styles.legalLink}
-                onPress={() => router.push('/(app)/legal/tokusho')}
+                onPress={() => router.push('/(public)/tokusho')}
               >
                 <Text style={styles.legalLinkText}>特定商取引法に基づく表記</Text>
                 <Text style={styles.legalLinkArrow}>→</Text>
