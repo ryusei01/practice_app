@@ -57,6 +57,7 @@ jobs:
             echo "::warning::EXPO_PUBLIC_API_URL が Railway を指しています。GCP（Cloud Run）運用なら、シークレットを ...run.app/api/v1 に更新し、フロントを再デプロイしてください。バックエンド側の CORS_ORIGINS に https://ai-practice-book.com が含まれることも確認してください。"
           fi
 
+      # 特商法表記は EXPO_PUBLIC_TOKUSHO_* をビルド時に埋め込む。未設定だとプレースホルダーのままになる。
       - name: Build
         working-directory: frontend
         env:
@@ -67,6 +68,11 @@ jobs:
           EXPO_PUBLIC_AD_UNIT_ANDROID: ${{ secrets.EXPO_PUBLIC_AD_UNIT_ANDROID }}
           EXPO_PUBLIC_AD_UNIT_IOS: ${{ secrets.EXPO_PUBLIC_AD_UNIT_IOS }}
           EXPO_PUBLIC_AD_SLOT_WEB: ${{ secrets.EXPO_PUBLIC_AD_SLOT_WEB }}
+          EXPO_PUBLIC_TOKUSHO_SELLER_NAME: ${{ secrets.EXPO_PUBLIC_TOKUSHO_SELLER_NAME }}
+          EXPO_PUBLIC_TOKUSHO_OPERATOR_NAME: ${{ secrets.EXPO_PUBLIC_TOKUSHO_OPERATOR_NAME }}
+          EXPO_PUBLIC_TOKUSHO_ADDRESS: ${{ secrets.EXPO_PUBLIC_TOKUSHO_ADDRESS }}
+          EXPO_PUBLIC_TOKUSHO_PHONE: ${{ secrets.EXPO_PUBLIC_TOKUSHO_PHONE }}
+          EXPO_PUBLIC_TOKUSHO_EMAIL: ${{ secrets.EXPO_PUBLIC_TOKUSHO_EMAIL }}
         run: npm run build:web
 
       - name: Verify build output (dist)
