@@ -127,8 +127,11 @@ app.include_router(feedback_router, prefix=f"{settings.API_V1_STR}/feedback", ta
 # Static files for uploaded media (images, audio)
 import os
 _uploads_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads")
-os.makedirs(_uploads_dir, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=_uploads_dir), name="uploads")
+try:
+    os.makedirs(_uploads_dir, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=_uploads_dir), name="uploads")
+except OSError:
+    pass
 
 # TODO: 他のルーターを追加
 # from .api import users, questions, marketplace

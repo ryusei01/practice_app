@@ -15,6 +15,14 @@ export interface LocalQuestionSet {
   content_language?: ContentLanguage;
 }
 
+export interface LocalMediaItem {
+  type: "image" | "audio";
+  /** Full local URI (file:// or data:) for the media file */
+  url: string;
+  position: "question" | "answer";
+  caption?: string;
+}
+
 export interface LocalQuestion {
   id: string;
   question: string;
@@ -25,6 +33,7 @@ export interface LocalQuestion {
   subcategory2?: string;
   question_type?: "multiple_choice" | "true_false" | "text_input";
   options?: string[];
+  media_urls?: LocalMediaItem[];
 }
 
 export interface RedSheetProgress {
@@ -385,5 +394,43 @@ export const localStorageService = {
       description,
       questions,
     };
+  },
+
+  async addMediaToQuestion(
+    setId: string,
+    questionId: string,
+    media: LocalMediaItem
+  ): Promise<LocalMediaItem[]> {
+    const sets = await this.getTrialQuestionSets();
+    const setIdx = sets.findIndex((s) => s.id === setId);
+    if (setIdx === -1) throw new Error("Set not found");
+    const qIdx = sets[setIdx].questions.findIndex((q) => q.id === questionId);
+    if (qIdx === -1) throw new Error("Question not found");
+
+    const q = sets[setIdx].questions[qIdx];
+    const mediaList = q.media_urls ? [...q.media_urls] : [];
+    mediaList.push(media);
+    sets[setIdx].questions[qIdx] = { ...q, media_urls: mediaList };
+    await AsyncStorage.setItem(TRIAL_QUESTION_SETS_KEY, JSON.stringify(sets));
+    return mediaList;
+  },
+
+  async removeMediaFromQuestion(
+    setId: string,
+    questionId: string,
+    mediaIndex: number
+  ): Promise<LocalMediaItem[]> {
+    const sets = await this.getTrialQuestionSets();
+    const setIdx = sets.findIndex((s) => s.id === setId);
+    if (setIdx === -1) throw new Error("Set not found");
+    const qIdx = sets[setIdx].questions.findIndex((q) => q.id === questionId);
+    if (qIdx === -1) throw new Error("Question not found");
+
+    const q = sets[setIdx].questions[qIdx];
+    const mediaList = q.media_urls ? [...q.media_urls] : [];
+    mediaList.splice(mediaIndex, 1);
+    sets[setIdx].questions[qIdx] = { ...q, media_urls: mediaList.length > 0 ? mediaList : undefined };
+    await AsyncStorage.setItem(TRIAL_QUESTION_SETS_KEY, JSON.stringify(sets));
+    return mediaList;
   },
 };

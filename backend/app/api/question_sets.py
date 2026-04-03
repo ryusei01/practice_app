@@ -808,6 +808,43 @@ async def run_copyright_check(
 
 # --- Anki .apkg import ---
 
+@router.post("/parse-anki")
+async def parse_anki(
+    file: UploadFile = File(...),
+):
+    """Parse an Anki .apkg file and return questions without saving to DB.
+    No authentication required — intended for trial / local use."""
+    import tempfile, os
+    from ..services.anki_importer import import_apkg
+
+    filename = (file.filename or "").strip()
+    if not filename.lower().endswith(".apkg"):
+        raise HTTPException(status_code=400, detail="Only .apkg files are supported")
+
+    contents = await file.read()
+    if len(contents) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 50 MB)")
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".apkg")
+    try:
+        tmp.write(contents)
+        tmp.close()
+
+        result = import_apkg(tmp.name, "trial_local")
+
+        return {
+            "title": result["title"],
+            "questions": result["questions"],
+            "total": len(result["questions"]),
+        }
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="Invalid .apkg file (not a valid ZIP)")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        os.unlink(tmp.name)
+
+
 @router.post("/import-anki")
 async def import_anki(
     file: UploadFile = File(...),

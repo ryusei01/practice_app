@@ -14,7 +14,8 @@ import {
 import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
 import { useLanguage } from "../../src/contexts/LanguageContext";
-import { ContentLanguage } from "../../src/api/questionSets";
+import { ContentLanguage, questionSetsApi } from "../../src/api/questionSets";
+import { aiApi } from "../../src/api/ai";
 import {
   localStorageService,
   LocalQuestion,
@@ -25,7 +26,10 @@ import { QUESTION_SET_CSV_PROMPT_MARKDOWN } from "../../src/data/questionSetCsvP
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 
-type InputMode = "manual" | "csv";
+let ImagePicker: typeof import("expo-image-picker") | null = null;
+try { ImagePicker = require("expo-image-picker"); } catch {}
+
+type InputMode = "manual" | "csv" | "image" | "anki";
 
 export default function TrialCreateScreen() {
   const [inputMode, setInputMode] = useState<InputMode>("manual");
@@ -48,6 +52,18 @@ export default function TrialCreateScreen() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [showCsvPromptModal, setShowCsvPromptModal] = useState(false);
+
+  const [expandedFeature, setExpandedFeature] = useState<string | null>(null);
+
+  // Image OCR state
+  const [imageGenerating, setImageGenerating] = useState(false);
+  const [imageQuestions, setImageQuestions] = useState<LocalQuestion[] | null>(null);
+
+  // Anki import state
+  const [ankiParsing, setAnkiParsing] = useState(false);
+  const [ankiQuestions, setAnkiQuestions] = useState<LocalQuestion[] | null>(null);
+  const [ankiDeckTitle, setAnkiDeckTitle] = useState("");
+
   const { t, language } = useLanguage();
   const [contentLanguage, setContentLanguage] = useState<ContentLanguage>(
     () => (language === "ja" ? "ja" : "en")
@@ -178,6 +194,88 @@ export default function TrialCreateScreen() {
     setQuestions(newQuestions);
   };
 
+  // --- Image OCR handlers ---
+  const handlePickImageForGeneration = async () => {
+    if (!ImagePicker) return;
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert(t("Permission required", "権限が必要です")); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
+    if (result.canceled || !result.assets?.[0]) return;
+    await generateFromImage(result.assets[0].uri);
+  };
+
+  const handleCameraForGeneration = async () => {
+    if (!ImagePicker) return;
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) { Alert.alert(t("Permission required", "権限が必要です")); return; }
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+    if (result.canceled || !result.assets?.[0]) return;
+    await generateFromImage(result.assets[0].uri);
+  };
+
+  const generateFromImage = async (uri: string) => {
+    const ext = uri.split(".").pop() || "jpg";
+    setImageGenerating(true);
+    setImageQuestions(null);
+    try {
+      const res = await aiApi.generateFromImage(
+        { uri, name: `photo.${ext}`, type: `image/${ext}` }, 5
+      );
+      setImageQuestions(res.questions.map((q, i) => ({
+        id: `img_${Date.now()}_${i}`,
+        question: q.question_text,
+        answer: q.correct_answer,
+        question_type: (q.question_type as LocalQuestion["question_type"]) || "text_input",
+        options: q.options || undefined,
+        category: q.category || undefined,
+      })));
+    } catch (error: any) {
+      Alert.alert(t("Error", "エラー"), error.response?.data?.detail || t("Failed to generate questions from image", "画像からの問題生成に失敗しました"));
+    } finally {
+      setImageGenerating(false);
+    }
+  };
+
+  // --- Anki import handlers ---
+  const handlePickAnkiFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["application/octet-stream", "*/*"],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      if (!asset.name?.toLowerCase().endsWith(".apkg")) {
+        Alert.alert(t("Error", "エラー"), t("Please select an .apkg file", ".apkgファイルを選択してください"));
+        return;
+      }
+
+      setAnkiParsing(true);
+      setAnkiQuestions(null);
+      try {
+        const res = await questionSetsApi.parseAnki({
+          uri: asset.uri,
+          name: asset.name || "deck.apkg",
+          type: asset.mimeType || "application/octet-stream",
+        });
+        setAnkiDeckTitle(res.title);
+        if (!title.trim()) setTitle(res.title);
+        setAnkiQuestions(res.questions.map((q, i) => ({
+          id: `anki_${Date.now()}_${i}`,
+          question: q.question_text,
+          answer: q.correct_answer,
+          question_type: (q.question_type as LocalQuestion["question_type"]) || "text_input",
+          options: q.options || undefined,
+          media_urls: q.media_urls?.map(m => ({ ...m, position: m.position as "question" | "answer", type: m.type as "image" | "audio" })) || undefined,
+        })));
+      } catch (error: any) {
+        Alert.alert(t("Error", "エラー"), error.response?.data?.detail || t("Failed to parse Anki file", "Ankiファイルの解析に失敗しました"));
+      } finally {
+        setAnkiParsing(false);
+      }
+    } catch {}
+  };
+
   const handleCreate = async () => {
     setErrorMessage("");
     setSuccessMessage("");
@@ -189,31 +287,39 @@ export default function TrialCreateScreen() {
       return;
     }
 
-    let finalQuestions: typeof questions;
+    let finalQuestions: LocalQuestion[];
 
     if (inputMode === "csv") {
       if (csvQuestions.length === 0) {
-        setErrorMessage(
-          t("Please select a CSV file", "CSVファイルを選択してください")
-        );
+        setErrorMessage(t("Please select a CSV file", "CSVファイルを選択してください"));
         return;
       }
-      finalQuestions = csvQuestions.map((q) => ({
+      finalQuestions = csvQuestions;
+    } else if (inputMode === "image") {
+      if (!imageQuestions || imageQuestions.length === 0) {
+        setErrorMessage(t("Generate questions from an image first", "まず画像から問題を生成してください"));
+        return;
+      }
+      finalQuestions = imageQuestions;
+    } else if (inputMode === "anki") {
+      if (!ankiQuestions || ankiQuestions.length === 0) {
+        setErrorMessage(t("Import an Anki deck first", "まずAnkiデッキをインポートしてください"));
+        return;
+      }
+      finalQuestions = ankiQuestions;
+    } else {
+      const valid = questions.filter((q) => q.question.trim() && q.answer.trim());
+      if (valid.length === 0) {
+        setErrorMessage(t("Please add at least one question", "最低1つの問題を追加してください"));
+        return;
+      }
+      finalQuestions = valid.map((q, i) => ({
+        id: `q_${Date.now()}_${i}`,
         question: q.question,
         answer: q.answer,
-        difficulty: q.difficulty,
+        difficulty: q.difficulty as LocalQuestion["difficulty"],
         category: q.category,
       }));
-    } else {
-      finalQuestions = questions.filter(
-        (q) => q.question.trim() && q.answer.trim()
-      );
-      if (finalQuestions.length === 0) {
-        setErrorMessage(
-          t("Please add at least one question", "最低1つの問題を追加してください")
-        );
-        return;
-      }
     }
 
     setIsLoading(true);
@@ -286,6 +392,100 @@ export default function TrialCreateScreen() {
           </Text>
         </View>
 
+        <View style={styles.featureBanner}>
+          <Text style={styles.featureBannerTitle}>{t("What you can do", "できること")}</Text>
+          <Text style={styles.featureBannerSub}>{t("Tap any item to see how to use it", "タップすると使い方を表示")}</Text>
+          <View style={styles.featureChips}>
+            {([
+              {
+                id: "mc",
+                label: t("Multiple Choice", "多肢選択"),
+                color: "#007AFF",
+                bg: "#E8F0FE",
+                desc: t(
+                  "In bulk input, write options as A) B) C) ... and end with \"Answer: B\".\n\nExample:\nWhat is the capital of Japan?\nA) Tokyo\nB) Osaka\nC) Kyoto\nD) Nagoya\nAnswer: A",
+                  "一括入力で選択肢を A) B) C) ... で書き、最後に「答え: B」で正解を指定します。\n\n例:\n日本の首都は？\nA) 東京\nB) 大阪\nC) 京都\nD) 名古屋\n答え: A"
+                ),
+              },
+              {
+                id: "tf",
+                label: t("True / False", "正誤問題"),
+                color: "#FF9500",
+                bg: "#FFF3E0",
+                desc: t(
+                  "In bulk input, write a statement and end with \"Answer: true\" or \"Answer: false\".\n\nExample:\nThe Earth revolves around the Sun\nAnswer: true",
+                  "一括入力で命題を書き、「答え: true」または「答え: false」で正解を指定します。\n\n例:\n地球は太陽の周りを回る\n答え: true"
+                ),
+              },
+              {
+                id: "text",
+                label: t("Text Input", "記述式"),
+                color: "#8E8E93",
+                bg: "#F2F2F7",
+                desc: t(
+                  "Write a question and its answer. You can use \"Answer: ...\" prefix or just two lines (question + answer).\n\nExample:\nWhat is the chemical formula for water?\nAnswer: H2O",
+                  "問題と答えを記述します。「答え: ...」形式か、シンプルに2行（問題＋答え）でもOKです。\n\n例:\n水の化学式は？\n答え: H2O"
+                ),
+              },
+              {
+                id: "media",
+                label: t("Images & Audio", "画像・音声"),
+                color: "#34C759",
+                bg: "#E8F5E9",
+                desc: t(
+                  "After saving a question (in Server mode), you can attach images and audio to both the question and answer sides. Supports camera capture, photo library, audio recording, and file upload.",
+                  "問題を保存後（サーバーモード）、問題側・解答側の両方に画像や音声を添付できます。カメラ撮影、写真ライブラリ、録音、ファイルアップロードに対応しています。"
+                ),
+              },
+              {
+                id: "latex",
+                label: t("Math ($LaTeX$)", "数式 ($LaTeX$)"),
+                color: "#5856D6",
+                bg: "#EDE7F6",
+                desc: t(
+                  "Use $...$ for inline math and $$...$$ for block math in any question or answer text.\n\nExamples:\n• Inline: The area is $\\pi r^2$\n• Block: $$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$",
+                  "問題文や解答に $...$ でインライン数式、$$...$$ でブロック数式を記述できます。\n\n例:\n• インライン: 面積は $\\pi r^2$\n• ブロック: $$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$"
+                ),
+              },
+              {
+                id: "csv",
+                label: t("CSV auto-detect", "CSV自動判定"),
+                color: "#FF6B35",
+                bg: "#FFF3E0",
+                desc: t(
+                  "When uploading CSV, question_type is auto-detected:\n• Has option_1~option_4 → Multiple Choice\n• Answer is \"true\" or \"false\" → True/False\n• Otherwise → Text Input\n\nYou can also set question_type explicitly in the CSV column.",
+                  "CSVアップロード時、question_typeを自動判定します:\n• option_1〜option_4がある → 多肢選択\n• 答えが「true」または「false」→ 正誤問題\n• それ以外 → 記述式\n\nCSVの列でquestion_typeを明示的に指定することも可能です。"
+                ),
+              },
+            ] as const).map((feature) => (
+              <View key={feature.id} style={{ width: "100%" }}>
+                <TouchableOpacity
+                  style={[
+                    styles.featureChipBtn,
+                    { backgroundColor: feature.bg, borderColor: feature.color },
+                    expandedFeature === feature.id && { borderWidth: 1.5 },
+                  ]}
+                  onPress={() => setExpandedFeature(expandedFeature === feature.id ? null : feature.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.featureChipDot, { backgroundColor: feature.color }]} />
+                  <Text style={[styles.featureChipLabel, { color: feature.color }]}>{feature.label}</Text>
+                  {feature.desc ? (
+                    <View style={[styles.featureHelpBadge, { backgroundColor: feature.color }]}>
+                      <Text style={styles.featureHelpBadgeText}>?</Text>
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
+                {expandedFeature === feature.id && (
+                  <View style={[styles.featureDetail, { borderLeftColor: feature.color }]}>
+                    <Text style={styles.featureDetailText}>{feature.desc}</Text>
+                  </View>
+                )}
+              </View>
+            ))}
+          </View>
+        </View>
+
         <TextInput
           style={styles.input}
           placeholder={t("Question Set Title", "問題セットのタイトル")}
@@ -337,39 +537,29 @@ export default function TrialCreateScreen() {
                 contentLanguage === "en" && styles.langChipTextActive,
               ]}
             >
-              English
+              {t("English", "英語")}
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* タブ切り替え */}
         <View style={styles.tabRow}>
-          <TouchableOpacity
-            style={[styles.tab, inputMode === "manual" && styles.tabActive]}
-            onPress={() => setInputMode("manual")}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                inputMode === "manual" && styles.tabTextActive,
-              ]}
+          {([
+            { key: "manual" as InputMode, label: t("Manual", "手動") },
+            { key: "csv" as InputMode, label: "CSV" },
+            { key: "image" as InputMode, label: t("Image", "画像") },
+            { key: "anki" as InputMode, label: "Anki" },
+          ] as const).map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[styles.tab, inputMode === tab.key && styles.tabActive]}
+              onPress={() => setInputMode(tab.key)}
             >
-              {t("Manual Input", "手動入力")}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, inputMode === "csv" && styles.tabActive]}
-            onPress={() => setInputMode("csv")}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                inputMode === "csv" && styles.tabTextActive,
-              ]}
-            >
-              {t("CSV Import", "CSVインポート")}
-            </Text>
-          </TouchableOpacity>
+              <Text style={[styles.tabText, inputMode === tab.key && styles.tabTextActive]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {/* エラー・成功メッセージ */}
@@ -385,7 +575,7 @@ export default function TrialCreateScreen() {
           </View>
         ) : null}
 
-        {inputMode === "csv" ? (
+        {inputMode === "csv" && (
           <View>
             {/* CSV フォーマット説明 */}
             <View style={styles.csvFormatBox}>
@@ -479,7 +669,9 @@ export default function TrialCreateScreen() {
               </View>
             ) : null}
           </View>
-        ) : (
+        )}
+
+        {inputMode === "manual" && (
           <View>
             {questions.map((q, index) => (
               <View key={index} style={styles.questionCard}>
@@ -551,6 +743,112 @@ export default function TrialCreateScreen() {
           </View>
         )}
 
+        {/* ----- Image OCR ----- */}
+        {inputMode === "image" && (
+          <View>
+            <Text style={styles.sectionDesc}>
+              {t(
+                "AI reads your image and automatically generates quiz questions.",
+                "AIが画像を読み取り、クイズ問題を自動生成します。"
+              )}
+            </Text>
+
+            {!imageQuestions && !imageGenerating && (
+              <View style={{ gap: 10 }}>
+                <TouchableOpacity style={styles.createButton} onPress={handlePickImageForGeneration}>
+                  <Text style={styles.createButtonText}>{t("Select Image from Library", "ライブラリから画像を選択")}</Text>
+                </TouchableOpacity>
+                {Platform.OS !== "web" && ImagePicker && (
+                  <TouchableOpacity style={[styles.createButton, { backgroundColor: "#34C759" }]} onPress={handleCameraForGeneration}>
+                    <Text style={styles.createButtonText}>{t("Take Photo with Camera", "カメラで撮影")}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {imageGenerating && (
+              <View style={styles.progressBox}>
+                <ActivityIndicator color="#007AFF" size="large" />
+                <Text style={styles.progressText}>{t("Analyzing image and generating questions...", "画像を分析して問題を生成中...")}</Text>
+              </View>
+            )}
+
+            {imageQuestions && (
+              <View>
+                <Text style={styles.previewTitle}>
+                  {t(`${imageQuestions.length} question(s) generated`, `${imageQuestions.length}問が生成されました`)}
+                </Text>
+                {imageQuestions.map((q, i) => (
+                  <View key={i} style={styles.previewItem}>
+                    <Text style={styles.previewBadge}>
+                      {q.question_type === "multiple_choice" ? t("MC", "選択") : q.question_type === "true_false" ? t("TF", "正誤") : t("Text", "記述")}
+                    </Text>
+                    <View style={{ flex: 1 }}>
+                      <Text numberOfLines={2} style={styles.previewQ}>{q.question}</Text>
+                      <Text style={styles.previewA}>{t("Answer", "答え")}: {q.answer}</Text>
+                    </View>
+                  </View>
+                ))}
+                <TouchableOpacity style={styles.addButton} onPress={() => setImageQuestions(null)}>
+                  <Text style={styles.addButtonText}>{t("Try Again", "やり直す")}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ----- Anki Import ----- */}
+        {inputMode === "anki" && (
+          <View>
+            <Text style={styles.sectionDesc}>
+              {t(
+                "Import an Anki .apkg file. All cards including media will be converted to local questions.",
+                "Ankiの.apkgファイルをインポートします。メディアを含む全カードがローカル問題に変換されます。"
+              )}
+            </Text>
+
+            {!ankiQuestions && !ankiParsing && (
+              <TouchableOpacity style={styles.createButton} onPress={handlePickAnkiFile}>
+                <Text style={styles.createButtonText}>{t("Select .apkg File", ".apkgファイルを選択")}</Text>
+              </TouchableOpacity>
+            )}
+
+            {ankiParsing && (
+              <View style={styles.progressBox}>
+                <ActivityIndicator color="#8E44AD" size="large" />
+                <Text style={styles.progressText}>{t("Parsing Anki deck...", "Ankiデッキを解析中...")}</Text>
+              </View>
+            )}
+
+            {ankiQuestions && (
+              <View>
+                <Text style={styles.previewTitle}>
+                  {ankiDeckTitle} — {t(`${ankiQuestions.length} card(s)`, `${ankiQuestions.length}枚のカード`)}
+                </Text>
+                {ankiQuestions.slice(0, 10).map((q, i) => (
+                  <View key={i} style={styles.previewItem}>
+                    <Text style={styles.previewBadge}>
+                      {q.question_type === "multiple_choice" ? t("MC", "選択") : q.question_type === "true_false" ? t("TF", "正誤") : t("Text", "記述")}
+                    </Text>
+                    <View style={{ flex: 1 }}>
+                      <Text numberOfLines={1} style={styles.previewQ}>{q.question}</Text>
+                      <Text numberOfLines={1} style={styles.previewA}>{q.answer}</Text>
+                    </View>
+                  </View>
+                ))}
+                {ankiQuestions.length > 10 && (
+                  <Text style={styles.moreText}>
+                    {t(`... and ${ankiQuestions.length - 10} more`, `... 他${ankiQuestions.length - 10}枚`)}
+                  </Text>
+                )}
+                <TouchableOpacity style={styles.addButton} onPress={() => { setAnkiQuestions(null); setAnkiDeckTitle(""); }}>
+                  <Text style={styles.addButtonText}>{t("Select Different File", "別のファイルを選択")}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
+
         <TouchableOpacity
           style={[styles.createButton, isLoading && styles.buttonDisabled]}
           onPress={handleCreate}
@@ -587,6 +885,75 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333",
     marginBottom: 16,
+  },
+  featureBanner: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: "#E0E6ED",
+    ...platformShadow({ shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 }),
+    elevation: 2,
+  },
+  featureBannerTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 2,
+  },
+  featureBannerSub: {
+    fontSize: 12,
+    color: "#999",
+    marginBottom: 12,
+  },
+  featureChips: {
+    gap: 8,
+  },
+  featureChipBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  featureChipDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 10,
+  },
+  featureChipLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  featureHelpBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  featureHelpBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  featureDetail: {
+    marginTop: 2,
+    marginBottom: 4,
+    marginLeft: 18,
+    paddingLeft: 14,
+    paddingVertical: 10,
+    borderLeftWidth: 3,
+  },
+  featureDetailText: {
+    fontSize: 13,
+    color: "#555",
+    lineHeight: 20,
   },
   trialNotice: {
     backgroundColor: "#E8F5E9",
@@ -937,5 +1304,60 @@ const styles = StyleSheet.create({
     color: "#333",
     fontSize: 15,
     fontWeight: "600",
+  },
+  sectionDesc: {
+    fontSize: 14,
+    color: "#666",
+    lineHeight: 20,
+    marginBottom: 14,
+  },
+  progressBox: {
+    alignItems: "center",
+    paddingVertical: 30,
+    gap: 12,
+  },
+  progressText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  previewTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 10,
+  },
+  previewItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  previewBadge: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#fff",
+    backgroundColor: "#007AFF",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  previewQ: {
+    fontSize: 13,
+    color: "#333",
+  },
+  previewA: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 2,
+  },
+  moreText: {
+    fontSize: 13,
+    color: "#888",
+    textAlign: "center",
+    paddingVertical: 10,
+    fontStyle: "italic",
   },
 });

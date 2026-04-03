@@ -22,7 +22,9 @@ COPY docs/textbook/ ./docs/textbook/
 EXPOSE 8080
 
 # 非rootユーザーで実行（セキュリティ）
-RUN adduser --disabled-password --gecos "" appuser
+RUN adduser --disabled-password --gecos "" appuser \
+    && mkdir -p /app/uploads \
+    && chown appuser:appuser /app/uploads
 USER appuser
 
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1"]

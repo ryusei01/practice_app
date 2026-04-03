@@ -45,6 +45,7 @@ interface UnifiedQuestion {
   options?: string[];
   explanation?: string;
   difficulty?: number | string;
+  media_urls?: { type: string; url: string; position: string; caption?: string }[];
 }
 
 export default function FlashcardScreen() {
@@ -236,6 +237,7 @@ export default function FlashcardScreen() {
           question_text: q.question,
           correct_answer: q.answer,
           difficulty: q.difficulty,
+          media_urls: q.media_urls as any,
         }));
 
         setQuestions(unifiedQuestions);

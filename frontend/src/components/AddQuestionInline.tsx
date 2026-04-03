@@ -232,7 +232,7 @@ export default function AddQuestionInline({ questionSetId, onQuestionAdded }: Ad
               {parsed.map((q, i) => (
                 <View key={i} style={styles.previewItem}>
                   <Text style={[styles.badge, q.question_type === "multiple_choice" ? styles.badgeMC : q.question_type === "true_false" ? styles.badgeTF : styles.badgeText]}>
-                    {q.question_type === "multiple_choice" ? "MC" : q.question_type === "true_false" ? "TF" : "TXT"}
+                    {q.question_type === "multiple_choice" ? t("MC", "選択") : q.question_type === "true_false" ? t("TF", "正誤") : t("Text", "記述")}
                   </Text>
                   <Text style={styles.previewQ} numberOfLines={1}>{q.question_text}</Text>
                 </View>

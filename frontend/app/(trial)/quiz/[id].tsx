@@ -10,7 +10,7 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
-import { localStorageService, LocalQuestionSet } from "../../../src/services/localStorageService";
+import { localStorageService, LocalQuestionSet, LocalQuestion } from "../../../src/services/localStorageService";
 import { srsService, SRSMap } from "../../../src/services/srsService";
 import Header from "../../../src/components/Header";
 import QuizEngine, { QuizQuestion, QuizAnswer } from "../../../src/components/QuizEngine";
@@ -289,13 +289,13 @@ export default function TrialQuizScreen() {
   // 使用する問題を決定（選択された問題があればそれを使用、なければ全て）
   const questionsToUse = selectedQuestions || questionSet.questions;
 
-  // LocalQuestionをQuizQuestionに変換
   const quizQuestions: QuizQuestion[] = questionsToUse.map((q, index) => ({
     id: q.id || `${questionSet.id}_q${index}`,
     question_text: q.question,
     correct_answer: q.answer,
     question_type: q.question_type || "text_input",
     options: q.options,
+    media_urls: q.media_urls as any,
   }));
 
   return (

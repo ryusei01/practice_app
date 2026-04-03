@@ -194,7 +194,7 @@ export default function QuestionSetDetailScreen() {
       }
     } catch (error) {
       console.error("Failed to load data:", error);
-      Alert.alert("Error", "Failed to load question set");
+      Alert.alert(t("Error", "エラー"), t("Failed to load question set", "問題集の読み込みに失敗しました"));
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -264,28 +264,28 @@ export default function QuestionSetDetailScreen() {
       setCopyrightCheckResult(result);
       if (result.risk_level === "high") {
         Alert.alert(
-          "⚠️ 著作権チェック：高リスク",
-          `このコンテンツは著作権侵害の可能性があるため公開できません。\n\n${result.recommendation}`,
+          t("⚠️ Copyright: High Risk", "⚠️ 著作権チェック：高リスク"),
+          `${t("This content may infringe copyright and cannot be published.", "このコンテンツは著作権侵害の可能性があるため公開できません。")}\n\n${result.recommendation}`,
           [{ text: "OK" }]
         );
       } else if (result.risk_level === "medium") {
         Alert.alert(
-          "⚠️ 著作権チェック：注意",
-          `一部注意が必要な箇所があります。内容をご確認ください。\n\n${result.recommendation}`,
+          t("⚠️ Copyright: Caution", "⚠️ 著作権チェック：注意"),
+          `${t("Some areas need attention. Please review the content.", "一部注意が必要な箇所があります。内容をご確認ください。")}\n\n${result.recommendation}`,
           [{ text: "OK" }]
         );
       } else {
         Alert.alert(
-          "✅ 著作権チェック：問題なし",
-          "著作権上の問題は検出されませんでした。問題集を公開できます。",
+          t("✅ Copyright: No Issues", "✅ 著作権チェック：問題なし"),
+          t("No copyright issues detected. You can publish this set.", "著作権上の問題は検出されませんでした。問題集を公開できます。"),
           [{ text: "OK" }]
         );
       }
     } catch (error: any) {
       const msg =
         error?.response?.data?.detail ||
-        "著作権チェックに失敗しました。Ollamaサーバーが起動しているか確認してください。";
-      Alert.alert("エラー", msg);
+        t("Copyright check failed. Make sure the Ollama server is running.", "著作権チェックに失敗しました。Ollamaサーバーが起動しているか確認してください。");
+      Alert.alert(t("Error", "エラー"), msg);
     } finally {
       setIsCopyrightChecking(false);
     }
@@ -301,8 +301,8 @@ export default function QuestionSetDetailScreen() {
   const handleStartQuiz = () => {
     if (questions.length === 0) {
       Alert.alert(
-        "No Questions",
-        "Please add questions before starting the quiz"
+        t("No Questions", "問題がありません"),
+        t("Please add questions before starting the quiz", "クイズを開始するには問題を追加してください")
       );
       return;
     }
@@ -444,20 +444,20 @@ export default function QuestionSetDetailScreen() {
 
   const handleDeleteQuestion = async (questionId: string) => {
     Alert.alert(
-      "Delete Question",
-      "Are you sure you want to delete this question?",
+      t("Delete Question", "問題を削除"),
+      t("Are you sure you want to delete this question?", "この問題を削除してよろしいですか？"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("Cancel", "キャンセル"), style: "cancel" },
         {
-          text: "Delete",
+          text: t("Delete", "削除"),
           style: "destructive",
           onPress: async () => {
             try {
               await questionsApi.delete(questionId);
               setQuestions(questions.filter((q) => q.id !== questionId));
-              Alert.alert("Success", "Question deleted");
+              Alert.alert(t("Success", "成功"), t("Question deleted", "問題を削除しました"));
             } catch (error) {
-              Alert.alert("Error", "Failed to delete question");
+              Alert.alert(t("Error", "エラー"), t("Failed to delete question", "問題の削除に失敗しました"));
             }
           },
         },
@@ -467,21 +467,21 @@ export default function QuestionSetDetailScreen() {
 
   const handleDeleteSet = async () => {
     Alert.alert(
-      "Delete Question Set",
-      "Are you sure? This will delete all questions in this set.",
+      t("Delete Question Set", "問題集を削除"),
+      t("Are you sure? This will delete all questions in this set.", "よろしいですか？この問題集の全問題が削除されます。"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("Cancel", "キャンセル"), style: "cancel" },
         {
-          text: "Delete",
+          text: t("Delete", "削除"),
           style: "destructive",
           onPress: async () => {
             try {
               await questionSetsApi.delete(id);
-              Alert.alert("Success", "Question set deleted", [
+              Alert.alert(t("Success", "成功"), t("Question set deleted", "問題集を削除しました"), [
                 { text: "OK", onPress: () => router.back() },
               ]);
             } catch (error) {
-              Alert.alert("Error", "Failed to delete question set");
+              Alert.alert(t("Error", "エラー"), t("Failed to delete question set", "問題集の削除に失敗しました"));
             }
           },
         },
@@ -614,7 +614,7 @@ ${t("Important notes", "注意事項")}:
                           typeof err === "string" ? err : JSON.stringify(err)
                         )
                         .join("\n")
-                    : "Unknown errors occurred";
+                    : t("Unknown errors occurred", "不明なエラーが発生しました");
 
                   showModal(
                     t(
@@ -682,7 +682,7 @@ ${t("Important notes", "注意事項")}:
       );
     } catch (error) {
       console.error("Failed to pick document:", error);
-      Alert.alert("Error", "Failed to select file");
+      Alert.alert(t("Error", "エラー"), t("Failed to select file", "ファイルの選択に失敗しました"));
     }
   };
 
@@ -700,15 +700,21 @@ ${t("Important notes", "注意事項")}:
       <View style={styles.questionCard}>
         <View style={styles.questionHeader}>
           <Text style={styles.questionNumber}>Q{index + 1}</Text>
-          <TouchableOpacity onPress={() => handleDeleteQuestion(item.id)}>
-            <Text style={styles.deleteText}>Delete</Text>
-          </TouchableOpacity>
+          {isOwner && (
+            <TouchableOpacity onPress={() => handleDeleteQuestion(item.id)}>
+              <Text style={styles.deleteText}>{t("Delete", "削除")}</Text>
+            </TouchableOpacity>
+          )}
         </View>
         <Text style={styles.questionText}>{item.question_text}</Text>
         <View style={styles.questionFooter}>
-          <Text style={styles.questionType}>{item.question_type}</Text>
+          <Text style={styles.questionType}>
+            {item.question_type === "multiple_choice" ? t("MC", "選択")
+              : item.question_type === "true_false" ? t("TF", "正誤")
+              : t("Text", "記述")}
+          </Text>
           <Text style={styles.difficulty}>
-            Difficulty: {(item.difficulty * 100).toFixed(0)}%
+            {t("Difficulty", "難易度")}: {(item.difficulty * 100).toFixed(0)}%
           </Text>
         </View>
 
@@ -902,7 +908,7 @@ ${t("Important notes", "注意事項")}:
   if (!questionSet) {
     return (
       <View style={styles.centerContainer}>
-        <Text>Question set not found</Text>
+        <Text>{t("Question set not found", "問題集が見つかりません")}</Text>
       </View>
     );
   }
@@ -1030,7 +1036,7 @@ What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter i
           </Text>
           {questionSet.is_published && (
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>Published</Text>
+              <Text style={styles.badgeText}>{t("Published", "公開中")}</Text>
             </View>
           )}
         </View>
@@ -1049,7 +1055,7 @@ What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter i
       <View style={styles.statsContainer}>
         <View style={styles.stat}>
           <Text style={styles.statValue}>{questions.length}</Text>
-          <Text style={styles.statLabel}>Questions</Text>
+          <Text style={styles.statLabel}>{t("Questions", "問題数")}</Text>
         </View>
         {dueCount > 0 && (
           <View style={styles.stat}>
@@ -1059,7 +1065,7 @@ What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter i
         )}
         <View style={styles.stat}>
           <Text style={styles.statValue}>¥{questionSet.price}</Text>
-          <Text style={styles.statLabel}>Price</Text>
+          <Text style={styles.statLabel}>{t("Price", "価格")}</Text>
         </View>
       </View>
 
@@ -1070,7 +1076,7 @@ What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter i
           onPress={() => router.push("/(public)/tokusho")}
         >
           <Text style={styles.tokushoLinkText}>
-            特定商取引法に基づく表記
+            {t("Specified Commercial Transactions Act", "特定商取引法に基づく表記")}
           </Text>
         </TouchableOpacity>
       )}
@@ -1174,8 +1180,8 @@ What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter i
           )}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No questions yet</Text>
-              <Text style={styles.emptySubtext}>Add your first question</Text>
+              <Text style={styles.emptyText}>{t("No questions yet", "まだ問題がありません")}</Text>
+              <Text style={styles.emptySubtext}>{t("Add your first question", "最初の問題を追加しましょう")}</Text>
             </View>
           }
         />
@@ -1190,8 +1196,8 @@ What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter i
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No questions yet</Text>
-              <Text style={styles.emptySubtext}>Add your first question</Text>
+              <Text style={styles.emptyText}>{t("No questions yet", "まだ問題がありません")}</Text>
+              <Text style={styles.emptySubtext}>{t("Add your first question", "最初の問題を追加しましょう")}</Text>
             </View>
           }
         />
@@ -1240,34 +1246,38 @@ What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter i
             </Text>
           </TouchableOpacity>
         )}
-        <View style={styles.buttonRow}>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={handleAddQuestion}
-          >
-            <Text style={styles.addButtonText}>
-              {t("Add Question", "問題を追加")}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.uploadCSVButton}
-            onPress={handleUploadCSV}
-          >
-            <Text style={styles.uploadCSVButtonText}>
-              {t("Upload CSV", "CSVをアップロード")}
-            </Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.buttonRow}>
-          <TouchableOpacity
-            style={[styles.uploadCSVButton, { borderColor: "#8E44AD", backgroundColor: "#8E44AD", flex: 1 }]}
-            onPress={handleImportAnki}
-          >
-            <Text style={styles.uploadCSVButtonText}>
-              {t("Import from Anki (.apkg)", "Ankiからインポート (.apkg)")}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {isOwner && (
+          <>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={handleAddQuestion}
+              >
+                <Text style={styles.addButtonText}>
+                  {t("Add Question", "問題を追加")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.uploadCSVButton}
+                onPress={handleUploadCSV}
+              >
+                <Text style={styles.uploadCSVButtonText}>
+                  {t("Upload CSV", "CSVをアップロード")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={[styles.uploadCSVButton, { borderColor: "#8E44AD", backgroundColor: "#8E44AD", flex: 1 }]}
+                onPress={handleImportAnki}
+              >
+                <Text style={styles.uploadCSVButtonText}>
+                  {t("Import from Anki (.apkg)", "Ankiからインポート (.apkg)")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
         {/* 教科書ボタン */}
         {(questionSet?.textbook_path || questionSet?.textbook_type === 'inline') && (
           <View style={styles.buttonRow}>
@@ -1281,62 +1291,64 @@ What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter i
             </TouchableOpacity>
           </View>
         )}
-        {/* 作成者向け：教科書編集ボタン */}
-        {user?.id === questionSet?.creator_id && (
-          <View style={styles.buttonRow}>
-            <TouchableOpacity
-              style={styles.editTextbookButton}
-              onPress={() => router.push(`/(app)/question-sets/${id}/edit-textbook`)}
-            >
-              <Text style={styles.editTextbookButtonText}>
-                ✏️ {t("Edit Textbook", "教科書を編集")}
-              </Text>
-            </TouchableOpacity>
-          </View>
+        {isOwner && (
+          <>
+            {/* 作成者向け：教科書編集ボタン */}
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={styles.editTextbookButton}
+                onPress={() => router.push(`/(app)/question-sets/${id}/edit-textbook`)}
+              >
+                <Text style={styles.editTextbookButtonText}>
+                  ✏️ {t("Edit Textbook", "教科書を編集")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={styles.helpButton}
+                onPress={handleShowCSVHelp}
+              >
+                <Text style={styles.helpButtonText}>
+                  {t("CSV Help", "CSVヘルプ")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.csvSampleButton}
+                onPress={() => {
+                  console.log("CSV Sample button pressed");
+                  downloadCSVSample();
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.csvSampleButtonText}>
+                  📄 {t("CSV Sample", "CSVサンプル")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={styles.editButton}
+                onPress={handleEditQuestionSet}
+              >
+                <Text style={styles.editButtonText}>
+                  {t("Edit Details", "詳細を編集")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={handleDeleteSet}
+              >
+                <Text style={styles.deleteButtonText}>{t("Delete", "削除")}</Text>
+              </TouchableOpacity>
+            </View>
+          </>
         )}
-        <View style={styles.buttonRow}>
-          <TouchableOpacity
-            style={styles.helpButton}
-            onPress={handleShowCSVHelp}
-          >
-            <Text style={styles.helpButtonText}>
-              {t("CSV Help", "CSVヘルプ")}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.csvSampleButton}
-            onPress={() => {
-              console.log("CSV Sample button pressed");
-              downloadCSVSample();
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.csvSampleButtonText}>
-              📄 {t("CSV Sample", "CSVサンプル")}
-            </Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.buttonRow}>
-          <TouchableOpacity
-            style={styles.editButton}
-            onPress={handleEditQuestionSet}
-          >
-            <Text style={styles.editButtonText}>
-              {t("Edit Details", "詳細を編集")}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={handleDeleteSet}
-          >
-            <Text style={styles.deleteButtonText}>{t("Delete", "削除")}</Text>
-          </TouchableOpacity>
-        </View>
 
         {user?.id === questionSet?.creator_id && (
           <View style={styles.copyrightCheckSection}>
             <Text style={styles.copyrightCheckTitle}>
-              📋 著作権チェック（公開前必須）
+              📋 {t("Copyright Check (required before publishing)", "著作権チェック（公開前必須）")}
             </Text>
             {copyrightCheckResult && (
               <View
@@ -1351,10 +1363,10 @@ What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter i
               >
                 <Text style={styles.copyrightResultLabel}>
                   {copyrightCheckResult.risk_level === "low"
-                    ? "✅ 問題なし（公開可能）"
+                    ? t("✅ No issues (safe to publish)", "✅ 問題なし（公開可能）")
                     : copyrightCheckResult.risk_level === "medium"
-                    ? "⚠️ 要注意"
-                    : "❌ 高リスク（公開不可）"}
+                    ? t("⚠️ Caution needed", "⚠️ 要注意")
+                    : t("❌ High risk (cannot publish)", "❌ 高リスク（公開不可）")}
                 </Text>
                 {copyrightCheckResult.reasons.length > 0 && (
                   <Text style={styles.copyrightResultReasons}>
@@ -1380,12 +1392,12 @@ What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter i
                 <View style={styles.copyrightCheckButtonInner}>
                   <ActivityIndicator size="small" color="#fff" />
                   <Text style={styles.copyrightCheckButtonText}>
-                    {"  "}チェック中...（数秒〜数十秒かかります）
+                    {"  "}{t("Checking... (may take a few seconds)", "チェック中...（数秒〜数十秒かかります）")}
                   </Text>
                 </View>
               ) : (
                 <Text style={styles.copyrightCheckButtonText}>
-                  🔍 著作権チェックを実行
+                  🔍 {t("Run Copyright Check", "著作権チェックを実行")}
                 </Text>
               )}
             </TouchableOpacity>
@@ -1398,7 +1410,7 @@ What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter i
             style={styles.reportButton}
             onPress={() => setReportModalVisible(true)}
           >
-            <Text style={styles.reportButtonText}>🚩 この問題集を通報</Text>
+            <Text style={styles.reportButtonText}>🚩 {t("Report this set", "この問題集を通報")}</Text>
           </TouchableOpacity>
         )}
       </View>

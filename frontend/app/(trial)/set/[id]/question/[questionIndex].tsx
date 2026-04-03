@@ -7,15 +7,20 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useLanguage } from "../../../../../src/contexts/LanguageContext";
 import {
   localStorageService,
   LocalQuestionSet,
+  LocalMediaItem,
 } from "../../../../../src/services/localStorageService";
 import Header from "../../../../../src/components/Header";
 import Modal from "../../../../../src/components/Modal";
+import MathText from "../../../../../src/components/MathText";
+import MediaAttachment from "../../../../../src/components/MediaAttachment";
+import MediaPlayer from "../../../../../src/components/MediaPlayer";
 
 export default function QuestionDetailScreen() {
   const { id, questionIndex } = useLocalSearchParams<{
@@ -29,6 +34,7 @@ export default function QuestionDetailScreen() {
   const [showAnswer, setShowAnswer] = useState(false);
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [mediaItems, setMediaItems] = useState<LocalMediaItem[]>([]);
 
   const currentIndex = parseInt(questionIndex || "0");
 
@@ -43,6 +49,8 @@ export default function QuestionDetailScreen() {
       const set = await localStorageService.getTrialQuestionSet(id);
       if (set) {
         setQuestionSet(set);
+        const q = set.questions[parseInt(questionIndex || "0")];
+        if (q?.media_urls) setMediaItems(q.media_urls);
       } else {
         setErrorMessage(t("Question set not found", "問題セットが見つかりません"));
         setErrorModalVisible(true);
@@ -59,6 +67,8 @@ export default function QuestionDetailScreen() {
   const handlePrevious = () => {
     if (currentIndex > 0) {
       setShowAnswer(false);
+      const prevQ = questionSet?.questions[currentIndex - 1];
+      setMediaItems(prevQ?.media_urls || []);
       router.push(`/(trial)/set/${id}/question/${currentIndex - 1}`);
     }
   };
@@ -66,7 +76,42 @@ export default function QuestionDetailScreen() {
   const handleNext = () => {
     if (questionSet && currentIndex < questionSet.questions.length - 1) {
       setShowAnswer(false);
+      const nextQ = questionSet.questions[currentIndex + 1];
+      setMediaItems(nextQ?.media_urls || []);
       router.push(`/(trial)/set/${id}/question/${currentIndex + 1}`);
+    }
+  };
+
+  const handleMediaUpload = async (
+    file: { uri: string; name: string; type: string },
+    position: "question" | "answer"
+  ) => {
+    if (!questionSet) return;
+    const q = questionSet.questions[currentIndex];
+    if (!q) return;
+    const mediaType: "image" | "audio" = file.type.startsWith("image") ? "image" : "audio";
+    const newMedia: LocalMediaItem = { type: mediaType, url: file.uri, position };
+    try {
+      const updated = await localStorageService.addMediaToQuestion(questionSet.id, q.id, newMedia);
+      setMediaItems(updated);
+      const refreshed = await localStorageService.getTrialQuestionSet(id);
+      if (refreshed) setQuestionSet(refreshed);
+    } catch (e) {
+      Alert.alert(t("Error", "エラー"), t("Failed to save media", "メディアの保存に失敗しました"));
+    }
+  };
+
+  const handleMediaDelete = async (index: number) => {
+    if (!questionSet) return;
+    const q = questionSet.questions[currentIndex];
+    if (!q) return;
+    try {
+      const updated = await localStorageService.removeMediaFromQuestion(questionSet.id, q.id, index);
+      setMediaItems(updated);
+      const refreshed = await localStorageService.getTrialQuestionSet(id);
+      if (refreshed) setQuestionSet(refreshed);
+    } catch (e) {
+      Alert.alert(t("Error", "エラー"), t("Failed to delete media", "メディアの削除に失敗しました"));
     }
   };
 
@@ -134,9 +179,11 @@ export default function QuestionDetailScreen() {
             )}
           </View>
 
-          <Text style={styles.questionText} nativeID="question-text">
-            {currentQuestion.question}
-          </Text>
+          <MathText text={currentQuestion.question} style={styles.questionText} />
+
+          {mediaItems.length > 0 && (
+            <MediaPlayer media={mediaItems as any} position="question" />
+          )}
 
           <TouchableOpacity
             style={styles.showAnswerButton}
@@ -155,11 +202,31 @@ export default function QuestionDetailScreen() {
               <Text style={styles.answerLabel} nativeID="answer-label">
                 {t("Answer", "答え")}:
               </Text>
-              <Text style={styles.answerText} nativeID="answer-text">
-                {currentQuestion.answer}
-              </Text>
+              <MathText text={currentQuestion.answer} style={styles.answerText} />
+              {mediaItems.length > 0 && (
+                <MediaPlayer media={mediaItems as any} position="answer" />
+              )}
             </View>
           )}
+
+          {/* メディア添付 */}
+          <View style={styles.mediaSectionContainer}>
+            <Text style={styles.mediaSectionTitle}>{t("Images & Audio", "画像・音声")}</Text>
+            <Text style={styles.mediaSectionHint}>{t("Question side", "問題側")}</Text>
+            <MediaAttachment
+              position="question"
+              existingMedia={mediaItems as any}
+              onUpload={handleMediaUpload}
+              onDelete={handleMediaDelete}
+            />
+            <Text style={styles.mediaSectionHint}>{t("Answer side", "解答側")}</Text>
+            <MediaAttachment
+              position="answer"
+              existingMedia={mediaItems as any}
+              onUpload={handleMediaUpload}
+              onDelete={handleMediaDelete}
+            />
+          </View>
         </View>
 
         <View style={styles.navigationContainer} nativeID="nav-container">
@@ -410,5 +477,24 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  mediaSectionContainer: {
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+  },
+  mediaSectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 8,
+  },
+  mediaSectionHint: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#666",
+    marginTop: 4,
+    marginBottom: 2,
   },
 });

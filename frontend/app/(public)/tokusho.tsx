@@ -10,11 +10,12 @@ import { router } from "expo-router";
 
 const DEFAULT_SUPPORT_EMAIL = "support@ai-practice-book.com";
 
-const PLACEHOLDER_SELLER = "[事業者名をここに記載してください]";
-const PLACEHOLDER_OPERATOR = "[運営責任者氏名をここに記載してください]";
-const PLACEHOLDER_ADDRESS = "[住所をここに記載してください]";
+const PLACEHOLDER_SELLER = "請求があった場合に遅滞なく開示いたします";
+const PLACEHOLDER_OPERATOR = "請求があった場合に遅滞なく開示いたします";
+const PLACEHOLDER_ADDRESS =
+  "請求があった場合に遅滞なく開示いたします\n（特定商取引法第11条ただし書に基づく）";
 const PLACEHOLDER_PHONE =
-  "[電話番号をここに記載してください]\n（お問い合わせはメールにて承ります）";
+  "請求があった場合に遅滞なく開示いたします\n（お問い合わせはメールにて承ります）";
 
 type SectionItem = {
   label: string;

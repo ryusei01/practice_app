@@ -916,7 +916,9 @@ export default function AddQuestionScreen() {
                     q.question_type === "true_false" && styles.previewBadgeTF,
                     q.question_type === "text_input" && styles.previewBadgeText,
                   ]}>
-                    {q.question_type === "multiple_choice" ? "MC" : q.question_type === "true_false" ? "TF" : "TXT"}
+                    {q.question_type === "multiple_choice" ? t("MC", "選択") :
+                     q.question_type === "true_false" ? t("TF", "正誤") :
+                     t("Text", "記述")}
                   </Text>
                 </View>
                 <Text style={styles.previewQuestion} numberOfLines={2}>{q.question_text}</Text>
@@ -961,18 +963,6 @@ export default function AddQuestionScreen() {
   return (
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.inner}>
-        {/* 機能概要バナー */}
-        <View style={styles.featureBanner}>
-          <Text style={styles.featureBannerTitle}>{t("Create Questions", "問題を作成")}</Text>
-          <View style={styles.featureChips}>
-            <Text style={styles.featureChip}>{t("Multiple Choice", "多肢選択")}</Text>
-            <Text style={styles.featureChip}>{t("True / False", "正誤問題")}</Text>
-            <Text style={styles.featureChip}>{t("Text Input", "記述式")}</Text>
-            <Text style={styles.featureChip}>{t("Images & Audio", "画像・音声")}</Text>
-            <Text style={styles.featureChip}>{t("Math ($LaTeX$)", "数式 ($LaTeX$)")}</Text>
-          </View>
-        </View>
-
         {/* タブ */}
         <View style={styles.tabRow}>
           <TouchableOpacity
@@ -1014,30 +1004,6 @@ const styles = StyleSheet.create({
   },
   inner: {
     padding: 16,
-  },
-  featureBanner: {
-    marginBottom: 14,
-  },
-  featureBannerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#333",
-    marginBottom: 8,
-  },
-  featureChips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  featureChip: {
-    fontSize: 11,
-    color: "#555",
-    backgroundColor: "#E8F0FE",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    overflow: "hidden",
-    fontWeight: "500",
   },
   // タブ
   tabRow: {

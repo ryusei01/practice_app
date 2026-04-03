@@ -155,4 +155,30 @@ export const questionSetsApi = {
     });
     return response.data;
   },
+
+  parseAnki: async (file: { uri: string; name: string; type: string }): Promise<{
+    title: string;
+    questions: Array<{
+      question_text: string;
+      correct_answer: string;
+      question_type: string;
+      options: string[] | null;
+      media_urls: Array<{ type: string; url: string; position: string }> | null;
+      tags: string[];
+    }>;
+    total: number;
+  }> => {
+    const formData = new FormData();
+    if (file.uri.startsWith('blob:')) {
+      const response = await fetch(file.uri);
+      const blob = await response.blob();
+      formData.append('file', blob, file.name);
+    } else {
+      formData.append('file', { uri: file.uri, name: file.name, type: file.type } as any);
+    }
+    const response = await apiClient.post('/question-sets/parse-anki', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
 };
