@@ -14,6 +14,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { questionSetsApi, ContentLanguage } from "../../../src/api/questionSets";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
+import Header from "../../../src/components/Header";
 import {
   copyrightApi,
   CopyrightCheckResult,
@@ -185,13 +186,10 @@ export default function EditQuestionSetScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.formContainer}>
-        <View style={styles.headerContainer}>
-          <Text style={styles.headerTitle}>
-            {t("Edit Question Set", "問題集を編集")}
-          </Text>
-        </View>
+    <View style={styles.outerContainer}>
+      <Header title={t("Edit Question Set", "問題集を編集")} />
+      <ScrollView style={styles.container}>
+        <View style={styles.formContainer}>
 
         <Text style={styles.label}>{t("Title", "タイトル")} *</Text>
         <TextInput
@@ -341,10 +339,15 @@ export default function EditQuestionSetScreen() {
         </TouchableOpacity>
       </View>
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+  },
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
@@ -357,17 +360,6 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     padding: 20,
-  },
-  headerContainer: {
-    marginBottom: 20,
-    alignItems: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 12,
-    textAlign: "center",
   },
   langRow: {
     flexDirection: "row",

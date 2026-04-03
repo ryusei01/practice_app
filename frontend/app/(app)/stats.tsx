@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { answersApi, UserStats } from '../../src/api/answers';
+import Header from '../../src/components/Header';
 
 export default function StatsScreen() {
   const [stats, setStats] = useState<UserStats | null>(null);
@@ -64,14 +65,15 @@ export default function StatsScreen() {
   const incorrectAnswers = stats.total_answers - stats.correct_answers;
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
-      }
-    >
-      <View style={styles.content}>
-        <Text style={styles.title}>Your Statistics</Text>
+    <View style={styles.outerContainer}>
+      <Header title="Your Statistics" />
+      <ScrollView
+        style={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
+        }
+      >
+        <View style={styles.content}>
 
         {/* Overall Stats */}
         <View style={styles.section}>
@@ -171,10 +173,15 @@ export default function StatsScreen() {
         </View>
       </View>
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
@@ -187,12 +194,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 24,
   },
   section: {
     marginBottom: 24,

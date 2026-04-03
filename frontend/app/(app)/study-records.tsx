@@ -12,6 +12,7 @@ import {
 import { useLanguage } from "../../src/contexts/LanguageContext";
 import { studyRecordService, StudyAggregate, StudyRecord } from "../../src/services/studyRecordService";
 import AdBanner from "../../src/components/AdBanner";
+import Header from "../../src/components/Header";
 
 function formatDurationSec(sec: number) {
   const s = Math.max(0, Math.floor(sec));
@@ -118,12 +119,13 @@ export default function StudyRecordsScreen() {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
-    >
-      <View style={styles.content}>
-        <Text style={styles.title}>{t("Study Records", "学習記録")}</Text>
+    <View style={styles.outerContainer}>
+      <Header title={t("Study Records", "学習記録")} />
+      <ScrollView
+        style={styles.container}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
+      >
+        <View style={styles.content}>
 
         <View style={styles.cards}>
           <StatCard title={t("Today", "今日")} agg={today} width={width} />
@@ -154,22 +156,21 @@ export default function StudyRecordsScreen() {
         <AdBanner />
       </View>
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+  },
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
   },
   content: {
     padding: 16,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#333",
-    marginBottom: 16,
   },
   cards: {
     gap: 12,

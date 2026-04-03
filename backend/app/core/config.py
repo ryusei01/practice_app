@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     OLLAMA_TRANSLATION_MODEL: str = "llama3.2:1b"  # 軽量モデル推奨
     USE_LOCAL_TRANSLATION: bool = False  # デフォルトはGoogleTranslatorを使用
     OLLAMA_COPYRIGHT_CHECK_MODEL: str = "gpt-oss-20b"  # 著作権チェック用モデル（GPT-OSS 20B）
+    OLLAMA_LEARNING_PLAN_MODEL: str = "gpt-oss-20b"  # AI学習プラン生成用（Ollama）
 
     class Config:
         env_file = ".env"

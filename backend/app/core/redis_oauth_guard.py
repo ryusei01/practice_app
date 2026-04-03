@@ -38,6 +38,10 @@ async def check_oauth_ip_blocked(ip: str) -> None:
         logger.warning("Redis check_oauth_ip_blocked failed; fail-open ip=%s", ip, exc_info=True)
         return
     if blocked:
+        logger.info(
+            "oauth_audit action=blocked_request ip=%s",
+            ip,
+        )
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="アクセスが集中しています。しばらくしてから再試行してください。",
@@ -54,7 +58,7 @@ async def record_oauth_failure(ip: str, reason_code: str) -> None:
         if n == 1:
             await r.expire(key, settings.OAUTH_FAIL_WINDOW_SEC)
         logger.info(
-            "oauth failure ip=%s count=%s reason=%s",
+            "oauth_audit action=failure ip=%s count=%s reason=%s",
             ip,
             n,
             reason_code,
@@ -66,9 +70,11 @@ async def record_oauth_failure(ip: str, reason_code: str) -> None:
                 "1",
             )
             logger.warning(
-                "oauth temp_block ip=%s threshold=%s",
+                "oauth_audit action=temp_block ip=%s count=%s threshold=%s block_sec=%s",
                 ip,
+                n,
                 settings.OAUTH_FAIL_THRESHOLD,
+                settings.OAUTH_BLOCK_DURATION_SEC,
             )
     except Exception:
         logger.warning("Redis record_oauth_failure failed ip=%s", ip, exc_info=True)

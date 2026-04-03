@@ -19,6 +19,7 @@ import {
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useLanguage } from "../../src/contexts/LanguageContext";
 import AdBanner from "../../src/components/AdBanner";
+import Header from "../../src/components/Header";
 
 export default function StoreScreen() {
   const [questionSets, setQuestionSets] = useState<QuestionSet[]>([]);
@@ -70,6 +71,7 @@ export default function StoreScreen() {
 
   return (
     <View style={styles.container}>
+      <Header title={t("Question Set Store", "問題集ストア")} />
       <ScrollView
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />

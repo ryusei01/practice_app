@@ -14,6 +14,7 @@ import {
   verifyOTPCode,
   verifyBackupCode,
 } from "../../src/api/twoFactor";
+import Header from "../../src/components/Header";
 
 export default function VerifyOTPScreen() {
   const router = useRouter();
@@ -83,10 +84,8 @@ export default function VerifyOTPScreen() {
 
   return (
     <View style={styles.container}>
+      <Header title={useBackupCode ? "バックアップコード入力" : "2段階認証"} />
       <View style={styles.content}>
-        <Text style={styles.title}>
-          {useBackupCode ? "バックアップコード入力" : "2段階認証"}
-        </Text>
 
         {!useBackupCode && (
           <Text style={styles.description}>
@@ -186,13 +185,6 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     justifyContent: "center",
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 15,
-    textAlign: "center",
   },
   description: {
     fontSize: 16,

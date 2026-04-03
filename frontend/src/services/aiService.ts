@@ -36,6 +36,32 @@ export interface ImprovementSuggestion {
   priority: 'high' | 'medium' | 'low';
 }
 
+export interface LearningPlanDay {
+  day: number;
+  tasks: string[];
+}
+
+export interface LearningPlanWeek {
+  week: number;
+  theme: string;
+  milestone: string;
+  days: LearningPlanDay[];
+}
+
+export interface LearningPlanResponse {
+  goal: string;
+  weeks: LearningPlanWeek[];
+  raw_response?: string;
+  fallback?: boolean;
+}
+
+export interface GenerateLearningPlanBody {
+  goal: string;
+  weeks: number;
+  daily_hours: number;
+  weak_categories?: string[];
+}
+
 class AIService {
   /**
    * AIによる問題推薦を取得
@@ -77,6 +103,16 @@ class AIService {
   async getAdaptiveDifficulty(userId: string, category: string): Promise<number> {
     const response = await api.get(`/ai/adaptive-difficulty/${userId}/${category}`);
     return response.data.recommended_difficulty;
+  }
+
+  /**
+   * Ollama 経由で学習プランを生成（タイムアウト長め）
+   */
+  async generateLearningPlan(body: GenerateLearningPlanBody): Promise<LearningPlanResponse> {
+    const response = await api.post<LearningPlanResponse>('/ai/generate-learning-plan', body, {
+      timeout: 180000,
+    });
+    return response.data;
   }
 }
 

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Header from '../../src/components/Header';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { answersApi, LocalAnswerData, LocalQuestionSetData } from '../../src/api/answers';
 import { subscriptionsApi } from '../../src/api/subscriptions';
@@ -167,9 +168,10 @@ export default function PremiumUpgradeScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>プレミアムプラン</Text>
+    <View style={styles.outerContainer}>
+      <Header title="プレミアムプラン" />
+      <ScrollView style={styles.container}>
+        <View style={styles.content}>
 
         {/* 価格カード（表示値は GET /subscriptions/plan-display） */}
         <View style={styles.priceCard}>
@@ -285,23 +287,21 @@ export default function PremiumUpgradeScreen() {
         </TouchableOpacity>
       </View>
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
   content: {
     padding: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 24,
-    textAlign: 'center',
   },
   priceCard: {
     backgroundColor: '#007AFF',

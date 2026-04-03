@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { paymentsApi, SellerDashboard } from '../../src/api/payments';
 import { authApi } from '../../src/api/auth';
+import Header from '../../src/components/Header';
 
 export default function SellerDashboardScreen() {
   const { user } = useAuth();
@@ -184,16 +185,14 @@ export default function SellerDashboardScreen() {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
-      }
-    >
-      <View style={styles.header}>
-        <Text style={styles.title}>販売者ダッシュボード</Text>
-        <Text style={styles.subtitle}>売上・収益の管理</Text>
-      </View>
+    <View style={styles.outerContainer}>
+      <Header title="販売者ダッシュボード" />
+      <ScrollView
+        style={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
+        }
+      >
 
       {!localUser?.is_seller ? (
         // 販売者未登録 — 申請フロー
@@ -428,6 +427,7 @@ export default function SellerDashboardScreen() {
         </>
       )}
     </ScrollView>
+    </View>
   );
 }
 
@@ -505,6 +505,10 @@ const checkStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
@@ -513,22 +517,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  header: {
-    backgroundColor: '#34C759',
-    padding: 24,
-    paddingTop: 40,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#fff',
-    opacity: 0.9,
   },
   section: {
     padding: 16,

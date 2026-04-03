@@ -11,6 +11,7 @@ import { useRouter } from "expo-router";
 import { questionSetsApi, ContentLanguage } from "../../../src/api/questionSets";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
+import Header from "../../../src/components/Header";
 
 export default function CreateQuestionSetScreen() {
   const [isLoading, setIsLoading] = useState(false);
@@ -96,11 +97,9 @@ export default function CreateQuestionSetScreen() {
 
   return (
     <View style={styles.container}>
+      <Header title={t("Create New Question Set", "新しい問題集を作成")} />
       <View style={styles.formContainer}>
         <View style={styles.headerContainer}>
-          <Text style={styles.headerTitle}>
-            {t("Create New Question Set", "新しい問題集を作成")}
-          </Text>
           <Text style={styles.subtitle}>
             {t(
               "Create a question set and then add questions via CSV",
@@ -239,13 +238,6 @@ const styles = StyleSheet.create({
   headerContainer: {
     marginBottom: 32,
     alignItems: "center",
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 12,
-    textAlign: "center",
   },
   subtitle: {
     fontSize: 14,

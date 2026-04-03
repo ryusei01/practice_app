@@ -15,6 +15,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../../src/contexts/AuthContext';
 import { adminApi, SellerApplication } from '../../../src/api/admin';
+import Header from '../../../src/components/Header';
 
 type TabType = 'pending' | 'all';
 
@@ -128,13 +129,7 @@ export default function AdminScreen() {
 
   return (
     <View style={styles.container}>
-      {/* ヘッダー */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← 戻る</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>販売者申請 管理</Text>
-      </View>
+      <Header title="販売者申請 管理" />
 
       {/* タブ */}
       <View style={styles.tabBar}>
@@ -310,28 +305,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F2F2F7',
-  },
-  header: {
-    backgroundColor: '#fff',
-    paddingTop: 56,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
-  },
-  backButton: {
-    marginRight: 16,
-  },
-  backButtonText: {
-    fontSize: 16,
-    color: '#007AFF',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1C1C1E',
   },
   tabBar: {
     flexDirection: 'row',

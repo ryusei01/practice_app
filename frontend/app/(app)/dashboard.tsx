@@ -149,14 +149,6 @@ export default function DashboardScreen() {
               >
                 {t("AI Learning Plan", "AI学習プラン")}
               </Text>
-              <View style={styles.overlay} nativeID="menu-overlay-learning-plan">
-                <Text
-                  style={styles.overlayText}
-                  nativeID="menu-overlay-text-learning-plan"
-                >
-                  {t("Under Preparation", "準備中")}
-                </Text>
-              </View>
             </TouchableOpacity>
 
             <TouchableOpacity

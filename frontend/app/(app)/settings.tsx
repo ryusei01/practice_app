@@ -7,6 +7,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Platform,
   ActivityIndicator,
   Modal,
   TextInput,
@@ -14,12 +15,38 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useLanguage } from "../../src/contexts/LanguageContext";
+import Header from "../../src/components/Header";
 import {
   getTwoFactorStatus,
   enableTwoFactor,
   disableTwoFactor,
   type Enable2FAResponse,
 } from "../../src/api/twoFactor";
+
+const showAlert = (title: string, message: string) => {
+  if (Platform.OS === "web") {
+    window.alert(`${title}\n${message}`);
+  } else {
+    Alert.alert(title, message);
+  }
+};
+
+const showConfirm = (
+  title: string,
+  message: string,
+  onConfirm: () => void
+) => {
+  if (Platform.OS === "web") {
+    if (window.confirm(`${title}\n\n${message}`)) {
+      onConfirm();
+    }
+  } else {
+    Alert.alert(title, message, [
+      { text: "キャンセル", style: "cancel" },
+      { text: "OK", onPress: onConfirm },
+    ]);
+  }
+};
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -50,43 +77,38 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleEnable2FA = async () => {
-    Alert.alert(
+  const doEnable2FA = async () => {
+    setLoading(true);
+    try {
+      const response: Enable2FAResponse = await enableTwoFactor();
+      setTwoFactorEnabled(true);
+      setBackupCodes(response.backup_codes);
+      setShowBackupCodesModal(true);
+      showAlert(
+        "成功",
+        "2段階認証が有効化されました。バックアップコードをメールで送信しました。"
+      );
+    } catch (error: any) {
+      showAlert(
+        "エラー",
+        error.response?.data?.detail || "2FA有効化に失敗しました"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEnable2FA = () => {
+    showConfirm(
       "2段階認証を有効化",
       "2段階認証を有効にすると、ログイン時にメールで送られるコードの入力が必要になります。続けますか？",
-      [
-        { text: "キャンセル", style: "cancel" },
-        {
-          text: "有効化",
-          onPress: async () => {
-            setLoading(true);
-            try {
-              const response: Enable2FAResponse = await enableTwoFactor();
-              setTwoFactorEnabled(true);
-              setBackupCodes(response.backup_codes);
-              setShowBackupCodesModal(true);
-
-              Alert.alert(
-                "成功",
-                "2段階認証が有効化されました。バックアップコードをメールで送信しました。"
-              );
-            } catch (error: any) {
-              Alert.alert(
-                "エラー",
-                error.response?.data?.detail || "2FA有効化に失敗しました"
-              );
-            } finally {
-              setLoading(false);
-            }
-          },
-        },
-      ]
+      doEnable2FA
     );
   };
 
   const handleDisable2FA = async () => {
     if (!password) {
-      Alert.alert("エラー", "パスワードを入力してください");
+      showAlert("エラー", "パスワードを入力してください");
       return;
     }
 
@@ -96,9 +118,9 @@ export default function SettingsScreen() {
       setTwoFactorEnabled(false);
       setShowDisableModal(false);
       setPassword("");
-      Alert.alert("成功", "2段階認証を無効化しました");
+      showAlert("成功", "2段階認証を無効化しました");
     } catch (error: any) {
-      Alert.alert(
+      showAlert(
         "エラー",
         error.response?.data?.detail || "2FA無効化に失敗しました"
       );
@@ -116,10 +138,9 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{t("Security Settings", "セキュリティ設定")}</Text>
-      </View>
+    <View style={styles.outerContainer}>
+      <Header title={t("Security Settings", "セキュリティ設定")} />
+      <ScrollView style={styles.container}>
 
       {/* マイページへのリンク */}
       <View
@@ -270,10 +291,15 @@ export default function SettingsScreen() {
         </View>
       </Modal>
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+  },
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
@@ -282,17 +308,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-  },
-  header: {
-    backgroundColor: "#fff",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#333",
   },
   section: {
     backgroundColor: "#fff",
