@@ -3,6 +3,7 @@
 """
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
 from datetime import timedelta, datetime
 from typing import Optional
@@ -24,7 +25,8 @@ from ..core.redis_oauth_guard import (
 
 from ..core.database import get_db
 from ..core.auth import (
-    get_password_hash,
+    hash_refresh_token,
+    verify_refresh_token,
     create_access_token,
     create_refresh_token,
     decode_access_token,
@@ -61,16 +63,20 @@ class UserResponse(BaseModel):
 
     @classmethod
     def from_orm(cls, obj):
+        role_val = getattr(obj, "role", None)
+        if role_val is not None and hasattr(role_val, "value"):
+            role_val = role_val.value
+        role_str = role_val if isinstance(role_val, str) and role_val else "user"
         return cls(
             id=obj.id,
             email=obj.email,
             full_name=obj.username,
-            is_active=obj.is_active,
-            is_seller=obj.is_seller,
-            is_premium=obj.is_premium,
+            is_active=bool(obj.is_active) if obj.is_active is not None else True,
+            is_seller=bool(obj.is_seller) if obj.is_seller is not None else False,
+            is_premium=bool(obj.is_premium) if obj.is_premium is not None else False,
             premium_expires_at=obj.premium_expires_at,
             account_credit_jpy=obj.account_credit_jpy or 0,
-            role=obj.role if obj.role else "user",
+            role=role_str,
             seller_application_status=obj.seller_application_status if obj.seller_application_status else "none",
             seller_application_admin_note=obj.seller_application_admin_note,
             created_at=obj.created_at,
@@ -82,6 +88,15 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+def _username_base_from_google(name: str, email: str) -> str:
+    base = (name or "").strip()
+    if not base:
+        base = (email.split("@")[0] if email else "user").strip() or "user"
+    if len(base) > 100:
+        base = base[:100]
+    return base
 
 
 def _make_unique_username(db: Session, base_name: str) -> str:
@@ -124,8 +139,12 @@ async def google_login(request: Request, body: GoogleAuthRequest, db: Session = 
         return result
     except HTTPException:
         raise
-    except Exception:
-        logger.error("=== /auth/google 500 エラー詳細 ===\n%s", traceback.format_exc())
+    except Exception as exc:
+        logger.error(
+            "=== /auth/google 500 (%s) ===\n%s",
+            type(exc).__name__,
+            traceback.format_exc(),
+        )
         raise HTTPException(
             status_code=500,
             detail="サーバーエラーが発生しました。しばらくしてから再試行してください。",
@@ -173,7 +192,10 @@ async def _google_login_impl(body: GoogleAuthRequest, db: Session):
     google_data = google_response.json()
     email = google_data.get("email")
     google_id = google_data.get("sub")
-    name = google_data.get("name") or (email.split("@")[0] if email else "User")
+    name_base = _username_base_from_google(
+        google_data.get("name") or "",
+        email or "",
+    )
 
     if not email or not google_id:
         raise HTTPException(
@@ -181,43 +203,59 @@ async def _google_login_impl(body: GoogleAuthRequest, db: Session):
             detail="Googleアカウントの情報を取得できませんでした"
         )
 
-    # 既存ユーザーを検索（google_idまたはemailで）
     user = db.query(User).filter(User.google_id == google_id).first()
     if not user:
         user = db.query(User).filter(User.email == email).first()
 
-    if not user:
-        # 新規ユーザー作成
-        username = _make_unique_username(db, name)
-        user = User(
-            id=str(uuid.uuid4()),
-            email=email,
-            username=username,
-            google_id=google_id,
-            is_active=True,
-            is_seller=False,
+    try:
+        if not user:
+            username = _make_unique_username(db, name_base)
+            user = User(
+                id=str(uuid.uuid4()),
+                email=email,
+                username=username,
+                google_id=google_id,
+                is_active=True,
+                is_seller=False,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        else:
+            if not user.google_id:
+                conflict = (
+                    db.query(User)
+                    .filter(User.google_id == google_id, User.id != user.id)
+                    .first()
+                )
+                if conflict:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="このGoogleアカウントは別ユーザーと既に紐づいています。サポートへお問い合わせください。",
+                    )
+                user.google_id = google_id
+            if not user.is_active:
+                user.is_active = True
+            db.commit()
+            db.refresh(user)
+
+        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user.id},
+            expires_delta=access_token_expires
         )
-        db.add(user)
+        refresh_token = create_refresh_token(data={"sub": user.id})
+
+        user.refresh_token = hash_refresh_token(refresh_token)
         db.commit()
         db.refresh(user)
-    else:
-        # google_idが未設定なら更新
-        if not user.google_id:
-            user.google_id = google_id
-        if not user.is_active:
-            user.is_active = True
-        db.commit()
-
-    # JWTトークンを生成
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.id},
-        expires_delta=access_token_expires
-    )
-    refresh_token = create_refresh_token(data={"sub": user.id})
-
-    user.refresh_token = get_password_hash(refresh_token)
-    db.commit()
+    except IntegrityError:
+        db.rollback()
+        logger.exception("Google login DB integrity error email=%s google_id=%s", email, google_id)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="ユーザー登録情報が競合しました。しばらくしてから再試行するか、サポートへお問い合わせください。",
+        )
 
     return TokenResponse(
         access_token=access_token,
@@ -258,7 +296,7 @@ async def refresh_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not user.refresh_token or not verify_password(refresh_token, user.refresh_token):
+    if not user.refresh_token or not verify_refresh_token(refresh_token, user.refresh_token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="無効なリフレッシュトークンです",
@@ -272,7 +310,7 @@ async def refresh_access_token(
     )
     new_refresh_token = create_refresh_token(data={"sub": user.id})
 
-    user.refresh_token = get_password_hash(new_refresh_token)
+    user.refresh_token = hash_refresh_token(new_refresh_token)
     db.commit()
 
     return TokenResponse(

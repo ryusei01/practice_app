@@ -2,6 +2,7 @@
 認証関連のユーティリティ
 JWT トークン生成、パスワードハッシュなど
 """
+import hashlib
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
@@ -17,8 +18,10 @@ from ..models import User
 
 logger = logging.getLogger(__name__)
 
-# 新規は bcrypt（本番イメージに必ず含まれる）。既存の argon2 ハッシュは検証のみ互換（開発用・argon2-cffi 要）
+# 一般パスワード用（argon2 レガシー検証を含む）
 pwd_context = CryptContext(schemes=["bcrypt", "argon2"], deprecated="auto")
+# リフレッシュトークンは bcrypt のみ（argon2 未導入イメージでもハッシュ生成が必ず動く）
+_refresh_token_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # HTTPベアラートークン
 security = HTTPBearer()
@@ -32,6 +35,37 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def get_password_hash(password: str) -> str:
     """パスワードをハッシュ化"""
     return pwd_context.hash(password)
+
+
+def _digest_sha256_hex(secret: str) -> str:
+    """bcrypt の72バイト制限より長いシークレット用（JWT リフレッシュトークン等）"""
+    return hashlib.sha256(secret.encode("utf-8")).hexdigest()
+
+
+def hash_refresh_token(token: str) -> str:
+    """リフレッシュトークンを保存用にハッシュ（平文JWTは長いため先にSHA-256）"""
+    return _refresh_token_context.hash(_digest_sha256_hex(token))
+
+
+def verify_refresh_token(token: str, hashed: str) -> bool:
+    """
+    保存済みハッシュとリフレッシュトークンを照合。
+    新形式（SHA-256前置・bcrypt）→ 旧bcrypt（短文のみ）→ 旧argon2（pwd_context）
+    """
+    if not hashed:
+        return False
+    digest = _digest_sha256_hex(token)
+    if _refresh_token_context.verify(digest, hashed):
+        return True
+    try:
+        if _refresh_token_context.verify(token, hashed):
+            return True
+    except (ValueError, TypeError):
+        pass
+    try:
+        return pwd_context.verify(token, hashed)
+    except Exception:
+        return False
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
