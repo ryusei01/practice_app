@@ -1,13 +1,15 @@
+# -----------------------------------------------------------------------------
 # Python
+# -----------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+.venv/
 venv/
 env/
 ENV/
-.venv
 pip-log.txt
 pip-delete-this-directory.txt
 .pytest_cache/
@@ -16,12 +18,9 @@ htmlcov/
 *.egg-info/
 build/
 
-# FastAPI
-.env
-.env.local
-.env.*.local
-
-# Node
+# -----------------------------------------------------------------------------
+# Node / package managers
+# -----------------------------------------------------------------------------
 node_modules/
 npm-debug.log*
 yarn-debug.log*
@@ -29,31 +28,44 @@ yarn-error.log*
 .npm
 .yarn/
 
-# Expo
+# -----------------------------------------------------------------------------
+# Expo / React Native
+# -----------------------------------------------------------------------------
 .expo/
 .expo-shared/
 web-build/
 dist/
-
-# React Native
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
 *.orig.*
+frontend/wrangler.toml
 
-# macOS
+# -----------------------------------------------------------------------------
+# 環境変数・シークレット（コミット禁止）
+# -----------------------------------------------------------------------------
+.env
+.env.local
+.env.*.local
+frontend/.env.production
+gcp-sa-key.json
+*-sa-key.json
+
+# -----------------------------------------------------------------------------
+# OS
+# -----------------------------------------------------------------------------
 .DS_Store
 .AppleDouble
 .LSOverride
-
-# Windows
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 
-# IDEs
+# -----------------------------------------------------------------------------
+# エディタ・IDE
+# -----------------------------------------------------------------------------
 .vscode/
 .idea/
 *.swp
@@ -63,39 +75,77 @@ Desktop.ini
 .classpath
 .settings/
 
-# Database
+# -----------------------------------------------------------------------------
+# データベース・ログ・一時ファイル
+# -----------------------------------------------------------------------------
 *.db
 *.sqlite
 *.sqlite3
-
-# Logs
 logs/
 *.log
-
-# Temporary files
 tmp/
 temp/
 *.tmp
 nul
 
-# Test files (keep if needed, ignore if temporary)
+# -----------------------------------------------------------------------------
+# テスト・サンプル用（一時）
+# -----------------------------------------------------------------------------
 test_*.js
 test_*.html
 *.csv
 
-# Personal notes
-memo.txt
-tuunel
+# -----------------------------------------------------------------------------
+# ローカル専用（プロジェクト固有）
+# -----------------------------------------------------------------------------
 
-# Claude / generated docs (do not track)
-.claude/component-reference.md
+# AI アシスタントのコンテキスト
+.claude/
 
-# Local-only / keep out of git
-backend/migrations/add_textbook_fields.sql
+# デプロイスクリプト
+deploy-cloudflare.bat
+deploy-cloudflare.sh
+
+# ドキュメント（未公開）
 docs/AI_FEATURES_DESIGN.md
 docs/AI_IMPLEMENTATION_EXAMPLE.md
+docs/ARCHITECTURE.md
+docs/CSV_IMPORT_GUIDE.md
+docs/CSV_MANAGEMENT.md
+docs/DEPLOYMENT.md
+docs/DEVELOPMENT_LOG.md
+docs/EMAIL_SETUP.md
+docs/QUICKSTART.md
+docs/RAILWAY_DEPLOYMENT_GUIDE.md
+docs/RAILWAY_ENV_SETUP.md
+docs/RELEASE_CHECKLIST.md
+docs/RELOAD_INSTRUCTIONS.md
+docs/SECURITY_IMPLEMENTATION.md
+docs/SECURITY_IMPROVEMENTS.md
+docs/SEO_IMPLEMENTATION.md
+docs/SETUP.md
+docs/SUBCATEGORY_FEATURE_IMPLEMENTATION.md
 docs/TRANSLATION_SETUP.md
+docs/TROUBLESHOOTING.md
+docs/sql/
+
+# Backend
+backend/check_enum_values.sql
+backend/check_user.sql
+backend/CORS_SETUP.md
+backend/database_add_user_role.sql
+backend/database_update_users_table.sql
+backend/MIGRATION_2FA.md
+backend/RAILWAY_ENV_VARS.md
+backend/migrations/add_textbook_fields.sql
+
+# Scripts
+scripts/import-all-csv.sh
+scripts/add-csv.sh
+
+# Frontend
 frontend/public/README_GOOGLE_VERIFICATION.md
 
-# Production env (contains secrets)
-frontend/.env.production
+# 個人メモ
+memo.txt
+tuunel
