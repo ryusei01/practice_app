@@ -29,6 +29,7 @@ import {
   localStorageService,
   LocalQuestionSet,
   LocalQuestion,
+  RedSheetProgress,
 } from "../../../src/services/localStorageService";
 import {
   getAvailableTextbooks,
@@ -133,11 +134,22 @@ export default function TrialSetDetailScreen() {
     Array<{ category: string | null; questions: LocalQuestion[] }>
   >([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [savedProgress, setSavedProgress] = useState<{
+    currentIndex: number;
+    totalQuestions: number;
+  } | null>(null);
   /** カテゴリがある場合のみ: カテゴリ別 / 問題番号（配列順） */
   const [listOrderMode, setListOrderMode] = useState<
     "category" | "questionNumber"
   >("category");
   const flatListRef = useRef<FlatList>(null);
+
+  // 赤シート（フラッシュカード）選択モーダル用のstate
+  const [flashcardModalVisible, setFlashcardModalVisible] = useState(false);
+  const [flashcardMode, setFlashcardMode] = useState<"all" | "category" | "difficulty">("all");
+  const [flashcardCategory, setFlashcardCategory] = useState<string | null>(null);
+  const [flashcardDifficulty, setFlashcardDifficulty] = useState<string | null>(null);
+  const [redSheetProgress, setRedSheetProgress] = useState<RedSheetProgress | null>(null);
 
   // エラーモーダル用のstate
   const [errorModalVisible, setErrorModalVisible] = useState(false);
@@ -261,6 +273,29 @@ export default function TrialSetDetailScreen() {
         setSrsMap(map);
         const due = await srsService.getDueCount(id);
         setDueCount(due);
+      }
+
+      // 保存された進捗を読み込み
+      try {
+        const progressData = await AsyncStorage.getItem(`@quiz_progress_${id}`);
+        if (progressData) {
+          const progress = JSON.parse(progressData);
+          if (progress.currentIndex > 0) {
+            setSavedProgress(progress);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to load quiz progress:", e);
+      }
+
+      // 赤シート進捗を読み込み
+      try {
+        const rsProgress = await localStorageService.getRedSheetProgress(id);
+        if (rsProgress && rsProgress.lastIndex > 0) {
+          setRedSheetProgress(rsProgress);
+        }
+      } catch (e) {
+        console.warn("Failed to load red sheet progress:", e);
       }
     } catch (error) {
       console.error("Failed to load question set:", error);
@@ -503,7 +538,8 @@ export default function TrialSetDetailScreen() {
         })
         .filter(Boolean)
         .join(",");
-      router.push(`/(trial)/quiz/${id}?questionIds=${questionIds}`);
+      const modeParam = selectionMode === "all" ? "&mode=all" : "";
+      router.push(`/(trial)/quiz/${id}?questionIds=${questionIds}${modeParam}`);
     } catch (error) {
       console.error("Failed to select questions:", error);
       showErrorModal(
@@ -568,7 +604,63 @@ export default function TrialSetDetailScreen() {
     if (!questionSet || questionSet.questions.length === 0) {
       return;
     }
-    router.push(`/(app)/flashcard/${id}`);
+    setFlashcardModalVisible(true);
+  };
+
+  const getDifficultyLabel = (d: string) => {
+    if (d === "easy") return t("Easy", "易しい");
+    if (d === "hard") return t("Hard", "難しい");
+    return t("Medium", "普通");
+  };
+
+  const handleStartFlashcardWithSelection = () => {
+    if (!questionSet) return;
+    setFlashcardModalVisible(false);
+    let selectedQuestions = [...questionSet.questions];
+
+    if (flashcardMode === "category" && flashcardCategory) {
+      selectedQuestions = questionSet.questions.filter(q =>
+        (q.category || t("Uncategorized", "未分類")) === flashcardCategory
+      );
+    } else if (flashcardMode === "difficulty" && flashcardDifficulty) {
+      selectedQuestions = questionSet.questions.filter(q =>
+        (q.difficulty || "medium") === flashcardDifficulty
+      );
+    }
+
+    if (selectedQuestions.length === 0) {
+      showErrorModal(
+        t("Error", "エラー"),
+        t("No questions match your selection", "選択条件に一致する問題がありません")
+      );
+      return;
+    }
+
+    const qIds = selectedQuestions
+      .map((q) => {
+        const qid = q?.id;
+        if (qid) return String(qid);
+        const idx = questionSet.questions.findIndex((qq) => qq === q);
+        return idx >= 0 ? `idx:${idx}` : "";
+      })
+      .filter(Boolean)
+      .join(",");
+    router.push(`/(app)/flashcard/${id}?questionIds=${qIds}`);
+  };
+
+  const handleResumeFlashcard = () => {
+    setFlashcardModalVisible(false);
+    if (redSheetProgress?.filterState?.questionIds) {
+      const qids = redSheetProgress.filterState.questionIds.join(",");
+      router.push(`/(app)/flashcard/${id}?questionIds=${qids}&startIndex=${redSheetProgress.lastIndex}`);
+    } else {
+      router.push(`/(app)/flashcard/${id}?startIndex=${redSheetProgress?.lastIndex || 0}`);
+    }
+  };
+
+  const handleResetFlashcardProgress = async () => {
+    await localStorageService.deleteRedSheetProgress(id);
+    setRedSheetProgress(null);
   };
 
   const renderQuestion = ({ item, index }: { item: any; index: number }) => {
@@ -931,6 +1023,11 @@ export default function TrialSetDetailScreen() {
             <Text style={styles.flashcardButtonText}>
               {t("Flashcard", "赤シート機能")}
             </Text>
+            {redSheetProgress && redSheetProgress.viewedIndices.length > 0 && (
+              <Text style={styles.flashcardProgressText}>
+                {redSheetProgress.viewedIndices.length}/{redSheetProgress.totalQuestions}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
         {dueCount > 0 && (
@@ -1025,6 +1122,40 @@ export default function TrialSetDetailScreen() {
             </Text>
           </View>
 
+          {savedProgress && savedProgress.currentIndex > 0 && questionSet && savedProgress.currentIndex < questionSet.questions.length && (
+            <TouchableOpacity
+              style={[styles.selectionOption, styles.resumeOption]}
+              onPress={() => {
+                setSelectionModalVisible(false);
+                const qIds = questionSet.questions
+                  .map((q, idx) => {
+                    const qid = (q as any)?.id;
+                    if (qid !== null && qid !== undefined && String(qid).trim() !== "") {
+                      return String(qid);
+                    }
+                    return `idx:${idx}`;
+                  })
+                  .filter(Boolean)
+                  .join(",");
+                router.push(
+                  `/(trial)/quiz/${id}?questionIds=${qIds}&mode=all&startIndex=${savedProgress.currentIndex}`
+                );
+              }}
+            >
+              <View style={styles.selectionOptionHeader}>
+                <Text style={[styles.selectionOptionTitle, styles.resumeOptionTitle]}>
+                  ▶️ {t("Resume", "途中から解く")}
+                </Text>
+              </View>
+              <Text style={styles.selectionOptionDesc}>
+                {t(
+                  `Continue from question ${savedProgress.currentIndex + 1} / ${questionSet.questions.length}`,
+                  `${questionSet.questions.length}問中 ${savedProgress.currentIndex + 1}問目から再開`
+                )}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={[
               styles.selectionOption,
@@ -1032,10 +1163,8 @@ export default function TrialSetDetailScreen() {
             ]}
             onPress={() => {
               if (selectionMode === "all") {
-                // 既に選択されている場合はクイズを開始
                 handleStartQuizWithSelection();
               } else {
-                // 初回選択時はモードを設定
                 setSelectionMode("all");
               }
             }}
@@ -1306,6 +1435,189 @@ export default function TrialSetDetailScreen() {
         </View>
       </Modal>
 
+      {/* フラッシュカード（赤シート）選択モーダル */}
+      <Modal
+        visible={flashcardModalVisible}
+        title={t("Flashcard Mode", "赤シートモード")}
+        onClose={() => setFlashcardModalVisible(false)}
+      >
+        <View style={styles.selectionModalContent}>
+          {redSheetProgress && redSheetProgress.lastIndex > 0 && (
+            <TouchableOpacity
+              style={[styles.selectionOption, styles.resumeOption]}
+              onPress={handleResumeFlashcard}
+            >
+              <View style={styles.selectionOptionHeader}>
+                <Text style={[styles.selectionOptionTitle, styles.resumeOptionTitle]}>
+                  ▶️ {t("Resume", "続きから")}
+                </Text>
+              </View>
+              <Text style={styles.selectionOptionDesc}>
+                {t(
+                  `Continue from card ${redSheetProgress.lastIndex + 1} / ${redSheetProgress.totalQuestions} (Viewed: ${redSheetProgress.viewedIndices.length})`,
+                  `${redSheetProgress.totalQuestions}枚中 ${redSheetProgress.lastIndex + 1}枚目から再開（閲覧済: ${redSheetProgress.viewedIndices.length}枚）`
+                )}
+              </Text>
+              <TouchableOpacity
+                style={styles.resetProgressButton}
+                onPress={handleResetFlashcardProgress}
+              >
+                <Text style={styles.resetProgressText}>
+                  {t("Reset progress", "進捗をリセット")}
+                </Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[
+              styles.selectionOption,
+              flashcardMode === "all" && styles.selectionOptionActive,
+            ]}
+            onPress={() => {
+              if (flashcardMode === "all") {
+                handleStartFlashcardWithSelection();
+              } else {
+                setFlashcardMode("all");
+              }
+            }}
+          >
+            <View style={styles.selectionOptionHeader}>
+              <Text style={[
+                styles.selectionOptionTitle,
+                flashcardMode === "all" && styles.selectionOptionTitleActive,
+              ]}>
+                📚 {t("All Questions", "全ての問題")}
+              </Text>
+            </View>
+            <Text style={styles.selectionOptionDesc}>
+              {t("Browse all cards in order", "全てのカードを順番に閲覧")}
+            </Text>
+          </TouchableOpacity>
+
+          {questionGroups.length > 0 && (
+            <TouchableOpacity
+              style={[
+                styles.selectionOption,
+                flashcardMode === "category" && styles.selectionOptionActive,
+              ]}
+              onPress={() => {
+                if (flashcardMode === "category" && flashcardCategory) {
+                  handleStartFlashcardWithSelection();
+                } else {
+                  setFlashcardMode("category");
+                }
+              }}
+            >
+              <View style={styles.selectionOptionHeader}>
+                <Text style={[
+                  styles.selectionOptionTitle,
+                  flashcardMode === "category" && styles.selectionOptionTitleActive,
+                ]}>
+                  📁 {t("By Category", "カテゴリ別")}
+                </Text>
+              </View>
+              <Text style={styles.selectionOptionDesc}>
+                {t("Filter cards by category", "カテゴリで絞り込み")}
+              </Text>
+              {flashcardMode === "category" && (
+                <View style={styles.inputContainer}>
+                  <FlatList
+                    data={questionGroups}
+                    keyExtractor={(item, index) =>
+                      `fc_cat_${item.category || "uncategorized"}_${index}`
+                    }
+                    renderItem={({ item: group }) => (
+                      <TouchableOpacity
+                        style={[
+                          styles.categoryOption,
+                          flashcardCategory === (group.category || t("Uncategorized", "未分類")) &&
+                            styles.categoryOptionActive,
+                        ]}
+                        onPress={() => {
+                          setFlashcardCategory(group.category || t("Uncategorized", "未分類"));
+                          setTimeout(() => handleStartFlashcardWithSelection(), 300);
+                        }}
+                      >
+                        <Text style={[
+                          styles.categoryOptionText,
+                          flashcardCategory === (group.category || t("Uncategorized", "未分類")) &&
+                            styles.categoryOptionTextActive,
+                        ]}>
+                          {group.category || t("Uncategorized", "未分類")} ({group.questions.length} {t("questions", "問")})
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  />
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[
+              styles.selectionOption,
+              flashcardMode === "difficulty" && styles.selectionOptionActive,
+            ]}
+            onPress={() => {
+              if (flashcardMode === "difficulty" && flashcardDifficulty) {
+                handleStartFlashcardWithSelection();
+              } else {
+                setFlashcardMode("difficulty");
+              }
+            }}
+          >
+            <View style={styles.selectionOptionHeader}>
+              <Text style={[
+                styles.selectionOptionTitle,
+                flashcardMode === "difficulty" && styles.selectionOptionTitleActive,
+              ]}>
+                📊 {t("By Difficulty", "難易度別")}
+              </Text>
+            </View>
+            <Text style={styles.selectionOptionDesc}>
+              {t("Filter cards by difficulty level", "難易度で絞り込み")}
+            </Text>
+            {flashcardMode === "difficulty" && questionSet && (
+              <View style={styles.inputContainer}>
+                {(["easy", "medium", "hard"] as const).map(level => {
+                  const count = questionSet.questions.filter(q => (q.difficulty || "medium") === level).length;
+                  return (
+                    <TouchableOpacity
+                      key={level}
+                      style={[
+                        styles.categoryOption,
+                        flashcardDifficulty === level && styles.categoryOptionActive,
+                      ]}
+                      onPress={() => {
+                        setFlashcardDifficulty(level);
+                        setTimeout(() => handleStartFlashcardWithSelection(), 300);
+                      }}
+                    >
+                      <Text style={[
+                        styles.categoryOptionText,
+                        flashcardDifficulty === level && styles.categoryOptionTextActive,
+                      ]}>
+                        {getDifficultyLabel(level)} ({count} {t("questions", "問")})
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.startButton, styles.primaryStartButton]}
+            onPress={handleStartFlashcardWithSelection}
+          >
+            <Text style={styles.startButtonText}>
+              ▶ {t("Start Flashcard", "赤シート開始")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
       {/* エラーモーダル */}
       <Modal
         visible={errorModalVisible}
@@ -1524,6 +1836,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#E8F4FF",
     borderColor: "#007AFF",
   },
+  resumeOption: {
+    backgroundColor: "#FFF8E1",
+    borderColor: "#FF9800",
+    borderWidth: 2,
+  },
+  resumeOptionTitle: {
+    color: "#FF9800",
+  },
   selectionOptionHeader: {
     ...commonStyles.selectionOptionHeader,
     marginBottom: 8,
@@ -1656,5 +1976,20 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     padding: 20,
+  },
+  flashcardProgressText: {
+    fontSize: 11,
+    color: "#FF6B00",
+    fontWeight: "700",
+    marginTop: 2,
+  },
+  resetProgressButton: {
+    marginTop: 8,
+    alignSelf: "flex-end",
+  },
+  resetProgressText: {
+    fontSize: 12,
+    color: "#999",
+    textDecorationLine: "underline",
   },
 });

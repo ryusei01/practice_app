@@ -16,14 +16,16 @@ export default {
     platforms: ["ios", "android", "web"],
     ios: {
       supportsTablet: true,
-      bundleIdentifier: "com.yourcompany.quizmarketplace",
+      bundleIdentifier:
+        process.env.EXPO_PUBLIC_IOS_BUNDLE_ID || "com.aipracticebook.app",
     },
     android: {
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#ffffff",
       },
-      package: "com.yourcompany.quizmarketplace",
+      package:
+        process.env.EXPO_PUBLIC_ANDROID_PACKAGE || "com.aipracticebook.app",
     },
     web: {
       favicon: "./assets/favicon.png",

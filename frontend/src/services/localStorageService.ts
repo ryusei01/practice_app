@@ -23,11 +23,28 @@ export interface LocalQuestion {
   category?: string;
   subcategory1?: string;
   subcategory2?: string;
+  question_type?: "multiple_choice" | "true_false" | "text_input";
+  options?: string[];
+}
+
+export interface RedSheetProgress {
+  questionSetId: string;
+  lastIndex: number;
+  totalQuestions: number;
+  viewedIndices: number[];
+  filterState?: {
+    category?: string;
+    difficulty?: string;
+    questionIds?: string[];
+  };
+  updatedAt: string;
 }
 
 const TRIAL_QUESTION_SETS_KEY = "@trial_question_sets";
 const TRIAL_RESULTS_KEY = "@trial_results";
 const DEFAULT_INITIALIZED_KEY = "@default_initialized";
+const REDSHEET_PROGRESS_PREFIX = "@redsheet_progress_";
+const REDSHEET_MODE_PREFIX = "@redsheet_mode_";
 
 export const localStorageService = {
   // 問題セット一覧を取得
@@ -231,6 +248,55 @@ export const localStorageService = {
     }
   },
 
+  // --- 赤シート進捗管理 ---
+
+  async getRedSheetProgress(questionSetId: string): Promise<RedSheetProgress | null> {
+    try {
+      const data = await AsyncStorage.getItem(`${REDSHEET_PROGRESS_PREFIX}${questionSetId}`);
+      return data ? JSON.parse(data) : null;
+    } catch (error) {
+      console.error("Error getting red sheet progress:", error);
+      return null;
+    }
+  },
+
+  async saveRedSheetProgress(progress: RedSheetProgress): Promise<void> {
+    try {
+      progress.updatedAt = new Date().toISOString();
+      await AsyncStorage.setItem(
+        `${REDSHEET_PROGRESS_PREFIX}${progress.questionSetId}`,
+        JSON.stringify(progress)
+      );
+    } catch (error) {
+      console.error("Error saving red sheet progress:", error);
+    }
+  },
+
+  async deleteRedSheetProgress(questionSetId: string): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(`${REDSHEET_PROGRESS_PREFIX}${questionSetId}`);
+    } catch (error) {
+      console.error("Error deleting red sheet progress:", error);
+    }
+  },
+
+  async getRedSheetMode(questionSetId: string): Promise<boolean> {
+    try {
+      const data = await AsyncStorage.getItem(`${REDSHEET_MODE_PREFIX}${questionSetId}`);
+      return data === null ? true : data === "true";
+    } catch (error) {
+      return true;
+    }
+  },
+
+  async saveRedSheetMode(questionSetId: string, enabled: boolean): Promise<void> {
+    try {
+      await AsyncStorage.setItem(`${REDSHEET_MODE_PREFIX}${questionSetId}`, String(enabled));
+    } catch (error) {
+      console.error("Error saving red sheet mode:", error);
+    }
+  },
+
   // CSVデータをパースして問題セットを作成
   parseCSVToQuestionSet(
     csvText: string,
@@ -277,6 +343,29 @@ export const localStorageService = {
       const difficulty = parseFloat(col("difficulty")) || 0.5;
       const category = col("category");
 
+      // option_1~option_4 or legacy options column
+      let options: string[] | undefined;
+      if (headers.includes("option_1")) {
+        const opts = [col("option_1"), col("option_2"), col("option_3"), col("option_4")].filter(Boolean);
+        options = opts.length > 0 ? opts : undefined;
+      } else {
+        const optionsStr = col("options");
+        options = optionsStr ? optionsStr.split(",").map(o => o.trim()).filter(Boolean) : undefined;
+      }
+
+      // question_type: explicit or auto-detect
+      const questionTypeRaw = col("question_type").trim() as LocalQuestion["question_type"] | "";
+      let question_type: LocalQuestion["question_type"];
+      if (questionTypeRaw && ["multiple_choice", "true_false", "text_input"].includes(questionTypeRaw)) {
+        question_type = questionTypeRaw as LocalQuestion["question_type"];
+      } else if (options && options.length > 0) {
+        question_type = "multiple_choice";
+      } else if (correct_answer.trim().toLowerCase() === "true" || correct_answer.trim().toLowerCase() === "false") {
+        question_type = "true_false";
+      } else {
+        question_type = "text_input";
+      }
+
       if (question_text && correct_answer) {
         questions.push({
           id: `q_${i}`,
@@ -285,6 +374,8 @@ export const localStorageService = {
           difficulty:
             difficulty < 0.3 ? "easy" : difficulty > 0.6 ? "hard" : "medium",
           category: category,
+          question_type,
+          options,
         });
       }
     }

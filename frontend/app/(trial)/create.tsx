@@ -60,14 +60,14 @@ export default function TrialCreateScreen() {
       "question_text,question_type,option_1,option_2,option_3,option_4,correct_answer,explanation,difficulty,category,subcategory1,subcategory2",
 
       // ── 短答形式（correct_answer に答えを書くだけ）──
-      "What is the capital of Japan?,,,,,,Tokyo,Japan's capital city is Tokyo,0.2,geography,asia,capitals",
-      "日本の首都は？,,,,,,東京,日本の首都は東京都,0.2,地理,アジア,首都",
-      "What is H2O?,,,,,,Water,H2O is the chemical formula for water,0.1,science,chemistry,compounds",
-      "水の化学式は？,,,,,,H2O,水の化学式はH2Oです,0.1,理科,化学,化合物",
-      "Who wrote Romeo and Juliet?,,,,,,William Shakespeare,Shakespeare wrote this famous play in the late 16th century,0.3,literature,english,drama",
-      "「ロミオとジュリエット」の作者は？,,,,,,シェイクスピア,ウィリアム・シェイクスピアが16世紀末に執筆,0.3,文学,英語,演劇",
-      "What is the speed of light?,,,,,,299792458 m/s,The speed of light in a vacuum is approximately 3×10⁸ m/s,0.6,science,physics,constants",
-      "光の速さは？,,,,,,約30万km/s,真空中の光速は約2.998×10⁸ m/s,0.6,理科,物理,定数",
+      "What is the capital of Japan?,text_input,,,,,Tokyo,Japan's capital city is Tokyo,0.2,geography,asia,capitals",
+      "日本の首都は？,text_input,,,,,東京,日本の首都は東京都,0.2,地理,アジア,首都",
+      "What is H2O?,text_input,,,,,Water,H2O is the chemical formula for water,0.1,science,chemistry,compounds",
+      "水の化学式は？,text_input,,,,,H2O,水の化学式はH2Oです,0.1,理科,化学,化合物",
+      "Who wrote Romeo and Juliet?,text_input,,,,,William Shakespeare,Shakespeare wrote this famous play in the late 16th century,0.3,literature,english,drama",
+      "「ロミオとジュリエット」の作者は？,text_input,,,,,シェイクスピア,ウィリアム・シェイクスピアが16世紀末に執筆,0.3,文学,英語,演劇",
+      "What is the speed of light?,text_input,,,,,299792458 m/s,The speed of light in a vacuum is approximately 3×10⁸ m/s,0.6,science,physics,constants",
+      "光の速さは？,text_input,,,,,約30万km/s,真空中の光速は約2.998×10⁸ m/s,0.6,理科,物理,定数",
 
       // ── 四択形式（option_1〜4 を使う）──
       "What is 8 × 7?,multiple_choice,42,54,56,64,56,8 multiplied by 7 equals 56,0.2,math,arithmetic,multiplication",
@@ -80,12 +80,12 @@ export default function TrialCreateScreen() {
       "電話を発明した国は？,multiple_choice,フランス,ドイツ,アメリカ,イギリス,アメリカ,グラハム・ベルが1876年にアメリカで特許を取得,0.5,歴史,テクノロジー,発明",
 
       // ── 正誤判定形式（true / false）──
-      "The Great Wall of China is visible from space.,,,,,,false,This is a common myth. It is not visible with the naked eye from space.,0.4,general,myths,space",
-      "万里の長城は宇宙から肉眼で見える。,,,,,,false,これはよくある誤解。実際には宇宙から肉眼では見えない。,0.4,一般常識,通説,宇宙",
-      "Photosynthesis produces oxygen.,,,,,,true,Plants use CO2 and sunlight to produce glucose and release O2,0.3,science,biology,plants",
-      "光合成によって酸素が生成される。,,,,,,true,植物はCO2と光を使ってグルコースを生成しO2を放出する,0.3,理科,生物,植物",
-      "Python is a compiled language.,,,,,,false,Python is an interpreted language,0.4,IT,programming,python",
-      "Pythonはコンパイル型言語である。,,,,,,false,Pythonはインタプリタ型言語,0.4,IT,プログラミング,Python",
+      "The Great Wall of China is visible from space.,true_false,,,,,false,This is a common myth. It is not visible with the naked eye from space.,0.4,general,myths,space",
+      "万里の長城は宇宙から肉眼で見える。,true_false,,,,,false,これはよくある誤解。実際には宇宙から肉眼では見えない。,0.4,一般常識,通説,宇宙",
+      "Photosynthesis produces oxygen.,true_false,,,,,true,Plants use CO2 and sunlight to produce glucose and release O2,0.3,science,biology,plants",
+      "光合成によって酸素が生成される。,true_false,,,,,true,植物はCO2と光を使ってグルコースを生成しO2を放出する,0.3,理科,生物,植物",
+      "Python is a compiled language.,true_false,,,,,false,Python is an interpreted language,0.4,IT,programming,python",
+      "Pythonはコンパイル型言語である。,true_false,,,,,false,Pythonはインタプリタ型言語,0.4,IT,プログラミング,Python",
     ].join("\n");
 
     if (Platform.OS === "web") {
@@ -436,8 +436,8 @@ export default function TrialCreateScreen() {
 
               <Text style={styles.csvFormatNote}>
                 {t(
-                  "difficulty: 0.0=easy / 0.5=medium / 1.0=hard  •  Save as UTF-8",
-                  "difficulty: 0.0=易 / 0.5=中 / 1.0=難  •  UTF-8で保存"
+                  "difficulty: 0.0=easy / 0.5=medium / 1.0=hard  •  Save as UTF-8\n\nquestion_type auto-detection: options → MC, true/false answer → TF, otherwise → text input",
+                  "difficulty: 0.0=易 / 0.5=中 / 1.0=難  •  UTF-8で保存\n\nquestion_type 自動判定: 選択肢あり→多肢選択、答えがtrue/false→正誤、それ以外→記述式"
                 )}
               </Text>
             </View>

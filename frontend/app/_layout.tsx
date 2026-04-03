@@ -1,12 +1,15 @@
 import { Stack } from "expo-router";
 import { Platform } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
 import { WebThirdPartyScripts } from "../src/components/WebThirdPartyScripts";
 import { AuthProvider } from "../src/contexts/AuthContext";
 import { LanguageProvider } from "../src/contexts/LanguageContext";
 
 export default function RootLayout() {
   return (
-    <>
+    <SafeAreaProvider>
+      <StatusBar style="light" />
       {Platform.OS === "web" && <WebThirdPartyScripts />}
 
       <LanguageProvider>
@@ -47,6 +50,6 @@ export default function RootLayout() {
           </Stack>
         </AuthProvider>
       </LanguageProvider>
-    </>
+    </SafeAreaProvider>
   );
 }

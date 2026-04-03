@@ -4,6 +4,7 @@ warnings.filterwarnings("ignore", message="pkg_resources is deprecated", categor
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from contextlib import asynccontextmanager
@@ -107,7 +108,7 @@ async def health():
 
 
 # APIルーターを追加
-from .api import ai_router, answers_router, auth_router, question_sets_router, questions_router, payments_router, admin_router, two_factor_router, translate_router, textbooks_router, reports_router, subscriptions_router
+from .api import ai_router, answers_router, auth_router, feedback_router, question_sets_router, questions_router, payments_router, admin_router, two_factor_router, translate_router, textbooks_router, reports_router, subscriptions_router
 
 app.include_router(auth_router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 app.include_router(question_sets_router, prefix=f"{settings.API_V1_STR}/question-sets", tags=["question-sets"])
@@ -121,6 +122,13 @@ app.include_router(translate_router, prefix=f"{settings.API_V1_STR}/translate", 
 app.include_router(textbooks_router, prefix=f"{settings.API_V1_STR}/textbooks", tags=["textbooks"])
 app.include_router(reports_router, prefix=f"{settings.API_V1_STR}/reports", tags=["reports"])
 app.include_router(subscriptions_router, prefix=f"{settings.API_V1_STR}/subscriptions", tags=["subscriptions"])
+app.include_router(feedback_router, prefix=f"{settings.API_V1_STR}/feedback", tags=["feedback"])
+
+# Static files for uploaded media (images, audio)
+import os
+_uploads_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads")
+os.makedirs(_uploads_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=_uploads_dir), name="uploads")
 
 # TODO: 他のルーターを追加
 # from .api import users, questions, marketplace

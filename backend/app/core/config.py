@@ -29,14 +29,16 @@ class Settings(BaseSettings):
     # 有料プランの Stripe Price ID（請求額は Stripe 側が正。表示用金額は下記と一致させること）
     STRIPE_PREMIUM_PRICE_ID: str = "price_placeholder"
     # UI 表示用の税込価格（円）。Stripe Price の金額と揃える
-    PREMIUM_PLAN_PRICE_JPY: int = 350
-    # 月額プランの有効日数
-    PREMIUM_PLAN_VALIDITY_DAYS: int = 30
+    PREMIUM_PLAN_PRICE_JPY: int = 1800
+    # 年額プランの有効日数
+    PREMIUM_PLAN_VALIDITY_DAYS: int = 365
     # 有料プラン購入時に付与するクレジット（円）
-    PREMIUM_PLAN_CREDIT_JPY: int = 100
+    PREMIUM_PLAN_CREDIT_JPY: int = 500
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_IOS_CLIENT_ID: str = ""
+    GOOGLE_ANDROID_CLIENT_ID: str = ""
     # リバースプロキシ（Cloudflare / Render 等）背後でクライアント IP を X-Forwarded-For から取る
     TRUST_X_FORWARDED_FOR: bool = False
     # OAuth 連続失敗の一時拒否（Redis）。未設定時は無効
@@ -54,6 +56,7 @@ class Settings(BaseSettings):
     SMTP_USER: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
     SMTP_FROM_EMAIL: str = "noreply@example.com"
+    FEEDBACK_TO_EMAIL: str = ""  # 空の場合は SMTP_FROM_EMAIL にフォールバック
 
     # CORS
     CORS_ORIGINS: str = "*"  # カンマ区切りで複数ドメイン指定可能
@@ -69,11 +72,13 @@ class Settings(BaseSettings):
     USE_LOCAL_TRANSLATION: bool = False  # デフォルトはGoogleTranslatorを使用
     OLLAMA_COPYRIGHT_CHECK_MODEL: str = "gpt-oss-20b"  # 著作権チェック用モデル（GPT-OSS 20B）
     OLLAMA_LEARNING_PLAN_MODEL: str = "gpt-oss-20b"  # AI学習プラン生成用（Ollama）
+    OLLAMA_VISION_MODEL: str = "llava"  # 画像認識+問題生成用（Ollama vision model）
 
     class Config:
         env_file = ".env"
         case_sensitive = True
         extra = "ignore"
+        env_file_encoding = "utf-8"
 
 
 settings = Settings()

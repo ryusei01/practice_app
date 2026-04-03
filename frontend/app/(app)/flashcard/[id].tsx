@@ -24,8 +24,10 @@ import {
 import { questionsApi, Question } from "../../../src/api/questions";
 import { answersApi } from "../../../src/api/answers";
 import { useAuth } from "../../../src/contexts/AuthContext";
-import { localStorageService, LocalQuestionSet } from "../../../src/services/localStorageService";
+import { localStorageService, LocalQuestionSet, RedSheetProgress } from "../../../src/services/localStorageService";
 import { srsService } from "../../../src/services/srsService";
+import MediaPlayer from "../../../src/components/MediaPlayer";
+import MathText from "../../../src/components/MathText";
 
 // expo-speechはモバイルのみ対応なので条件付きインポート
 let Speech: any = null;
@@ -46,7 +48,11 @@ interface UnifiedQuestion {
 }
 
 export default function FlashcardScreen() {
-  const { id, startIndex } = useLocalSearchParams<{ id: string; startIndex?: string }>();
+  const { id, startIndex, questionIds } = useLocalSearchParams<{
+    id: string;
+    startIndex?: string;
+    questionIds?: string;
+  }>();
   const { t } = useLanguage();
   const router = useRouter();
   const [questionSet, setQuestionSet] = useState<QuestionSet | LocalQuestionSet | null>(null);
@@ -57,7 +63,7 @@ export default function FlashcardScreen() {
   const [pan] = useState(new Animated.ValueXY());
   const [autoPlay, setAutoPlay] = useState(true);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [redSheetEnabled, setRedSheetEnabled] = useState(false);
+  const [redSheetEnabled, setRedSheetEnabled] = useState(true);
   const [revealedCards, setRevealedCards] = useState<Set<number>>(new Set());
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [answers, setAnswers] = useState<Array<{
@@ -69,10 +75,27 @@ export default function FlashcardScreen() {
   const [isTrial, setIsTrial] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
+  const [viewedIndices, setViewedIndices] = useState<Set<number>>(new Set([0]));
 
   useEffect(() => {
     loadData();
   }, [id]);
+
+  useEffect(() => {
+    if (questions.length === 0) return;
+    const newViewed = new Set(viewedIndices);
+    newViewed.add(currentIndex);
+    setViewedIndices(newViewed);
+
+    localStorageService.saveRedSheetProgress({
+      questionSetId: id,
+      lastIndex: currentIndex,
+      totalQuestions: questions.length,
+      viewedIndices: Array.from(newViewed),
+      filterState: questionIds ? { questionIds: questionIds.split(",") } : undefined,
+      updatedAt: new Date().toISOString(),
+    });
+  }, [currentIndex, questions.length]);
 
   useEffect(() => {
     // 問題が変わったら音声を停止
@@ -178,12 +201,15 @@ export default function FlashcardScreen() {
     try {
       console.log('[Flashcard] Loading data for question_set_id:', id);
 
-      // お試し版かどうかを判定（IDがtrial_またはdefault_で始まる）
+      const savedMode = await localStorageService.getRedSheetMode(id);
+      setRedSheetEnabled(savedMode);
+
       const isTrialMode = id.startsWith('trial_') || id.startsWith('default_');
       setIsTrial(isTrialMode);
 
+      const filterIds = questionIds ? questionIds.split(",") : null;
+
       if (isTrialMode) {
-        // お試し版：ローカルストレージから読み込み
         console.log('[Flashcard] Loading from local storage (trial mode)');
         const localSet = await localStorageService.getTrialQuestionSet(id);
 
@@ -193,13 +219,19 @@ export default function FlashcardScreen() {
           return;
         }
 
-        console.log('[Flashcard] Loaded trial question set:', localSet.title);
-        console.log('[Flashcard] Loaded questions:', localSet.questions.length, 'questions');
-
         setQuestionSet(localSet);
 
-        // ローカル問題を共通型に変換
-        const unifiedQuestions: UnifiedQuestion[] = localSet.questions.map(q => ({
+        let questionsToUse = localSet.questions;
+        if (filterIds && filterIds.length > 0) {
+          const idSet = new Set(filterIds);
+          const indexIds = filterIds.filter(fid => fid.startsWith("idx:"));
+          const indexSet = new Set(indexIds.map(fid => parseInt(fid.replace("idx:", ""))));
+          questionsToUse = localSet.questions.filter((q, idx) =>
+            idSet.has(q.id) || indexSet.has(idx)
+          );
+        }
+
+        const unifiedQuestions: UnifiedQuestion[] = questionsToUse.map(q => ({
           id: q.id,
           question_text: q.question,
           correct_answer: q.answer,
@@ -207,31 +239,24 @@ export default function FlashcardScreen() {
         }));
 
         setQuestions(unifiedQuestions);
-
-        if (unifiedQuestions.length > 0) {
-          setStartTime(new Date());
-        }
+        if (unifiedQuestions.length > 0) setStartTime(new Date());
       } else {
-        // 通常版：APIから読み込み
         console.log('[Flashcard] Loading from API (normal mode)');
         const [setData, questionsData] = await Promise.all([
           questionSetsApi.getById(id),
           questionsApi.getAll({ question_set_id: id }),
         ]);
 
-        console.log('[Flashcard] Loaded question set:', setData);
-        console.log('[Flashcard] Loaded questions:', questionsData?.length || 0, 'questions');
-
-        if (!questionsData || questionsData.length === 0) {
-          console.warn('[Flashcard] No questions returned from API');
-        }
-
         setQuestionSet(setData);
-        setQuestions(questionsData || []);
 
-        if (questionsData && questionsData.length > 0) {
-          setStartTime(new Date());
+        let filteredQuestions = questionsData || [];
+        if (filterIds && filterIds.length > 0) {
+          const idSet = new Set(filterIds);
+          filteredQuestions = filteredQuestions.filter(q => idSet.has(q.id));
         }
+
+        setQuestions(filteredQuestions);
+        if (filteredQuestions.length > 0) setStartTime(new Date());
       }
     } catch (error) {
       console.error("Failed to load flashcard data:", error);
@@ -433,11 +458,25 @@ export default function FlashcardScreen() {
             {contentLanguageDisplayLabel(questionSet.content_language, t)}
           </Text>
         </View>
-        <TouchableOpacity onPress={isSpeaking ? stopSpeaking : speakQuestion}>
-          <Text style={styles.speakerButton}>
-            {isSpeaking ? "🔇" : "🔊"}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={[styles.redSheetToggle, redSheetEnabled && styles.redSheetToggleActive]}
+            onPress={() => {
+              const next = !redSheetEnabled;
+              setRedSheetEnabled(next);
+              localStorageService.saveRedSheetMode(id, next);
+            }}
+          >
+            <Text style={[styles.redSheetToggleText, redSheetEnabled && styles.redSheetToggleTextActive]}>
+              {t("Red Sheet", "赤シート")}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={isSpeaking ? stopSpeaking : speakQuestion}>
+            <Text style={styles.speakerButton}>
+              {isSpeaking ? "🔇" : "🔊"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Progress Bar */}
@@ -448,6 +487,7 @@ export default function FlashcardScreen() {
         <View style={styles.progressFooter}>
           <Text style={styles.progressText}>
             {currentIndex + 1} / {questions.length}
+            {"  "}({t("Viewed", "閲覧済")}: {viewedIndices.size}/{questions.length})
           </Text>
           <TouchableOpacity
             style={styles.autoPlayToggle}
@@ -502,9 +542,15 @@ export default function FlashcardScreen() {
             )}
           </View>
 
-          <Text style={styles.questionText}>
-            {currentQuestion.question_text}
-          </Text>
+          <MathText text={currentQuestion.question_text} style={styles.questionText} />
+
+          {currentQuestion.media_urls && currentQuestion.media_urls.length > 0 && (
+            <MediaPlayer
+              media={currentQuestion.media_urls as any}
+              position="question"
+              autoPlayAudio={autoPlay}
+            />
+          )}
 
           {currentQuestion.options && currentQuestion.options.length > 0 && (
             <View style={styles.optionsContainer}>
@@ -520,7 +566,72 @@ export default function FlashcardScreen() {
           )}
 
           {/* Answer Section */}
-          {showAnswer ? (
+          {redSheetEnabled ? (
+            <View style={styles.answerContainer}>
+              {!revealedCards.has(currentIndex) ? (
+                <TouchableOpacity
+                  style={styles.redSheetCover}
+                  onPress={() => {
+                    const newRevealed = new Set(revealedCards);
+                    newRevealed.add(currentIndex);
+                    setRevealedCards(newRevealed);
+                    if (!startTime) setStartTime(new Date());
+                  }}
+                >
+                  <Text style={styles.redSheetText}>
+                    {t("Tap to reveal answer", "タップして答えを表示")}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <View style={styles.answerHeader}>
+                    <Text style={styles.answerLabel}>
+                      {t("Answer:", "答え:")}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.speakAnswerButton}
+                      onPress={speakAnswer}
+                    >
+                      <Text style={styles.speakAnswerButtonText}>
+                        🔊 {t("Read Answer", "答えを読む")}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.answerText}>
+                    {currentQuestion.correct_answer}
+                  </Text>
+                  {currentQuestion.explanation && (
+                    <>
+                      <Text style={styles.explanationLabel}>
+                        {t("Explanation:", "解説:")}
+                      </Text>
+                      <Text style={styles.explanationText}>
+                        {currentQuestion.explanation}
+                      </Text>
+                    </>
+                  )}
+                  <View style={styles.resultButtons}>
+                    <TouchableOpacity
+                      style={[styles.resultButton, styles.correctButton]}
+                      onPress={() => handleRecordAnswer(true)}
+                    >
+                      <Text style={styles.resultButtonText}>
+                        ✓ {t("Correct", "正解")}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.resultButton, styles.incorrectButton]}
+                      onPress={() => handleRecordAnswer(false)}
+                    >
+                      <Text style={styles.resultButtonText}>
+                        ✗ {t("Incorrect", "不正解")}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+          ) : showAnswer ? (
             <View style={styles.answerContainer}>
               <View style={styles.answerHeader}>
                 <Text style={styles.answerLabel}>
@@ -535,57 +646,39 @@ export default function FlashcardScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
-              {redSheetEnabled && !revealedCards.has(currentIndex) ? (
-                <TouchableOpacity
-                  style={styles.redSheetCover}
-                  onPress={() => {
-                    const newRevealed = new Set(revealedCards);
-                    newRevealed.add(currentIndex);
-                    setRevealedCards(newRevealed);
-                  }}
-                >
-                  <Text style={styles.redSheetText}>
-                    {t("Tap to reveal", "タップして表示")}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <Text style={styles.answerText}>
-                  {currentQuestion.correct_answer}
-                </Text>
+              <MathText text={currentQuestion.correct_answer} style={styles.answerText} />
+              {currentQuestion.media_urls && currentQuestion.media_urls.length > 0 && (
+                <MediaPlayer
+                  media={currentQuestion.media_urls as any}
+                  position="answer"
+                />
               )}
-
               {currentQuestion.explanation && (
                 <>
                   <Text style={styles.explanationLabel}>
                     {t("Explanation:", "解説:")}
                   </Text>
-                  <Text style={styles.explanationText}>
-                    {currentQuestion.explanation}
-                  </Text>
+                  <MathText text={currentQuestion.explanation} style={styles.explanationText} />
                 </>
               )}
-
-              {/* Correct/Incorrect buttons - always show when answer is revealed */}
-              {(!redSheetEnabled || revealedCards.has(currentIndex)) && (
-                <View style={styles.resultButtons}>
-                  <TouchableOpacity
-                    style={[styles.resultButton, styles.correctButton]}
-                    onPress={() => handleRecordAnswer(true)}
-                  >
-                    <Text style={styles.resultButtonText}>
-                      ✓ {t("Correct", "正解")}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.resultButton, styles.incorrectButton]}
-                    onPress={() => handleRecordAnswer(false)}
-                  >
-                    <Text style={styles.resultButtonText}>
-                      ✗ {t("Incorrect", "不正解")}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+              <View style={styles.resultButtons}>
+                <TouchableOpacity
+                  style={[styles.resultButton, styles.correctButton]}
+                  onPress={() => handleRecordAnswer(true)}
+                >
+                  <Text style={styles.resultButtonText}>
+                    ✓ {t("Correct", "正解")}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.resultButton, styles.incorrectButton]}
+                  onPress={() => handleRecordAnswer(false)}
+                >
+                  <Text style={styles.resultButtonText}>
+                    ✗ {t("Incorrect", "不正解")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           ) : (
             <View style={styles.hiddenAnswerContainer}>
@@ -611,16 +704,18 @@ export default function FlashcardScreen() {
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity
-          style={styles.showAnswerButton}
-          onPress={handleToggleAnswer}
-        >
-          <Text style={styles.showAnswerButtonText}>
-            {showAnswer
-              ? t("Hide Answer", "答えを隠す")
-              : t("Show Answer", "答えを表示")}
-          </Text>
-        </TouchableOpacity>
+        {!redSheetEnabled && (
+          <TouchableOpacity
+            style={styles.showAnswerButton}
+            onPress={handleToggleAnswer}
+          >
+            <Text style={styles.showAnswerButtonText}>
+              {showAnswer
+                ? t("Hide Answer", "答えを隠す")
+                : t("Show Answer", "答えを表示")}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         <View style={styles.navigationButtons}>
           <TouchableOpacity
@@ -788,6 +883,30 @@ const styles = StyleSheet.create({
     color: "#5856D6",
     marginTop: 2,
     textAlign: "center",
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  redSheetToggle: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#FF4444",
+    backgroundColor: "#fff",
+  },
+  redSheetToggleActive: {
+    backgroundColor: "#FF4444",
+  },
+  redSheetToggleText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#FF4444",
+  },
+  redSheetToggleTextActive: {
+    color: "#fff",
   },
   placeholder: {
     width: 30,

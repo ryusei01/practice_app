@@ -15,6 +15,9 @@ RUN pip install --no-cache-dir -r requirements-prod.txt
 # アプリケーションコードをコピー
 COPY app/ ./app/
 
+# 教科書ファイルをコピー（CI で docs/textbook が backend/ 内に配置済み）
+COPY docs/textbook/ ./docs/textbook/
+
 # Cloud Run は PORT 環境変数でポートを指定する
 EXPOSE 8080
 

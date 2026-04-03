@@ -11,10 +11,16 @@ import {
   TextInput,
   Platform,
   Modal,
+  KeyboardAvoidingView,
 } from "react-native";
 import { useLanguage } from "../contexts/LanguageContext";
 import { evaluateTextAnswer } from "../utils/aiEvaluator";
 import { translateText, translateQuestion } from "../api/translate";
+import MediaPlayer from "./MediaPlayer";
+import MathText from "./MathText";
+import InterstitialAdModal from "./InterstitialAdModal";
+
+const AD_INTERVAL = 20;
 
 // Platform-specific import for expo-speech (not available on web)
 let Speech: any = null;
@@ -31,6 +37,7 @@ export interface QuizQuestion {
   explanation?: string;
   category?: string;
   difficulty?: number;
+  media_urls?: { type: string; url: string; position: string; caption?: string }[];
 }
 
 export interface QuizAnswer {
@@ -50,6 +57,7 @@ export interface QuizEngineProps {
   showAdvancedFeatures?: boolean; // 音声読み上げ、AI評価など
   initialRedSheetEnabled?: boolean; // 赤シート機能の初期状態
   initialQuestionIndex?: number; // 開始する問題のインデックス
+  onProgressChange?: (currentIndex: number) => void;
 }
 
 export default function QuizEngine({
@@ -60,6 +68,7 @@ export default function QuizEngine({
   showAdvancedFeatures = true,
   initialRedSheetEnabled = false,
   initialQuestionIndex = 0,
+  onProgressChange,
 }: QuizEngineProps) {
   const { t, language } = useLanguage();
 
@@ -87,6 +96,7 @@ export default function QuizEngine({
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
   const [showOverrideModal, setShowOverrideModal] = useState(false);
+  const [showAdModal, setShowAdModal] = useState(false);
   const [overrideType, setOverrideType] = useState<'correct' | 'incorrect'>('correct');
   const [overrideMessage, setOverrideMessage] = useState("");
 
@@ -94,6 +104,10 @@ export default function QuizEngine({
   useEffect(() => {
     answersRef.current = answers;
   }, [answers]);
+
+  useEffect(() => {
+    onProgressChange?.(currentQuestionIndex);
+  }, [currentQuestionIndex]);
 
   // 言語を自動検出する関数
   const detectLanguage = (text: string): string => {
@@ -358,7 +372,7 @@ export default function QuizEngine({
     }, 3000);
   };
 
-  const handleNextQuestion = () => {
+  const proceedToNextQuestion = () => {
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       setUserAnswer("");
@@ -366,10 +380,27 @@ export default function QuizEngine({
       setCanOverride(false);
       setStartTime(Date.now());
     } else {
-      // 全問終了 → 合計時間を計算して完了コールバックを呼び出す
       const totalTime = answersRef.current.reduce((sum, answer) => sum + answer.answer_time_sec, 0);
       onComplete(answersRef.current, score, totalTime);
     }
+  };
+
+  const handleNextQuestion = () => {
+    const answered = totalAnswered;
+    if (
+      answered > 0 &&
+      answered % AD_INTERVAL === 0 &&
+      currentQuestionIndex < questions.length - 1
+    ) {
+      setShowAdModal(true);
+      return;
+    }
+    proceedToNextQuestion();
+  };
+
+  const handleAdClosed = () => {
+    setShowAdModal(false);
+    proceedToNextQuestion();
   };
 
   const handleSubmitEarly = () => {
@@ -477,7 +508,11 @@ export default function QuizEngine({
   const currentQuestion = questions[currentQuestionIndex];
 
   return (
-    <ScrollView style={styles.container}>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       <View style={[styles.header, { backgroundColor: headerColor }]}>
         <View style={styles.headerTop}>
           <Text style={styles.progressText}>
@@ -524,7 +559,15 @@ export default function QuizEngine({
       </View>
 
       <View style={styles.questionCard}>
-        <Text style={styles.questionText}>{currentQuestion.question_text}</Text>
+        <MathText text={currentQuestion.question_text} style={styles.questionText} />
+
+        {currentQuestion.media_urls && currentQuestion.media_urls.length > 0 && (
+          <MediaPlayer
+            media={currentQuestion.media_urls as any}
+            position="question"
+            autoPlayAudio={autoPlay}
+          />
+        )}
 
         {/* 翻訳された問題文 */}
         {showTranslation && translatedQuestion && (
@@ -655,12 +698,17 @@ export default function QuizEngine({
             </View>
           )}
 
+          {currentQuestion.media_urls && currentQuestion.media_urls.length > 0 && (
+            <MediaPlayer
+              media={currentQuestion.media_urls as any}
+              position="answer"
+            />
+          )}
+
           {currentQuestion.explanation && (
             <View style={styles.explanationContainer}>
               <Text style={styles.explanationLabel}>{t("Explanation:", "解説:")}</Text>
-              <Text style={styles.explanationText}>
-                {currentQuestion.explanation}
-              </Text>
+              <MathText text={currentQuestion.explanation} style={styles.explanationText} />
             </View>
           )}
         </View>
@@ -853,7 +901,10 @@ export default function QuizEngine({
           <Text style={styles.overrideMessageText}>{overrideMessage}</Text>
         </View>
       )}
+
+      <InterstitialAdModal visible={showAdModal} onClose={handleAdClosed} />
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

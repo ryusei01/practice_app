@@ -26,10 +26,11 @@ function toRgba(color: string, opacity: number): string {
   return `rgba(0,0,0,${opacity})`;
 }
 
-/** Web では boxShadow のみ（shadow* 非推奨警告回避）、ネイティブは従来の shadow* */
+/** Web では boxShadow のみ（shadow* 非推奨警告回避）、ネイティブは shadow* + Android elevation */
 export function platformShadow(s: IosLikeShadow): ViewStyle {
   const { shadowColor, shadowOffset, shadowOpacity, shadowRadius } = s;
   const rgba = toRgba(shadowColor, shadowOpacity);
+  const elevation = Math.max(1, Math.round(shadowRadius / 2));
   return Platform.select<ViewStyle>({
     web: {
       boxShadow: `${shadowOffset.width}px ${shadowOffset.height}px ${shadowRadius}px 0 ${rgba}`,
@@ -39,6 +40,7 @@ export function platformShadow(s: IosLikeShadow): ViewStyle {
       shadowOffset,
       shadowOpacity,
       shadowRadius,
+      elevation,
     },
   }) as ViewStyle;
 }

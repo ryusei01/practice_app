@@ -30,6 +30,11 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker asia-northeast1-docker.pkg.dev --quiet
 
+      - name: Copy docs/textbook into backend build context
+        run: |
+          mkdir -p backend/docs/textbook
+          cp -r docs/textbook/* backend/docs/textbook/
+
       - name: Build and push Docker image
         run: |
           IMAGE="asia-northeast1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/quiz-marketplace/api:${{ github.sha }}"
@@ -60,10 +65,13 @@ jobs:
               STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }},\
               STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }},\
               STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }},\
+              STRIPE_PREMIUM_PRICE_ID=${{ secrets.STRIPE_PREMIUM_PRICE_ID }},\
               SMTP_HOST=smtp.gmail.com,\
               SMTP_PORT=587,\
               SMTP_USER=${{ secrets.SMTP_USER }},\
               SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }},\
               SMTP_FROM_EMAIL=${{ secrets.SMTP_USER }},\
               GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},\
+              GOOGLE_IOS_CLIENT_ID=${{ secrets.GOOGLE_IOS_CLIENT_ID }},\
+              GOOGLE_ANDROID_CLIENT_ID=${{ secrets.GOOGLE_ANDROID_CLIENT_ID }},\
               CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}"

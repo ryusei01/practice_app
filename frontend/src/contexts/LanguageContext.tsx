@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform, NativeModules } from 'react-native';
+import { Platform } from 'react-native';
+import { getLocales } from 'expo-localization';
 
 type Language = 'en' | 'ja';
 
@@ -20,33 +21,14 @@ export const useLanguage = () => {
   return context;
 };
 
-// システムの言語を取得
 const getSystemLanguage = (): Language => {
   try {
-    let systemLang = 'en';
-
-    if (Platform.OS === 'web') {
-      // Web: ブラウザの言語設定を取得
-      systemLang = navigator.language || navigator.languages?.[0] || 'en';
-    } else if (Platform.OS === 'ios') {
-      // iOS: ネイティブモジュールから取得
-      systemLang =
-        NativeModules.SettingsManager?.settings?.AppleLocale ||
-        NativeModules.SettingsManager?.settings?.AppleLanguages?.[0] ||
-        'en';
-    } else if (Platform.OS === 'android') {
-      // Android: ネイティブモジュールから取得
-      systemLang = NativeModules.I18nManager?.localeIdentifier || 'en';
-    }
-
-    // 言語コードを正規化（例: "ja-JP" -> "ja", "en-US" -> "en"）
-    const langCode = systemLang.split('-')[0].toLowerCase();
-
-    // 日本語の場合は 'ja'、それ以外は 'en'
+    const locales = getLocales();
+    const langCode = locales[0]?.languageCode ?? 'en';
     return langCode === 'ja' ? 'ja' : 'en';
   } catch (error) {
     console.error('Failed to get system language:', error);
-    return 'en'; // デフォルトは英語
+    return 'en';
   }
 };
 

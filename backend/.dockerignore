@@ -22,7 +22,7 @@ tests/
 
 # ドキュメント
 *.md
-docs/
+!docs/textbook/*.md
 
 # ビルド成果物
 dist/

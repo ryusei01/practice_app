@@ -96,6 +96,14 @@ export async function getAvailableTextbooks(): Promise<Textbook[]> {
   try {
     // バックエンドAPIから教科書リストを取得
     const apiTextbooks = await textbooksApi.getAvailable();
+
+    if (apiTextbooks.length === 0) {
+      console.log(
+        "[TextbookService] API returned empty list, using fallback"
+      );
+      return FALLBACK_TEXTBOOKS;
+    }
+
     cachedTextbooks = apiTextbooks.map((tb) => ({
       path: tb.path,
       name: tb.name,

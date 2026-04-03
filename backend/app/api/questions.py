@@ -9,6 +9,9 @@ from typing import List, Optional
 import uuid
 import csv
 import io
+import os
+import shutil
+from pathlib import Path
 
 from ..core.database import get_db
 from ..core.auth import get_current_active_user
@@ -531,10 +534,15 @@ async def bulk_upload_questions(
 
                 # question_type: 明示指定があればそのまま、なければ自動判定
                 question_type_raw = row.get('question_type', '').strip()
+                correct_answer_raw = row.get('correct_answer', '').strip()
                 if question_type_raw:
                     question_type = question_type_raw
+                elif options:
+                    question_type = 'multiple_choice'
+                elif correct_answer_raw.lower() in ('true', 'false'):
+                    question_type = 'true_false'
                 else:
-                    question_type = 'multiple_choice' if options else 'text_input'
+                    question_type = 'text_input'
 
                 # difficultyの処理
                 difficulty_str = row.get('difficulty', '').strip()
@@ -793,3 +801,95 @@ async def select_questions_by_range(
         })
 
     return result
+
+
+# --- Media upload / delete ---
+
+_IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".gif", ".webp"})
+_AUDIO_EXTENSIONS = frozenset({".mp3", ".m4a", ".wav", ".ogg"})
+_IMAGE_MAX_BYTES = 5 * 1024 * 1024   # 5 MB
+_AUDIO_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+UPLOADS_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
+
+
+@router.post("/{question_id}/media")
+async def upload_media(
+    question_id: str,
+    position: str = Query("question", regex="^(question|answer)$"),
+    caption: Optional[str] = Query(None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    question = db.query(Question).filter(Question.id == question_id).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    question_set = db.query(QuestionSet).filter(QuestionSet.id == question.question_set_id).first()
+    if not question_set or question_set.creator_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext in _IMAGE_EXTENSIONS:
+        media_type = "image"
+        max_bytes = _IMAGE_MAX_BYTES
+    elif ext in _AUDIO_EXTENSIONS:
+        media_type = "audio"
+        max_bytes = _AUDIO_MAX_BYTES
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type: {ext}. Allowed: {', '.join(sorted(_IMAGE_EXTENSIONS | _AUDIO_EXTENSIONS))}",
+        )
+
+    contents = await file.read()
+    if len(contents) > max_bytes:
+        raise HTTPException(status_code=400, detail=f"File too large. Max: {max_bytes // (1024*1024)} MB")
+
+    file_id = str(uuid.uuid4())
+    dest_dir = UPLOADS_DIR / question_id
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = dest_dir / f"{file_id}{ext}"
+    dest_path.write_bytes(contents)
+
+    url = f"/uploads/{question_id}/{file_id}{ext}"
+    media_entry = {"type": media_type, "url": url, "position": position}
+    if caption:
+        media_entry["caption"] = caption
+
+    media_urls = list(question.media_urls or [])
+    media_urls.append(media_entry)
+    question.media_urls = media_urls
+    db.commit()
+    db.refresh(question)
+
+    return {"message": "Media uploaded", "media": media_entry, "media_urls": question.media_urls}
+
+
+@router.delete("/{question_id}/media/{media_index}")
+async def delete_media(
+    question_id: str,
+    media_index: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    question = db.query(Question).filter(Question.id == question_id).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    question_set = db.query(QuestionSet).filter(QuestionSet.id == question.question_set_id).first()
+    if not question_set or question_set.creator_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    media_urls = list(question.media_urls or [])
+    if media_index < 0 or media_index >= len(media_urls):
+        raise HTTPException(status_code=400, detail="Invalid media index")
+
+    removed = media_urls.pop(media_index)
+    # Delete file from disk
+    file_path = UPLOADS_DIR.parent / removed["url"].lstrip("/")
+    if file_path.exists():
+        file_path.unlink()
+
+    question.media_urls = media_urls if media_urls else None
+    db.commit()
+
+    return {"message": "Media deleted", "media_urls": question.media_urls}

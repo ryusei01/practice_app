@@ -1,6 +1,7 @@
 from .ai import router as ai_router
 from .answers import router as answers_router
 from .auth import router as auth_router
+from .feedback import router as feedback_router
 from .question_sets import router as question_sets_router
 from .questions import router as questions_router
 from .payments import router as payments_router
@@ -11,4 +12,4 @@ from .textbooks import router as textbooks_router
 from .reports import router as reports_router
 from .subscriptions import router as subscriptions_router
 
-__all__ = ["ai_router", "answers_router", "auth_router", "question_sets_router", "questions_router", "payments_router", "admin_router", "two_factor_router", "translate_router", "textbooks_router", "reports_router", "subscriptions_router"]
+__all__ = ["ai_router", "answers_router", "auth_router", "feedback_router", "question_sets_router", "questions_router", "payments_router", "admin_router", "two_factor_router", "translate_router", "textbooks_router", "reports_router", "subscriptions_router"]

@@ -11,10 +11,13 @@ from typing import List
 router = APIRouter()
 
 # 教科書ファイルのベースディレクトリ
-# プロジェクトルートからの相対パス（backend/app/api/textbooks.py から ../../docs/textbook）
+# ローカル: プロジェクトルートからの相対パス（backend/app/api/textbooks.py → ../../../../docs/textbook）
+# Docker:  WORKDIR /app からの相対パス（/app/docs/textbook）
 _current_file = Path(__file__)
 _project_root = _current_file.parent.parent.parent.parent
 TEXTBOOK_BASE_DIR = _project_root / "docs" / "textbook"
+if not TEXTBOOK_BASE_DIR.exists():
+    TEXTBOOK_BASE_DIR = Path.cwd() / "docs" / "textbook"
 
 # ファイル追加時はここに path（ファイル名）と ja|en を追記。未登録は ja。
 TEXTBOOK_LANGUAGE_BY_PATH: dict[str, str] = {

@@ -1,14 +1,18 @@
 """
 問題集CRUD APIエンドポイント
 """
+import csv
+import io
 import json
 import logging
+import zipfile
 from datetime import datetime
 from typing import List, Optional
 import uuid
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, model_validator, field_validator
 from sqlalchemy.orm import Session
 
@@ -599,6 +603,65 @@ async def download_question_set(
     )
 
 
+_CSV_EXPORT_COLUMNS = [
+    "question_text", "question_type",
+    "option_1", "option_2", "option_3", "option_4",
+    "correct_answer", "explanation", "difficulty",
+    "category", "subcategory1", "subcategory2",
+]
+
+
+@router.get("/{question_set_id}/export-csv")
+async def export_question_set_csv(
+    question_set_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """自分が作成した問題集の全問題をCSVとしてダウンロードする。"""
+    question_set = db.query(QuestionSet).filter(QuestionSet.id == question_set_id).first()
+    if not question_set:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="問題集が見つかりません")
+    if question_set.creator_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="この問題集をエクスポートする権限がありません")
+
+    questions = (
+        db.query(Question)
+        .filter(Question.question_set_id == question_set_id)
+        .order_by(Question.order)
+        .all()
+    )
+
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=_CSV_EXPORT_COLUMNS)
+    writer.writeheader()
+    for q in questions:
+        opts = q.options or []
+        writer.writerow({
+            "question_text": q.question_text or "",
+            "question_type": q.question_type or "",
+            "option_1": opts[0] if len(opts) > 0 else "",
+            "option_2": opts[1] if len(opts) > 1 else "",
+            "option_3": opts[2] if len(opts) > 2 else "",
+            "option_4": opts[3] if len(opts) > 3 else "",
+            "correct_answer": q.correct_answer or "",
+            "explanation": q.explanation or "",
+            "difficulty": q.difficulty if q.difficulty is not None else "",
+            "category": q.category or "",
+            "subcategory1": q.subcategory1 or "",
+            "subcategory2": q.subcategory2 or "",
+        })
+
+    safe_title = "".join(c for c in (question_set.title or "export") if c.isalnum() or c in " _-").strip() or "export"
+    filename = f"{safe_title}.csv"
+
+    buf.seek(0)
+    return StreamingResponse(
+        iter(["\ufeff" + buf.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # --- 著作権チェック ---
 
 class CopyrightCheckResponse(BaseModel):
@@ -741,3 +804,78 @@ async def run_copyright_check(
         record,
         reasons_list=result.get("reasons", []),
     )
+
+
+# --- Anki .apkg import ---
+
+@router.post("/import-anki")
+async def import_anki(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Import an Anki .apkg file and create a new question set with all cards."""
+    import tempfile, os
+    from ..services.anki_importer import import_apkg
+
+    filename = (file.filename or "").strip()
+    if not filename.lower().endswith(".apkg"):
+        raise HTTPException(status_code=400, detail="Only .apkg files are supported")
+
+    contents = await file.read()
+    if len(contents) > 50 * 1024 * 1024:  # 50 MB limit
+        raise HTTPException(status_code=400, detail="File too large (max 50 MB)")
+
+    # Write to temp file
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".apkg")
+    try:
+        tmp.write(contents)
+        tmp.close()
+
+        result = import_apkg(tmp.name, current_user.id)
+
+        # Create question set
+        question_set_id = str(uuid.uuid4())
+        all_tags = set()
+        for q in result["questions"]:
+            all_tags.update(q.get("tags", []))
+
+        new_set = QuestionSet(
+            id=question_set_id,
+            title=result["title"],
+            description=f"Imported from Anki ({len(result['questions'])} cards)",
+            category="Anki Import",
+            creator_id=current_user.id,
+            tags=list(all_tags) if all_tags else None,
+        )
+        db.add(new_set)
+
+        # Create questions
+        for idx, q_data in enumerate(result["questions"]):
+            question = Question(
+                id=str(uuid.uuid4()),
+                question_set_id=question_set_id,
+                question_text=q_data["question_text"],
+                question_type=q_data["question_type"],
+                options=q_data.get("options"),
+                correct_answer=q_data["correct_answer"],
+                media_urls=q_data.get("media_urls"),
+                order=idx,
+            )
+            db.add(question)
+
+        db.commit()
+
+        return {
+            "message": "Anki deck imported successfully",
+            "question_set_id": question_set_id,
+            "title": result["title"],
+            "total_questions": len(result["questions"]),
+        }
+
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="Invalid .apkg file (not a valid ZIP)")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        os.unlink(tmp.name)

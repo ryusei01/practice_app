@@ -361,12 +361,12 @@ export default function Home() {
                   {t("Premium Plan", "プレミアムプラン")}
                 </Text>
                 <Text style={[styles.serviceCardPrice, styles.serviceCardPricePremium]}>
-                  {t("350 JPY (tax incl.) / month", "350円（税込）/ 月")}
+                  {t("1,800 JPY (tax incl.) / year", "1,800円（税込）/ 年")}
                 </Text>
                 <Text style={styles.serviceCardDesc}>
                   {t(
-                    "Cloud sync & backup across devices. Includes 100 JPY account credit for marketplace purchases.",
-                    "クラウド同期・バックアップで複数端末から学習可能。マーケットプレイス用の100円分クレジット付き。"
+                    "Cloud sync & backup across devices. Includes 500 JPY account credit for marketplace purchases.",
+                    "クラウド同期・バックアップで複数端末から学習可能。マーケットプレイス用の500円分クレジット付き。"
                   )}
                 </Text>
               </View>

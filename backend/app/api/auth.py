@@ -167,10 +167,19 @@ async def _google_login_impl(body: GoogleAuthRequest, db: Session):
 
     tokeninfo = tokeninfo_response.json()
 
-    # GOOGLE_CLIENT_ID が設定されている場合は aud を照合
-    if settings.GOOGLE_CLIENT_ID:
+    # 設定済みの Google Client ID いずれかと aud が一致するか照合
+    allowed_client_ids = {
+        cid
+        for cid in [
+            settings.GOOGLE_CLIENT_ID,
+            settings.GOOGLE_IOS_CLIENT_ID,
+            settings.GOOGLE_ANDROID_CLIENT_ID,
+        ]
+        if cid
+    }
+    if allowed_client_ids:
         aud = tokeninfo.get("aud", "")
-        if aud != settings.GOOGLE_CLIENT_ID:
+        if aud not in allowed_client_ids:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="無効なGoogleトークンです"

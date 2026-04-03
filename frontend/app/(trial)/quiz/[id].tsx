@@ -17,11 +17,13 @@ import QuizEngine, { QuizQuestion, QuizAnswer } from "../../../src/components/Qu
 import Modal from "../../../src/components/Modal";
 
 export default function TrialQuizScreen() {
-  const { id, startIndex, questionIds } = useLocalSearchParams<{ 
+  const { id, startIndex, questionIds, mode } = useLocalSearchParams<{ 
     id: string; 
     startIndex?: string;
     questionIds?: string;
+    mode?: string;
   }>();
+  const isAllMode = mode === "all";
   const [questionSet, setQuestionSet] = useState<LocalQuestionSet | null>(null);
   const [selectedQuestions, setSelectedQuestions] = useState<LocalQuestion[] | null>(null);
   const [showResult, setShowResult] = useState(false);
@@ -85,8 +87,34 @@ export default function TrialQuizScreen() {
     }
   };
 
+  const handleProgressChange = async (currentIndex: number) => {
+    if (!isAllMode || !questionSet) return;
+    try {
+      await AsyncStorage.setItem(
+        `@quiz_progress_${id}`,
+        JSON.stringify({
+          currentIndex,
+          totalQuestions: questionSet.questions.length,
+          savedAt: new Date().toISOString(),
+        })
+      );
+    } catch (e) {
+      console.warn("Failed to save quiz progress:", e);
+    }
+  };
+
+  const clearProgress = async () => {
+    try {
+      await AsyncStorage.removeItem(`@quiz_progress_${id}`);
+    } catch (e) {
+      console.warn("Failed to clear quiz progress:", e);
+    }
+  };
+
   const handleQuizComplete = async (answers: QuizAnswer[], score: number, totalTime: number) => {
     if (!questionSet) return;
+
+    if (isAllMode) await clearProgress();
 
     // 結果を保存
     try {
@@ -266,7 +294,8 @@ export default function TrialQuizScreen() {
     id: q.id || `${questionSet.id}_q${index}`,
     question_text: q.question,
     correct_answer: q.answer,
-    question_type: "text_input",
+    question_type: q.question_type || "text_input",
+    options: q.options,
   }));
 
   return (
@@ -285,6 +314,7 @@ export default function TrialQuizScreen() {
         showAdvancedFeatures={true}
         initialRedSheetEnabled={questionSet.redSheetEnabled || false}
         initialQuestionIndex={parseInt(startIndex || "0")}
+        onProgressChange={isAllMode ? handleProgressChange : undefined}
       />
       <Modal
         visible={errorModalVisible}

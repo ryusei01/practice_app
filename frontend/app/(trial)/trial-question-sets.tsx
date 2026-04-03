@@ -8,8 +8,14 @@ import {
   Platform,
   ScrollView,
   useWindowDimensions,
+  TextInput,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { useRouter, useFocusEffect, usePathname } from "expo-router";
 import { useLanguage } from "../../src/contexts/LanguageContext";
 import {
@@ -196,6 +202,167 @@ export default function TrialQuestionSetsScreen() {
     }
   }, [language]);
 
+  // CSV import → create local question set flow
+  const [csvImportModalVisible, setCsvImportModalVisible] = useState(false);
+  const [csvImportTitle, setCsvImportTitle] = useState("");
+  const [csvImportFileContent, setCsvImportFileContent] = useState<string | null>(null);
+  const [csvImportFileName, setCsvImportFileName] = useState("");
+  const [csvImporting, setCsvImporting] = useState(false);
+
+  const handlePickCSVAndCreate = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["text/csv", "text/comma-separated-values", "text/plain"],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled) return;
+      const file = result.assets[0];
+
+      let content: string;
+      if (Platform.OS === "web") {
+        if (file.uri.startsWith("blob:") || file.uri.startsWith("data:")) {
+          const resp = await fetch(file.uri);
+          content = await resp.text();
+        } else {
+          content = file.uri;
+        }
+      } else {
+        content = await FileSystem.readAsStringAsync(file.uri, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
+      }
+
+      const suggestedTitle = (file.name || "")
+        .replace(/\.csv$/i, "")
+        .replace(/[_-]/g, " ")
+        .trim();
+      setCsvImportFileContent(content);
+      setCsvImportFileName(file.name || "file.csv");
+      setCsvImportTitle(suggestedTitle || "");
+      setCsvImportModalVisible(true);
+    } catch (error) {
+      console.error("Failed to pick CSV:", error);
+      showModal(
+        t("Error", "エラー"),
+        t("Failed to select file", "ファイルの選択に失敗しました"),
+        [{ text: t("OK", "OK"), onPress: () => setModalVisible(false) }]
+      );
+    }
+  };
+
+  const handleConfirmCSVImport = async () => {
+    if (!csvImportFileContent || !csvImportTitle.trim()) return;
+    setCsvImporting(true);
+    try {
+      const parsed = localStorageService.parseCSVToQuestionSet(
+        csvImportFileContent,
+        csvImportTitle.trim(),
+        ""
+      );
+      if (parsed.questions.length === 0) {
+        showModal(
+          t("Error", "エラー"),
+          t(
+            "No valid questions found in the CSV file",
+            "CSVファイルに有効な問題が見つかりませんでした"
+          ),
+          [{ text: t("OK", "OK"), onPress: () => setModalVisible(false) }]
+        );
+        setCsvImporting(false);
+        return;
+      }
+      await localStorageService.saveTrialQuestionSet(parsed);
+      setCsvImportModalVisible(false);
+      setCsvImportFileContent(null);
+      setCsvImportFileName("");
+      setCsvImportTitle("");
+      showModal(
+        t("Success", "成功"),
+        t(
+          `Created "${parsed.title}" with ${parsed.questions.length} questions!`,
+          `「${parsed.title}」を${parsed.questions.length}問で作成しました！`
+        ),
+        [{ text: t("OK", "OK"), onPress: () => setModalVisible(false) }]
+      );
+      await loadQuestionSets();
+    } catch (error: any) {
+      console.error("Failed to create from CSV:", error);
+      showModal(
+        t("Error", "エラー"),
+        t(
+          "Failed to create question set from CSV",
+          "CSVからの問題集作成に失敗しました"
+        ),
+        [{ text: t("OK", "OK"), onPress: () => setModalVisible(false) }]
+      );
+    } finally {
+      setCsvImporting(false);
+    }
+  };
+
+  const handleExportTrialCSV = async (item: LocalQuestionSet) => {
+    try {
+      const escapeCSV = (val: string) => {
+        if (val.includes(",") || val.includes('"') || val.includes("\n")) {
+          return `"${val.replace(/"/g, '""')}"`;
+        }
+        return val;
+      };
+      const header =
+        "question_text,question_type,option_1,option_2,option_3,option_4,correct_answer,explanation,difficulty,category,subcategory1,subcategory2";
+      const rows = item.questions.map((q) => {
+        const diffVal =
+          q.difficulty === "easy" ? "0.2" : q.difficulty === "hard" ? "0.8" : "0.5";
+        return [
+          escapeCSV(q.question || ""),
+          "text_input",
+          "", "", "", "",
+          escapeCSV(q.answer || ""),
+          "",
+          diffVal,
+          escapeCSV(q.category || ""),
+          escapeCSV(q.subcategory1 || ""),
+          escapeCSV(q.subcategory2 || ""),
+        ].join(",");
+      });
+      const csvData = "\ufeff" + header + "\n" + rows.join("\n");
+      const safeTitle =
+        (item.title || "export").replace(/[^a-zA-Z0-9\u3000-\u9fff_-]/g, "_") || "export";
+      const filename = `${safeTitle}.csv`;
+
+      if (Platform.OS === "web") {
+        const blob = new Blob([csvData], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const fileUri = FileSystem.documentDirectory + filename;
+        await FileSystem.writeAsStringAsync(fileUri, csvData, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: "text/csv",
+            dialogTitle: t("Export CSV", "CSVをエクスポート"),
+            UTI: "public.comma-separated-values-text",
+          });
+        } else {
+          Alert.alert(t("Saved", "保存完了"), fileUri);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to export trial CSV:", error);
+      showModal(
+        t("Error", "エラー"),
+        t("Failed to export CSV", "CSVのエクスポートに失敗しました"),
+        [{ text: t("OK", "OK"), onPress: () => setModalVisible(false) }]
+      );
+    }
+  };
+
   const handleDelete = async (id: string) => {
     showModal(
       t("Delete Question Set", "問題セットを削除"),
@@ -305,20 +472,33 @@ export default function TrialQuestionSetsScreen() {
             )}
           </View>
         </TouchableOpacity>
-        {!isDefaultSet && (
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={() => handleDelete(item.id)}
-            testID={`trial-delete-btn-${item.id}`}
-          >
-            <Text
-              style={styles.deleteButtonText}
-              nativeID={`trial-delete-text-${item.id}`}
+        <View style={styles.cardActions}>
+          {item.questions.length > 0 && (
+            <TouchableOpacity
+              style={styles.csvExportBadge}
+              onPress={() => handleExportTrialCSV(item)}
+              testID={`trial-csv-export-btn-${item.id}`}
             >
-              {t("Delete", "削除")}
-            </Text>
-          </TouchableOpacity>
-        )}
+              <Text style={styles.csvExportBadgeText}>
+                {t("CSV", "CSV")}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {!isDefaultSet && (
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={() => handleDelete(item.id)}
+              testID={`trial-delete-btn-${item.id}`}
+            >
+              <Text
+                style={styles.deleteButtonText}
+                nativeID={`trial-delete-text-${item.id}`}
+              >
+                {t("Delete", "削除")}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     );
   };
@@ -584,30 +764,51 @@ export default function TrialQuestionSetsScreen() {
           </View>
         )}
 
-        <TouchableOpacity
-          style={[
-            styles.createButton,
-            {
-              padding: isSmallScreen ? 12 : 15,
-            },
-          ]}
-          onPress={() =>
-            user
-              ? router.push("/(app)/question-sets/create")
-              : router.push("/(trial)/create")
-          }
-          testID="trial-btn-create"
-        >
-          <Text
+        <View style={styles.createButtonRow}>
+          <TouchableOpacity
             style={[
-              styles.createButtonText,
-              { fontSize: isSmallScreen ? 14 : 16 },
+              styles.createButton,
+              {
+                padding: isSmallScreen ? 12 : 15,
+              },
             ]}
-            nativeID="trial-btn-create-text"
+            onPress={() =>
+              user
+                ? router.push("/(app)/question-sets/create")
+                : router.push("/(trial)/create")
+            }
+            testID="trial-btn-create"
           >
-            {t("Create Question Set", "問題セットを作成")}
-          </Text>
-        </TouchableOpacity>
+            <Text
+              style={[
+                styles.createButtonText,
+                { fontSize: isSmallScreen ? 14 : 16 },
+              ]}
+              nativeID="trial-btn-create-text"
+            >
+              {t("Create Question Set", "問題セットを作成")}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.csvImportButton,
+              {
+                padding: isSmallScreen ? 12 : 15,
+              },
+            ]}
+            onPress={handlePickCSVAndCreate}
+            testID="trial-btn-csv-import"
+          >
+            <Text
+              style={[
+                styles.csvImportButtonText,
+                { fontSize: isSmallScreen ? 14 : 16 },
+              ]}
+            >
+              {t("CSV Import", "CSV取込")}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       <Modal
@@ -617,6 +818,63 @@ export default function TrialQuestionSetsScreen() {
         buttons={modalConfig.buttons}
         onClose={() => setModalVisible(false)}
       />
+
+      <Modal
+        visible={csvImportModalVisible}
+        title={t("Create from CSV", "CSVから問題集を作成")}
+        onClose={() => {
+          setCsvImportModalVisible(false);
+          setCsvImportFileContent(null);
+          setCsvImportFileName("");
+          setCsvImportTitle("");
+        }}
+      >
+        <View style={styles.csvImportModalContent}>
+          <Text style={styles.csvImportFileName}>{csvImportFileName}</Text>
+          <Text style={styles.csvImportLabel}>
+            {t("Question Set Title", "問題集のタイトル")}
+          </Text>
+          <TextInput
+            style={styles.csvImportInput}
+            value={csvImportTitle}
+            onChangeText={setCsvImportTitle}
+            placeholder={t("Enter title", "タイトルを入力")}
+            autoFocus
+          />
+          <View style={styles.csvImportActions}>
+            <TouchableOpacity
+              style={styles.csvImportCancelButton}
+              onPress={() => {
+                setCsvImportModalVisible(false);
+                setCsvImportFileContent(null);
+                setCsvImportFileName("");
+                setCsvImportTitle("");
+              }}
+            >
+              <Text style={styles.csvImportCancelText}>
+                {t("Cancel", "キャンセル")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.csvImportConfirmButton,
+                (!csvImportTitle.trim() || csvImporting) &&
+                  styles.csvImportConfirmDisabled,
+              ]}
+              onPress={handleConfirmCSVImport}
+              disabled={!csvImportTitle.trim() || csvImporting}
+            >
+              {csvImporting ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.csvImportConfirmText}>
+                  {t("Create", "作成")}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -742,13 +1000,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "bold",
   },
+  cardActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+  },
+  csvExportBadge: {
+    backgroundColor: "#30B060",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  csvExportBadgeText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   deleteButton: {
     backgroundColor: "#FF3B30",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
-    alignSelf: "flex-end",
-    marginTop: 10,
   },
   deleteButtonText: {
     color: "#fff",
@@ -765,17 +1039,91 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
   },
+  createButtonRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 20,
+  },
   createButton: {
+    flex: 1,
     backgroundColor: "#007AFF",
     borderRadius: 12,
     padding: 15,
     alignItems: "center",
-    marginBottom: 20,
   },
   createButtonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  csvImportButton: {
+    flex: 1,
+    backgroundColor: "#FF9500",
+    borderRadius: 12,
+    padding: 15,
+    alignItems: "center",
+  },
+  csvImportButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  csvImportModalContent: {
+    padding: 4,
+  },
+  csvImportFileName: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  csvImportLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+  },
+  csvImportInput: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 20,
+    backgroundColor: "#fff",
+  },
+  csvImportActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  csvImportCancelButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  csvImportCancelText: {
+    color: "#666",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  csvImportConfirmButton: {
+    backgroundColor: "#007AFF",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    minWidth: 80,
+    alignItems: "center",
+  },
+  csvImportConfirmDisabled: {
+    backgroundColor: "#B0B0B0",
+  },
+  csvImportConfirmText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
   },
   filterRow: {
     flexDirection: "row",

@@ -1,6 +1,7 @@
 import React, { ReactNode } from "react";
 import { platformShadow } from "@/src/styles/platformShadow";
 import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, usePathname } from "expo-router";
 import { useAuth } from "../contexts/AuthContext";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -20,6 +21,7 @@ export default function Header({ title, leftComponent, rightComponent }: HeaderP
   const { t } = useLanguage();
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 600;
+  const insets = useSafeAreaInsets();
 
   // ホームページかどうかを判定（戻るボタンを非表示にする）
   const ROOT_PAGES = ["/", "/index", "/dashboard", "/(app)/dashboard"];
@@ -28,11 +30,11 @@ export default function Header({ title, leftComponent, rightComponent }: HeaderP
   // マイページかどうかを判定
   const isMyPage = pathname === "/mypage" || pathname.includes("/mypage");
   
-  // 認証済みでマイページ以外の場合、マイページリンクを表示
-  const shouldShowMyPageLink = isAuthenticated && !isMyPage && !isHomePage && rightComponent == null;
+  const showMyPageLink = isAuthenticated && !isMyPage && rightComponent == null;
+  const showLoginLink = !isAuthenticated && rightComponent == null;
 
   return (
-    <View style={styles.header} nativeID="app-header">
+    <View style={[styles.header, { paddingTop: Math.max(insets.top, 10) + 8 }]} nativeID="app-header">
       <View style={styles.headerContent}>
         {leftComponent ? (
           <View
@@ -55,7 +57,11 @@ export default function Header({ title, leftComponent, rightComponent }: HeaderP
             </TouchableOpacity>
           )
         )}
-        <View style={styles.titleContainer}>
+        <TouchableOpacity
+          onPress={() => router.push("/")}
+          activeOpacity={0.7}
+          style={styles.titleContainer}
+        >
           <Text style={styles.appName} nativeID="app-name">
             AI Practice Book{" "}
             <Text style={styles.beta} nativeID="app-version">
@@ -67,14 +73,14 @@ export default function Header({ title, leftComponent, rightComponent }: HeaderP
               {title}
             </Text>
           )}
-        </View>
-        {(rightComponent || shouldShowMyPageLink) && (
+        </TouchableOpacity>
+        {(rightComponent || showMyPageLink || showLoginLink) && (
           <View
             style={styles.rightComponent}
             testID="header-right-component"
             nativeID="header-right-component"
           >
-            {rightComponent || (
+            {rightComponent || (showMyPageLink ? (
               <TouchableOpacity
                 style={styles.myPageLink}
                 onPress={() => router.push("/(app)/mypage")}
@@ -87,7 +93,20 @@ export default function Header({ title, leftComponent, rightComponent }: HeaderP
                   {t("My Profile", "マイページ")}
                 </Text>
               </TouchableOpacity>
-            )}
+            ) : showLoginLink ? (
+              <TouchableOpacity
+                style={styles.myPageLink}
+                onPress={() => router.push("/(auth)/login")}
+                testID="header-login-link"
+              >
+                <Text
+                  style={[styles.myPageLinkText, { fontSize: isSmallScreen ? 14 : 16 }]}
+                  nativeID="header-login-text"
+                >
+                  {t("Sign In", "ログイン")}
+                </Text>
+              </TouchableOpacity>
+            ) : null)}
           </View>
         )}
       </View>
@@ -100,7 +119,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#007AFF",
     paddingVertical: 16,
     paddingHorizontal: 20,
-    paddingTop: 10, // ステータスバー分のスペース
     ...platformShadow({
       shadowColor: "#000",
       shadowOffset: { width: 0, height: 2 },

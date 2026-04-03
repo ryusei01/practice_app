@@ -64,4 +64,31 @@ export const aiApi = {
     const response = await apiClient.get(`/ai/adaptive-difficulty/${userId}/${category}`);
     return response.data;
   },
+
+  generateFromImage: async (file: { uri: string; name: string; type: string }, count: number = 5): Promise<{
+    questions: Array<{
+      question_text: string;
+      question_type: string;
+      options: string[] | null;
+      correct_answer: string;
+      explanation: string | null;
+      difficulty: number;
+      category: string | null;
+    }>;
+    total: number;
+  }> => {
+    const formData = new FormData();
+    if (file.uri.startsWith('blob:')) {
+      const response = await fetch(file.uri);
+      const blob = await response.blob();
+      formData.append('file', blob, file.name);
+    } else {
+      formData.append('file', { uri: file.uri, name: file.name, type: file.type } as any);
+    }
+    const response = await apiClient.post(`/ai/generate-from-image?count=${count}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    });
+    return response.data;
+  },
 };

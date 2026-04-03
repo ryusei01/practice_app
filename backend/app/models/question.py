@@ -70,6 +70,7 @@ class Question(Base):
     options = Column(JSON)
     correct_answer = Column(String, nullable=False)
     explanation = Column(Text)
+    media_urls = Column(JSON, nullable=True)  # [{"type":"image"|"audio","url":"...","position":"question"|"answer","caption":"..."}]
 
     # メタデータ
     difficulty = Column(Float, default=0.5)  # 0.0(易) - 1.0(難)

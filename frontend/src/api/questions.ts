@@ -1,5 +1,12 @@
 import apiClient from './client';
 
+export interface MediaItem {
+  type: 'image' | 'audio';
+  url: string;
+  position: 'question' | 'answer';
+  caption?: string;
+}
+
 export interface Question {
   id: string;
   question_set_id: string;
@@ -16,6 +23,7 @@ export interface Question {
   total_attempts: number;
   correct_count: number;
   average_time_sec: number;
+  media_urls: MediaItem[] | null;
 }
 
 export interface QuestionCreate {
@@ -123,6 +131,28 @@ export const questionsApi = {
     const response = await apiClient.get(`/questions/groups/${questionSetId}`, {
       params: { group_by: groupBy || 'subcategory1' },
     });
+    return response.data;
+  },
+
+  uploadMedia: async (questionId: string, file: { uri: string; name: string; type: string }, position: 'question' | 'answer' = 'question', caption?: string): Promise<{ message: string; media: MediaItem; media_urls: MediaItem[] }> => {
+    const formData = new FormData();
+    if (file.uri.startsWith('blob:')) {
+      const response = await fetch(file.uri);
+      const blob = await response.blob();
+      formData.append('file', blob, file.name);
+    } else {
+      formData.append('file', { uri: file.uri, name: file.name, type: file.type } as any);
+    }
+    const params = new URLSearchParams({ position });
+    if (caption) params.set('caption', caption);
+    const response = await apiClient.post(`/questions/${questionId}/media?${params}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  deleteMedia: async (questionId: string, mediaIndex: number): Promise<{ message: string; media_urls: MediaItem[] | null }> => {
+    const response = await apiClient.delete(`/questions/${questionId}/media/${mediaIndex}`);
     return response.data;
   },
 };

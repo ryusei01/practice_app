@@ -1,16 +1,22 @@
 """
 AI関連のAPIエンドポイント
 """
+import base64
+import csv
+import io
+import json
 import logging
+import re
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
 from ..core.database import get_db
+from ..core.config import settings
 from ..ai import QuestionRecommender, ScorePredictor
 from ..services.learning_plan_generator import get_learning_plan_generator
 
@@ -197,3 +203,109 @@ async def get_adaptive_difficulty(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Image OCR → Question Generation ---
+
+_VISION_SYSTEM_PROMPT = """You are a quiz generator. Given an image (textbook page, whiteboard, notes, etc.),
+extract the content and generate quiz questions in CSV format.
+
+Output ONLY valid CSV with this header (no markdown fences, no commentary):
+question_text,question_type,option_1,option_2,option_3,option_4,correct_answer,explanation,difficulty,category
+
+Rules:
+- Generate 3-10 questions based on the image content
+- Mix question types: multiple_choice, true_false, text_input
+- For multiple_choice: fill option_1 through option_4, correct_answer must match one option exactly
+- For true_false: leave options empty, correct_answer is "true" or "false"
+- For text_input: leave options empty, correct_answer is the answer text
+- difficulty: 0.0 to 1.0
+- Use the same language as the image content
+- Be accurate — do not fabricate information not present in the image
+"""
+
+
+@router.post("/generate-from-image")
+async def generate_from_image(
+    file: UploadFile = File(...),
+    count: int = Query(5, ge=1, le=20),
+):
+    """Generate quiz questions from an image using a vision LLM."""
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image too large (max 10 MB)")
+
+    b64_image = base64.b64encode(contents).decode("utf-8")
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                f"{settings.OLLAMA_BASE_URL}/api/generate",
+                json={
+                    "model": settings.OLLAMA_VISION_MODEL,
+                    "prompt": f"{_VISION_SYSTEM_PROMPT}\n\nGenerate approximately {count} questions from this image.",
+                    "images": [b64_image],
+                    "stream": False,
+                    "options": {"temperature": 0.3},
+                },
+            )
+            response.raise_for_status()
+            result = response.json()
+            raw_text = result.get("response", "")
+
+    except httpx.HTTPError as e:
+        logger.error("Vision LLM call failed: %s", e)
+        raise HTTPException(status_code=502, detail="Vision model unavailable. Ensure Ollama is running with a vision model.")
+
+    # Parse CSV output
+    csv_text = raw_text.strip()
+    # Remove markdown fences if present
+    csv_text = re.sub(r"^```(?:csv)?\s*\n?", "", csv_text)
+    csv_text = re.sub(r"\n?```\s*$", "", csv_text)
+
+    questions = []
+    try:
+        reader = csv.DictReader(io.StringIO(csv_text))
+        for row in reader:
+            q_text = (row.get("question_text") or "").strip()
+            c_answer = (row.get("correct_answer") or "").strip()
+            if not q_text or not c_answer:
+                continue
+
+            opts = [row.get(f"option_{i}", "").strip() for i in range(1, 5)]
+            options = [o for o in opts if o] or None
+
+            q_type = (row.get("question_type") or "").strip()
+            if not q_type:
+                if options:
+                    q_type = "multiple_choice"
+                elif c_answer.lower() in ("true", "false"):
+                    q_type = "true_false"
+                else:
+                    q_type = "text_input"
+
+            diff_str = (row.get("difficulty") or "0.5").strip()
+            try:
+                difficulty = max(0.0, min(1.0, float(diff_str)))
+            except ValueError:
+                difficulty = 0.5
+
+            questions.append({
+                "question_text": q_text,
+                "question_type": q_type,
+                "options": options,
+                "correct_answer": c_answer,
+                "explanation": (row.get("explanation") or "").strip() or None,
+                "difficulty": difficulty,
+                "category": (row.get("category") or "").strip() or None,
+            })
+    except Exception as e:
+        logger.warning("Failed to parse vision LLM CSV output: %s\nRaw: %s", e, csv_text[:500])
+
+    if not questions:
+        raise HTTPException(
+            status_code=422,
+            detail="Could not generate questions from this image. Try a clearer image or different content.",
+        )
+
+    return {"questions": questions, "total": len(questions)}

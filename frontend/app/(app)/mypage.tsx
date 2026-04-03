@@ -25,6 +25,7 @@ import {
 } from "../../src/api/questionSets";
 import { paymentsApi, Purchase } from "../../src/api/payments";
 import apiClient from "../../src/api/client";
+import FeedbackModal from "../../src/components/FeedbackModal";
 
 interface AnswerHistory {
   id: string;
@@ -56,6 +57,9 @@ export default function MyPageScreen() {
   >([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
+  // フィードバックモーダル用のstate
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   // 編集モーダル用のstate
   const [showEditUsernameModal, setShowEditUsernameModal] = useState(false);
@@ -688,6 +692,16 @@ export default function MyPageScreen() {
           </Text>
 
           <TouchableOpacity
+            style={[styles.actionButton, styles.feedbackButton]}
+            onPress={() => setShowFeedbackModal(true)}
+            testID="feedback-button"
+          >
+            <Text style={styles.actionButtonText}>
+              {t("Review & Feedback", "レビュー・ご要望")}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={() => router.push("/(app)/settings")}
             testID="settings-button"
@@ -715,6 +729,11 @@ export default function MyPageScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+
+        <FeedbackModal
+          visible={showFeedbackModal}
+          onClose={() => setShowFeedbackModal(false)}
+        />
 
         {/* ユーザー名編集モーダル */}
         <Modal
@@ -927,6 +946,9 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  feedbackButton: {
+    backgroundColor: "#5A67D8",
   },
   logoutButton: {
     backgroundColor: "#F44336",

@@ -10,9 +10,14 @@ import {
   RefreshControl,
   Alert,
   useWindowDimensions,
+  TextInput,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import {
   questionSetsApi,
   QuestionSet,
@@ -21,6 +26,7 @@ import {
   resolvedContentLanguage,
   contentLanguageDisplayLabel,
 } from "../../../src/api/questionSets";
+import { questionsApi } from "../../../src/api/questions";
 import {
   getAvailableTextbooks,
   Textbook,
@@ -33,6 +39,8 @@ import { loadDefaultQuestionSets } from "../../../src/data/defaultQuestionSets";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
 import AdBanner from "../../../src/components/AdBanner";
+import FeedbackModal from "../../../src/components/FeedbackModal";
+import Modal from "../../../src/components/Modal";
 import { srsService } from "../../../src/services/srsService";
 
 export default function MyQuestionSetsScreen() {
@@ -47,6 +55,7 @@ export default function MyQuestionSetsScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [languageFilter, setLanguageFilter] = useState<LanguageFilter>("all");
   const [showDefaultSets, setShowDefaultSets] = useState(true);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const router = useRouter();
   const { user, isLoading: isAuthLoading } = useAuth();
   const { t } = useLanguage();
@@ -190,6 +199,188 @@ export default function MyQuestionSetsScreen() {
     router.push("/(app)/premium-upgrade");
   };
 
+  const handleExportMyCSV = async (item: QuestionSet) => {
+    try {
+      const csvData = await questionSetsApi.exportCSV(item.id);
+      const safeTitle =
+        (item.title || "export").replace(/[^a-zA-Z0-9\u3000-\u9fff_-]/g, "_") || "export";
+      const filename = `${safeTitle}.csv`;
+
+      if (Platform.OS === "web") {
+        const blob = new Blob([csvData], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const fileUri = FileSystem.documentDirectory + filename;
+        await FileSystem.writeAsStringAsync(fileUri, csvData, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: "text/csv",
+            dialogTitle: t("Export CSV", "CSVをエクスポート"),
+            UTI: "public.comma-separated-values-text",
+          });
+        } else {
+          Alert.alert(t("Saved", "保存完了"), fileUri);
+        }
+      }
+    } catch (error: any) {
+      const msg =
+        error?.response?.data?.detail ||
+        t("Failed to export CSV", "CSVのエクスポートに失敗しました");
+      Alert.alert(t("Error", "エラー"), msg);
+    }
+  };
+
+  const handleExportTrialCSV = async (item: LocalQuestionSet) => {
+    try {
+      const escapeCSV = (val: string) => {
+        if (val.includes(",") || val.includes('"') || val.includes("\n")) {
+          return `"${val.replace(/"/g, '""')}"`;
+        }
+        return val;
+      };
+      const header =
+        "question_text,question_type,option_1,option_2,option_3,option_4,correct_answer,explanation,difficulty,category,subcategory1,subcategory2";
+      const rows = item.questions.map((q) => {
+        const diffVal =
+          q.difficulty === "easy" ? "0.2" : q.difficulty === "hard" ? "0.8" : "0.5";
+        return [
+          escapeCSV(q.question || ""),
+          "text_input",
+          "", "", "", "",
+          escapeCSV(q.answer || ""),
+          "",
+          diffVal,
+          escapeCSV(q.category || ""),
+          escapeCSV(q.subcategory1 || ""),
+          escapeCSV(q.subcategory2 || ""),
+        ].join(",");
+      });
+      const csvData = "\ufeff" + header + "\n" + rows.join("\n");
+      const safeTitle =
+        (item.title || "export").replace(/[^a-zA-Z0-9\u3000-\u9fff_-]/g, "_") || "export";
+      const filename = `${safeTitle}.csv`;
+
+      if (Platform.OS === "web") {
+        const blob = new Blob([csvData], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const fileUri = FileSystem.documentDirectory + filename;
+        await FileSystem.writeAsStringAsync(fileUri, csvData, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: "text/csv",
+            dialogTitle: t("Export CSV", "CSVをエクスポート"),
+            UTI: "public.comma-separated-values-text",
+          });
+        } else {
+          Alert.alert(t("Saved", "保存完了"), fileUri);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to export trial CSV:", error);
+      Alert.alert(
+        t("Error", "エラー"),
+        t("Failed to export CSV", "CSVのエクスポートに失敗しました")
+      );
+    }
+  };
+
+  // CSV import → create question set flow
+  const [csvImportModalVisible, setCsvImportModalVisible] = useState(false);
+  const [csvImportTitle, setCsvImportTitle] = useState("");
+  const [csvImportFile, setCsvImportFile] = useState<{
+    uri: string;
+    name: string;
+    mimeType: string;
+  } | null>(null);
+  const [csvImporting, setCsvImporting] = useState(false);
+
+  const handlePickCSVAndCreate = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["text/csv", "text/comma-separated-values", "text/plain"],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled) return;
+      const file = result.assets[0];
+      const suggestedTitle = (file.name || "")
+        .replace(/\.csv$/i, "")
+        .replace(/[_-]/g, " ")
+        .trim();
+      setCsvImportFile({
+        uri: file.uri,
+        name: file.name,
+        mimeType: file.mimeType || "text/csv",
+      });
+      setCsvImportTitle(suggestedTitle || "");
+      setCsvImportModalVisible(true);
+    } catch (error) {
+      console.error("Failed to pick CSV:", error);
+      Alert.alert(
+        t("Error", "エラー"),
+        t("Failed to select file", "ファイルの選択に失敗しました")
+      );
+    }
+  };
+
+  const handleConfirmCSVImport = async () => {
+    if (!csvImportFile || !csvImportTitle.trim()) return;
+    setCsvImporting(true);
+    try {
+      const newSet = await questionSetsApi.create({
+        title: csvImportTitle.trim(),
+        description: "",
+        category: "general",
+      });
+      const uploadResult = await questionsApi.bulkUploadCSV(newSet.id, {
+        uri: csvImportFile.uri,
+        name: csvImportFile.name,
+        type: csvImportFile.mimeType,
+      });
+      setCsvImportModalVisible(false);
+      setCsvImportFile(null);
+      setCsvImportTitle("");
+
+      const msg =
+        uploadResult.total_errors > 0
+          ? t(
+              `Created "${newSet.title}" with ${uploadResult.total_created} questions (${uploadResult.total_errors} errors)`,
+              `「${newSet.title}」を作成しました（${uploadResult.total_created}問成功、${uploadResult.total_errors}件エラー）`
+            )
+          : t(
+              `Created "${newSet.title}" with ${uploadResult.total_created} questions!`,
+              `「${newSet.title}」を${uploadResult.total_created}問で作成しました！`
+            );
+      Alert.alert(t("Success", "成功"), msg);
+      loadQuestionSets();
+    } catch (error: any) {
+      console.error("Failed to create question set from CSV:", error);
+      const detail =
+        error?.response?.data?.detail ||
+        t(
+          "Failed to create question set from CSV",
+          "CSVからの問題集作成に失敗しました"
+        );
+      Alert.alert(t("Error", "エラー"), detail);
+    } finally {
+      setCsvImporting(false);
+    }
+  };
+
   const filteredMyQuestionSets = useMemo(
     () =>
       myQuestionSets.filter(
@@ -258,7 +449,7 @@ export default function MyQuestionSetsScreen() {
   );
 
   const renderMyQuestionSetItem = ({ item }: { item: QuestionSet }) => (
-    <TouchableOpacity
+    <View
       style={[
         styles.card,
         {
@@ -266,42 +457,56 @@ export default function MyQuestionSetsScreen() {
           marginBottom: isSmallScreen ? 10 : 12,
         },
       ]}
-      onPress={() => navigateToDetail(item.id)}
-      testID={`my-qs-card-${item.id}`}
     >
-      <View style={styles.cardHeader}>
-        <Text style={[styles.cardTitle, { fontSize: isSmallScreen ? 16 : 18 }]}>
-          {item.title}
-        </Text>
-        {(dueCounts[item.id] || 0) > 0 && (
-          <View style={styles.dueBadge}>
-            <Text style={styles.dueBadgeText}>
-              {t(`${dueCounts[item.id]} due`, `${dueCounts[item.id]}問 要復習`)}
-            </Text>
-          </View>
+      <TouchableOpacity
+        onPress={() => navigateToDetail(item.id)}
+        testID={`my-qs-card-${item.id}`}
+      >
+        <View style={styles.cardHeader}>
+          <Text style={[styles.cardTitle, { fontSize: isSmallScreen ? 16 : 18 }]}>
+            {item.title}
+          </Text>
+          {(dueCounts[item.id] || 0) > 0 && (
+            <View style={styles.dueBadge}>
+              <Text style={styles.dueBadgeText}>
+                {t(`${dueCounts[item.id]} due`, `${dueCounts[item.id]}問 要復習`)}
+              </Text>
+            </View>
+          )}
+          {item.is_published && (
+            <View style={styles.publishedBadge}>
+              <Text style={styles.publishedText}>{t("Published", "公開中")}</Text>
+            </View>
+          )}
+        </View>
+        {item.description && (
+          <Text style={styles.cardDescription} numberOfLines={2}>
+            {item.description}
+          </Text>
         )}
-        {item.is_published && (
-          <View style={styles.publishedBadge}>
-            <Text style={styles.publishedText}>{t("Published", "公開中")}</Text>
-          </View>
-        )}
-      </View>
-      {item.description && (
-        <Text style={styles.cardDescription} numberOfLines={2}>
-          {item.description}
-        </Text>
+        <View style={styles.cardFooter}>
+          <Text style={styles.cardCategory}>{item.category}</Text>
+          <Text style={styles.cardLang}>
+            {contentLanguageDisplayLabel(item.content_language, t)}
+          </Text>
+          <Text style={styles.cardQuestions}>
+            {t(`${item.total_questions} questions`, `${item.total_questions} 問`)}
+          </Text>
+          {item.price > 0 && <Text style={styles.cardPrice}>¥{item.price}</Text>}
+        </View>
+      </TouchableOpacity>
+      {item.total_questions > 0 && (
+        <TouchableOpacity
+          style={styles.csvExportBadge}
+          onPress={() => handleExportMyCSV(item)}
+          testID={`csv-export-btn-${item.id}`}
+        >
+          <Text style={styles.csvExportBadgeText}>
+            {t("CSV", "CSV")}
+          </Text>
+        </TouchableOpacity>
       )}
-      <View style={styles.cardFooter}>
-        <Text style={styles.cardCategory}>{item.category}</Text>
-        <Text style={styles.cardLang}>
-          {contentLanguageDisplayLabel(item.content_language, t)}
-        </Text>
-        <Text style={styles.cardQuestions}>
-          {t(`${item.total_questions} questions`, `${item.total_questions} 問`)}
-        </Text>
-        {item.price > 0 && <Text style={styles.cardPrice}>¥{item.price}</Text>}
-      </View>
-    </TouchableOpacity>
+    </View>
   );
 
   const renderPurchasedItem = ({ item }: { item: QuestionSet }) => (
@@ -351,7 +556,7 @@ export default function MyQuestionSetsScreen() {
   );
 
   const renderTrialQuestionSetItem = ({ item }: { item: LocalQuestionSet }) => (
-    <TouchableOpacity
+    <View
       style={[
         styles.card,
         {
@@ -359,40 +564,54 @@ export default function MyQuestionSetsScreen() {
           marginBottom: isSmallScreen ? 10 : 12,
         },
       ]}
-      onPress={() => router.push(`/(trial)/set/${item.id}`)}
-      testID={`trial-qs-card-${item.id}`}
     >
-      <View style={styles.cardHeader}>
-        <Text style={[styles.cardTitle, { fontSize: isSmallScreen ? 16 : 18 }]}>
-          {item.title}
-        </Text>
-        {(dueCounts[item.id] || 0) > 0 && (
-          <View style={styles.dueBadge}>
-            <Text style={styles.dueBadgeText}>
-              {t(`${dueCounts[item.id]} due`, `${dueCounts[item.id]}問 要復習`)}
+      <TouchableOpacity
+        onPress={() => router.push(`/(trial)/set/${item.id}`)}
+        testID={`trial-qs-card-${item.id}`}
+      >
+        <View style={styles.cardHeader}>
+          <Text style={[styles.cardTitle, { fontSize: isSmallScreen ? 16 : 18 }]}>
+            {item.title}
+          </Text>
+          {(dueCounts[item.id] || 0) > 0 && (
+            <View style={styles.dueBadge}>
+              <Text style={styles.dueBadgeText}>
+                {t(`${dueCounts[item.id]} due`, `${dueCounts[item.id]}問 要復習`)}
+              </Text>
+            </View>
+          )}
+          <View style={styles.trialBadge}>
+            <Text style={styles.trialBadgeText}>
+              {t("Trial Mode", "お試しモード")}
             </Text>
           </View>
-        )}
-        <View style={styles.trialBadge}>
-          <Text style={styles.trialBadgeText}>
-            {t("Trial Mode", "お試しモード")}
+        </View>
+        {item.description ? (
+          <Text style={styles.cardDescription} numberOfLines={2}>
+            {item.description}
+          </Text>
+        ) : null}
+        <View style={styles.cardFooter}>
+          <Text style={styles.cardCategory}>
+            {contentLanguageDisplayLabel(item.content_language, t)}
+          </Text>
+          <Text style={styles.cardQuestions}>
+            {t(`${item.questions.length} questions`, `${item.questions.length} 問`)}
           </Text>
         </View>
-      </View>
-      {item.description ? (
-        <Text style={styles.cardDescription} numberOfLines={2}>
-          {item.description}
-        </Text>
-      ) : null}
-      <View style={styles.cardFooter}>
-        <Text style={styles.cardCategory}>
-          {contentLanguageDisplayLabel(item.content_language, t)}
-        </Text>
-        <Text style={styles.cardQuestions}>
-          {t(`${item.questions.length} questions`, `${item.questions.length} 問`)}
-        </Text>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+      {item.questions.length > 0 && (
+        <TouchableOpacity
+          style={styles.csvExportBadge}
+          onPress={() => handleExportTrialCSV(item)}
+          testID={`csv-export-trial-btn-${item.id}`}
+        >
+          <Text style={styles.csvExportBadgeText}>
+            {t("CSV", "CSV")}
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
   );
 
   const renderTextbookItem = ({ item }: { item: Textbook }) => (
@@ -544,9 +763,19 @@ export default function MyQuestionSetsScreen() {
 
         {/* My Question Sets Section */}
         <View style={styles.section} nativeID="my-qs-section">
-          <Text style={[styles.sectionTitle, { fontSize: isSmallScreen ? 18 : 20 }]}>
-            {t("My Question Sets", "マイ問題集")}
-          </Text>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { fontSize: isSmallScreen ? 18 : 20, marginBottom: 0 }]}>
+              {t("My Question Sets", "マイ問題集")}
+            </Text>
+            <TouchableOpacity
+              style={styles.csvImportButton}
+              onPress={handlePickCSVAndCreate}
+            >
+              <Text style={styles.csvImportButtonText}>
+                {t("CSV Import", "CSV取込")}
+              </Text>
+            </TouchableOpacity>
+          </View>
           {myQuestionSets.length === 0 ? (
             <View style={styles.emptyContainer} nativeID="my-qs-empty">
               <Text style={styles.emptyText}>
@@ -647,7 +876,29 @@ export default function MyQuestionSetsScreen() {
             ))
           )}
         </View>
+
+        {/* Feedback Section */}
+        <TouchableOpacity
+          style={styles.feedbackBanner}
+          onPress={() => setShowFeedbackModal(true)}
+          testID="my-qs-feedback-banner"
+        >
+          <Text style={styles.feedbackBannerTitle}>
+            {t("Review & Feedback", "レビュー・ご要望")}
+          </Text>
+          <Text style={styles.feedbackBannerText}>
+            {t(
+              "Help us improve! Share your review or feature requests",
+              "アプリの改善にご協力ください！レビューや機能リクエストをお寄せください"
+            )}
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
+
+      <FeedbackModal
+        visible={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+      />
 
       <TouchableOpacity
         style={styles.fab}
@@ -656,6 +907,63 @@ export default function MyQuestionSetsScreen() {
       >
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
+
+      <Modal
+        visible={csvImportModalVisible}
+        title={t("Create from CSV", "CSVから問題集を作成")}
+        onClose={() => {
+          setCsvImportModalVisible(false);
+          setCsvImportFile(null);
+          setCsvImportTitle("");
+        }}
+      >
+        <View style={styles.csvImportModalContent}>
+          <Text style={styles.csvImportFileName}>
+            {csvImportFile?.name}
+          </Text>
+          <Text style={styles.csvImportLabel}>
+            {t("Question Set Title", "問題集のタイトル")}
+          </Text>
+          <TextInput
+            style={styles.csvImportInput}
+            value={csvImportTitle}
+            onChangeText={setCsvImportTitle}
+            placeholder={t("Enter title", "タイトルを入力")}
+            autoFocus
+          />
+          <View style={styles.csvImportActions}>
+            <TouchableOpacity
+              style={styles.csvImportCancelButton}
+              onPress={() => {
+                setCsvImportModalVisible(false);
+                setCsvImportFile(null);
+                setCsvImportTitle("");
+              }}
+            >
+              <Text style={styles.csvImportCancelText}>
+                {t("Cancel", "キャンセル")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.csvImportConfirmButton,
+                (!csvImportTitle.trim() || csvImporting) &&
+                  styles.csvImportConfirmDisabled,
+              ]}
+              onPress={handleConfirmCSVImport}
+              disabled={!csvImportTitle.trim() || csvImporting}
+            >
+              {csvImporting ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.csvImportConfirmText}>
+                  {t("Create", "作成")}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -894,6 +1202,118 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#999",
     textAlign: "center",
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  csvImportButton: {
+    backgroundColor: "#FF9500",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  csvImportButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  csvImportModalContent: {
+    padding: 4,
+  },
+  csvImportFileName: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  csvImportLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+  },
+  csvImportInput: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 20,
+    backgroundColor: "#fff",
+  },
+  csvImportActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  csvImportCancelButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  csvImportCancelText: {
+    color: "#666",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  csvImportConfirmButton: {
+    backgroundColor: "#007AFF",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    minWidth: 80,
+    alignItems: "center",
+  },
+  csvImportConfirmDisabled: {
+    backgroundColor: "#B0B0B0",
+  },
+  csvImportConfirmText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  csvExportBadge: {
+    alignSelf: "flex-end",
+    backgroundColor: "#30B060",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginTop: 8,
+  },
+  csvExportBadgeText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  feedbackBanner: {
+    backgroundColor: "#5A67D8",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    ...platformShadow({
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 4,
+    }),
+    elevation: 3,
+  },
+  feedbackBannerTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 4,
+  },
+  feedbackBannerText: {
+    fontSize: 13,
+    color: "#fff",
+    opacity: 0.9,
   },
   fab: {
     position: "absolute",

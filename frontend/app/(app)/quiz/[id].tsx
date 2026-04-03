@@ -14,7 +14,12 @@ import QuizEngine, { QuizQuestion, QuizAnswer } from "../../../src/components/Qu
 import { srsService } from "../../../src/services/srsService";
 
 export default function QuizScreen() {
-  const { id, questionIds } = useLocalSearchParams<{ id: string; questionIds?: string }>();
+  const { id, questionIds, startIndex, mode } = useLocalSearchParams<{
+    id: string;
+    questionIds?: string;
+    startIndex?: string;
+    mode?: string;
+  }>();
   const { user } = useAuth();
   const router = useRouter();
 
@@ -23,6 +28,7 @@ export default function QuizScreen() {
   const [sessionId] = useState<string>(
     `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
   );
+  const isAllMode = mode === "all";
 
   useEffect(() => {
     if (id && user) {
@@ -70,8 +76,34 @@ export default function QuizScreen() {
     }
   };
 
+  const handleProgressChange = async (currentIndex: number) => {
+    if (!isAllMode) return;
+    try {
+      await AsyncStorage.setItem(
+        `@quiz_progress_${id}`,
+        JSON.stringify({
+          currentIndex,
+          totalQuestions: questions.length,
+          savedAt: new Date().toISOString(),
+        })
+      );
+    } catch (e) {
+      console.warn("Failed to save quiz progress:", e);
+    }
+  };
+
+  const clearProgress = async () => {
+    try {
+      await AsyncStorage.removeItem(`@quiz_progress_${id}`);
+    } catch (e) {
+      console.warn("Failed to clear quiz progress:", e);
+    }
+  };
+
   const handleQuizComplete = async (answers: QuizAnswer[], score: number, totalTime: number) => {
     if (!user) return;
+
+    if (isAllMode) await clearProgress();
 
     try {
       // 結果データを準備（問題テキストと正解を含める）
@@ -163,6 +195,7 @@ export default function QuizScreen() {
     explanation: q.explanation,
     category: q.category,
     difficulty: q.difficulty,
+    media_urls: q.media_urls as any,
   }));
 
   return (
@@ -172,6 +205,8 @@ export default function QuizScreen() {
       onQuit={() => router.back()}
       headerColor="#007AFF"
       showAdvancedFeatures={true}
+      initialQuestionIndex={parseInt(startIndex || "0")}
+      onProgressChange={isAllMode ? handleProgressChange : undefined}
     />
   );
 }

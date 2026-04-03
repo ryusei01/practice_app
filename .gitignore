@@ -68,6 +68,8 @@ Desktop.ini
 # -----------------------------------------------------------------------------
 .vscode/
 .idea/
+.cursor/*
+!.cursor/rules/
 *.swp
 *.swo
 *~
@@ -101,6 +103,7 @@ test_*.html
 
 # AI アシスタントのコンテキスト
 .claude/
+.gemini/
 
 # デプロイスクリプト
 deploy-cloudflare.bat

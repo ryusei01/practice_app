@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import { authApi, AuthResponse } from '../api/auth';
 import { tokenStorage } from '../utils/secureStorage';
 import { authEvents } from '../utils/authEvents';
+import Modal from '../components/Modal';
 
 interface User {
   id: string;
@@ -43,32 +44,23 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionExpiredVisible, setSessionExpiredVisible] = useState(false);
   const sessionExpiredHandled = useRef(false);
+
+  const navigateToLogin = useCallback(() => {
+    try {
+      router.replace('/(auth)/login');
+    } catch {
+      // navigation not ready
+    }
+  }, []);
 
   const handleSessionExpired = useCallback(() => {
     if (sessionExpiredHandled.current) return;
     sessionExpiredHandled.current = true;
 
     setUser(null);
-
-    const navigateToLogin = () => {
-      try {
-        router.replace('/(auth)/login');
-      } catch {
-        // navigation not ready
-      }
-    };
-
-    if (Platform.OS === 'web') {
-      window.alert('セッションの有効期限が切れました。再度ログインしてください。');
-      navigateToLogin();
-    } else {
-      Alert.alert(
-        'セッション期限切れ',
-        'セッションの有効期限が切れました。再度ログインしてください。',
-        [{ text: 'OK', onPress: navigateToLogin }],
-      );
-    }
+    setSessionExpiredVisible(true);
 
     setTimeout(() => {
       sessionExpiredHandled.current = false;
@@ -99,8 +91,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await tokenStorage.clearAll();
       setUser(null);
 
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        try {
+      try {
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
           const currentPath = window.location.pathname;
           const isPublicPath =
             currentPath === '/' ||
@@ -113,9 +105,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (!isPublicPath) {
             router.replace('/(auth)/login');
           }
-        } catch (navError) {
-          console.error('Navigation failed:', navError);
+        } else {
+          router.replace('/(auth)/login');
         }
+      } catch (navError) {
+        console.error('Navigation failed:', navError);
       }
     } finally {
       setIsLoading(false);
@@ -161,6 +155,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }}
     >
       {children}
+      <Modal
+        visible={sessionExpiredVisible}
+        title="セッション期限切れ"
+        message="セッションの有効期限が切れました。再度ログインしてください。"
+        buttons={[{
+          text: 'OK',
+          onPress: () => {
+            setSessionExpiredVisible(false);
+            navigateToLogin();
+          },
+        }]}
+        onClose={() => {
+          setSessionExpiredVisible(false);
+          navigateToLogin();
+        }}
+      />
     </AuthContext.Provider>
   );
 };

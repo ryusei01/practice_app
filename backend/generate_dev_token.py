@@ -13,7 +13,7 @@ USER_ID = "392fb597-ee37-430d-a824-4133268b00bc"
 
 access_payload = {
     "sub": USER_ID,
-    "exp": datetime.utcnow() + timedelta(minutes=30),
+    "exp": datetime.utcnow() + timedelta(hours=24),
     "type": "access",
 }
 refresh_payload = {

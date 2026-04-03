@@ -133,4 +133,26 @@ export const questionSetsApi = {
     const response = await apiClient.get(`/question-sets/${id}/download`);
     return response.data;
   },
+
+  exportCSV: async (id: string): Promise<string> => {
+    const response = await apiClient.get(`/question-sets/${id}/export-csv`, {
+      responseType: 'text',
+    });
+    return response.data;
+  },
+
+  importAnki: async (file: { uri: string; name: string; type: string }): Promise<{ message: string; question_set_id: string; title: string; total_questions: number }> => {
+    const formData = new FormData();
+    if (file.uri.startsWith('blob:')) {
+      const response = await fetch(file.uri);
+      const blob = await response.blob();
+      formData.append('file', blob, file.name);
+    } else {
+      formData.append('file', { uri: file.uri, name: file.name, type: file.type } as any);
+    }
+    const response = await apiClient.post('/question-sets/import-anki', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
 };

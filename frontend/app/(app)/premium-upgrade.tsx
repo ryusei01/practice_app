@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Header from '../../src/components/Header';
 import { useAuth } from '../../src/contexts/AuthContext';
@@ -20,9 +21,9 @@ import { subscriptionsApi } from '../../src/api/subscriptions';
 const BASE_WEB_URL = process.env.EXPO_PUBLIC_WEB_URL || 'https://ai-practice-book.com';
 
 const FALLBACK_PLAN_DISPLAY = {
-  price_jpy: 350,
-  credit_jpy: 100,
-  validity_days: 30,
+  price_jpy: 1800,
+  credit_jpy: 500,
+  validity_days: 365,
 };
 
 export default function PremiumUpgradeScreen() {
@@ -65,8 +66,16 @@ export default function PremiumUpgradeScreen() {
 
     setIsCheckingOut(true);
     try {
-      const successUrl = `${BASE_WEB_URL}/premium-success`;
-      const cancelUrl = `${BASE_WEB_URL}/premium-cancel`;
+      let successUrl: string;
+      let cancelUrl: string;
+
+      if (Platform.OS === 'web') {
+        successUrl = `${BASE_WEB_URL}/premium-success`;
+        cancelUrl = `${BASE_WEB_URL}/premium-cancel`;
+      } else {
+        successUrl = Linking.createURL('/premium-success');
+        cancelUrl = Linking.createURL('/premium-cancel');
+      }
 
       const { checkout_url } = await subscriptionsApi.createPremiumCheckout(
         successUrl,
@@ -76,9 +85,7 @@ export default function PremiumUpgradeScreen() {
       if (Platform.OS === 'web') {
         window.location.href = checkout_url;
       } else {
-        // モバイル: expo-web-browser で Stripe Checkout を開く
         try {
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
           const { openBrowserAsync } = require('expo-web-browser');
           await openBrowserAsync(checkout_url);
         } catch {
@@ -179,13 +186,13 @@ export default function PremiumUpgradeScreen() {
             <ActivityIndicator color="#fff" size="large" />
           ) : (
             <>
-              <Text style={styles.priceLabel}>月額プラン</Text>
+              <Text style={styles.priceLabel}>年額プラン</Text>
               <Text style={styles.priceValue}>
-                ¥{planDisplay.price_jpy.toLocaleString()} / 月
+                ¥{planDisplay.price_jpy.toLocaleString()} / 年
               </Text>
               <Text style={styles.priceNote}>税込</Text>
               <Text style={styles.validityNote}>
-                毎月自動更新・いつでも解約可能
+                1年間有効・購入から365日間
               </Text>
               <View style={styles.creditBadge}>
                 <Text style={styles.creditBadgeText}>

@@ -46,9 +46,10 @@ question_text,question_type,options,correct_answer,explanation,difficulty,catego
 **省略可能。** 省略時のサーバ側の自動判定は次のとおり:
 
 - \`option_1\`〜\`option_4\` のいずれかに値がある（または旧形式で \`options\` が非空）→ \`multiple_choice\`
-- 上記がすべて空 → \`text_input\`
+- 上記がすべて空で \`correct_answer\` が \`true\` または \`false\`（大文字小文字不問）→ \`true_false\`
+- 上記いずれにも当てはまらない → \`text_input\`
 
-そのため **\`true_false\` は必ず \`question_type\` に \`true_false\` と明示すること**（省略すると \`text_input\` 扱いになる）。
+明示的に \`question_type\` を書くことを推奨するが、省略しても上記ルールで自動判定される。
 
 ### 3. option_1, option_2, option_3, option_4（推奨フォーマット）
 
