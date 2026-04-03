@@ -1,0 +1,20 @@
+---
+description: alertの使用を禁止し、代わりにモーダルを使用するルール
+globs: **/*.{ts,tsx,js,jsx}
+alwaysApply: false
+---
+
+# alert禁止 - モーダルを使用すること
+
+`window.alert()` / `alert()` の使用は禁止。ユーザーへの通知やダイアログにはモーダルコンポーネントを使用すること。
+
+```typescript
+// ❌ BAD
+alert('保存しました');
+alert('エラーが発生しました');
+window.alert('削除しますか？');
+
+// ✅ GOOD
+// モーダルやダイアログコンポーネントを使用する
+showModal({ title: '完了', message: '保存しました' });
+```

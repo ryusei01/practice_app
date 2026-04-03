@@ -20,13 +20,41 @@ export interface Purchase {
   purchased_at: string;
 }
 
+export interface QuestionSetBreakdown {
+  id: string;
+  title: string;
+  price: number;
+  sales_count: number;
+  total_revenue: number;
+  seller_revenue: number;
+}
+
+export interface RecentTransaction {
+  purchased_at: string;
+  question_set_title: string;
+  amount: number;
+  platform_fee: number;
+  seller_amount: number;
+}
+
+export interface MonthlySummary {
+  month: string;
+  total_sales: number;
+  total_earnings: number;
+  order_count: number;
+}
+
 export interface SellerDashboard {
   is_connected: boolean;
   stripe_account_id: string | null;
+  stripe_configured: boolean;
   total_sales: number;
   total_earnings: number;
   total_orders: number;
   question_sets_count: number;
+  question_set_breakdown: QuestionSetBreakdown[];
+  recent_transactions: RecentTransaction[];
+  monthly_summary: MonthlySummary[];
 }
 
 export const paymentsApi = {

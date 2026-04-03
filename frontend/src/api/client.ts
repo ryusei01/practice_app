@@ -1,6 +1,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import Constants from "expo-constants";
 import { tokenStorage } from "../utils/secureStorage";
+import { authEvents } from "../utils/authEvents";
 
 // 環境変数からAPI URLを取得（デフォルトは開発環境用）
 const API_URL =
@@ -86,6 +87,7 @@ apiClient.interceptors.response.use(
         if (!refreshToken) {
           await tokenStorage.clearAll();
           processQueue(new Error("No refresh token available"));
+          authEvents.emitSessionExpired();
           return Promise.reject(error);
         }
 
@@ -117,6 +119,7 @@ apiClient.interceptors.response.use(
         await tokenStorage.clearAll();
         processQueue(refreshError);
         isRefreshing = false;
+        authEvents.emitSessionExpired();
         return Promise.reject(refreshError);
       }
     }

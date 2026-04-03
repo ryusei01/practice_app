@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Platform } from 'react-native';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { Alert, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { authApi, AuthResponse } from '../api/auth';
 import { tokenStorage } from '../utils/secureStorage';
+import { authEvents } from '../utils/authEvents';
 
 interface User {
   id: string;
@@ -42,6 +43,41 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const sessionExpiredHandled = useRef(false);
+
+  const handleSessionExpired = useCallback(() => {
+    if (sessionExpiredHandled.current) return;
+    sessionExpiredHandled.current = true;
+
+    setUser(null);
+
+    const navigateToLogin = () => {
+      try {
+        router.replace('/(auth)/login');
+      } catch {
+        // navigation not ready
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      window.alert('セッションの有効期限が切れました。再度ログインしてください。');
+      navigateToLogin();
+    } else {
+      Alert.alert(
+        'セッション期限切れ',
+        'セッションの有効期限が切れました。再度ログインしてください。',
+        [{ text: 'OK', onPress: navigateToLogin }],
+      );
+    }
+
+    setTimeout(() => {
+      sessionExpiredHandled.current = false;
+    }, 3000);
+  }, []);
+
+  useEffect(() => {
+    return authEvents.onSessionExpired(handleSessionExpired);
+  }, [handleSessionExpired]);
 
   useEffect(() => {
     checkAuth();

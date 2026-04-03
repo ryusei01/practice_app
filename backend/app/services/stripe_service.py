@@ -17,6 +17,11 @@ class StripeService:
     def __init__(self):
         self.platform_fee_percent = settings.PLATFORM_FEE_PERCENT
 
+    @property
+    def is_configured(self) -> bool:
+        key = settings.STRIPE_SECRET_KEY or ""
+        return bool(key) and "placeholder" not in key
+
     def create_connect_account(self, email: str, country: str = "JP") -> Dict:
         """
         販売者用のStripe Connectアカウントを作成

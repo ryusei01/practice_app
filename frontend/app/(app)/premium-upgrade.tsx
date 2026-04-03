@@ -20,9 +20,9 @@ import { subscriptionsApi } from '../../src/api/subscriptions';
 const BASE_WEB_URL = process.env.EXPO_PUBLIC_WEB_URL || 'https://ai-practice-book.com';
 
 const FALLBACK_PLAN_DISPLAY = {
-  price_jpy: 550,
-  credit_jpy: 200,
-  validity_days: 365,
+  price_jpy: 350,
+  credit_jpy: 100,
+  validity_days: 30,
 };
 
 export default function PremiumUpgradeScreen() {
@@ -179,13 +179,13 @@ export default function PremiumUpgradeScreen() {
             <ActivityIndicator color="#fff" size="large" />
           ) : (
             <>
-              <Text style={styles.priceLabel}>1回のお支払い</Text>
+              <Text style={styles.priceLabel}>月額プラン</Text>
               <Text style={styles.priceValue}>
-                ¥{planDisplay.price_jpy.toLocaleString()}
+                ¥{planDisplay.price_jpy.toLocaleString()} / 月
               </Text>
-              <Text style={styles.priceNote}>税込・サブスクではありません</Text>
+              <Text style={styles.priceNote}>税込</Text>
               <Text style={styles.validityNote}>
-                購入日から {planDisplay.validity_days} 日間プレミアム有効
+                毎月自動更新・いつでも解約可能
               </Text>
               <View style={styles.creditBadge}>
                 <Text style={styles.creditBadgeText}>

@@ -152,6 +152,12 @@ export default function Home() {
     }
   }, [isAuthenticated, language]);
 
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace("/(app)/dashboard");
+    }
+  }, [isLoading, isAuthenticated, router]);
+
   if (isLoading) {
     return (
       <View style={styles.container} nativeID="loading-container">
@@ -322,6 +328,72 @@ export default function Home() {
               </View>
             </View>
 
+            <View
+              style={[
+                styles.serviceSection,
+                {
+                  maxWidth: isSmallScreen ? "100%" : isMediumScreen ? 480 : 600,
+                },
+              ]}
+              nativeID="service-section"
+            >
+              <Text style={styles.serviceSectionTitle}>
+                {t("Services & Pricing", "サービス内容と料金")}
+              </Text>
+
+              <View style={styles.serviceCard}>
+                <Text style={styles.serviceCardLabel}>
+                  {t("Free Trial", "無料トライアル")}
+                </Text>
+                <Text style={styles.serviceCardPrice}>
+                  {t("Free", "無料")}
+                </Text>
+                <Text style={styles.serviceCardDesc}>
+                  {t(
+                    "Create question sets, take quizzes, and use flashcards. Data is stored locally on your device.",
+                    "問題集の作成・クイズ・単語帳をご利用いただけます。データは端末内にローカル保存されます。"
+                  )}
+                </Text>
+              </View>
+
+              <View style={[styles.serviceCard, styles.serviceCardPremium]}>
+                <Text style={styles.serviceCardLabel}>
+                  {t("Premium Plan", "プレミアムプラン")}
+                </Text>
+                <Text style={[styles.serviceCardPrice, styles.serviceCardPricePremium]}>
+                  {t("350 JPY (tax incl.) / month", "350円（税込）/ 月")}
+                </Text>
+                <Text style={styles.serviceCardDesc}>
+                  {t(
+                    "Cloud sync & backup across devices. Includes 100 JPY account credit for marketplace purchases.",
+                    "クラウド同期・バックアップで複数端末から学習可能。マーケットプレイス用の100円分クレジット付き。"
+                  )}
+                </Text>
+              </View>
+
+              <View style={styles.serviceCard}>
+                <Text style={styles.serviceCardLabel}>
+                  {t("Question Set Marketplace", "問題集マーケットプレイス")}
+                </Text>
+                <Text style={styles.serviceCardPrice}>
+                  {t("Prices set by sellers", "出品者が価格を設定")}
+                </Text>
+                <Text style={styles.serviceCardDesc}>
+                  {t(
+                    "Buy and sell user-created question sets. Free and paid sets available.",
+                    "ユーザーが作成した問題集を売買できます。無料・有料の問題集があります。"
+                  )}
+                </Text>
+              </View>
+
+              <Text style={styles.servicePaymentNote}>
+                {t(
+                  "Payment: Credit card via Stripe (Visa / Mastercard / American Express / JCB)",
+                  "決済方法：クレジットカード（Stripe経由）Visa / Mastercard / American Express / JCB"
+                )}
+              </Text>
+            </View>
+
             <TouchableOpacity
               style={[
                 styles.button,
@@ -390,6 +462,49 @@ export default function Home() {
                 {t("Sign In", "ログイン")}
               </Text>
             </TouchableOpacity>
+          </View>
+
+          <View style={styles.footer} nativeID="footer">
+            <View
+              style={[
+                styles.footerLinks,
+                isSmallScreen && styles.footerLinksColumn,
+              ]}
+            >
+              <TouchableOpacity
+                onPress={() => router.push("/(public)/tokusho")}
+                style={styles.footerLinkTouchable}
+              >
+                <Text style={styles.footerLink}>
+                  {t(
+                    "Specified Commercial Transactions Act",
+                    "特定商取引法に基づく表記"
+                  )}
+                </Text>
+              </TouchableOpacity>
+              <Text style={[styles.footerSep, isSmallScreen && { display: "none" }]}>|</Text>
+              <TouchableOpacity
+                onPress={() => router.push("/(public)/terms-of-service")}
+                style={styles.footerLinkTouchable}
+              >
+                <Text style={styles.footerLink}>
+                  {t("Terms of Service", "利用規約")}
+                </Text>
+              </TouchableOpacity>
+              <Text style={[styles.footerSep, isSmallScreen && { display: "none" }]}>|</Text>
+              <TouchableOpacity
+                onPress={() => router.push("/(public)/privacy-policy")}
+                style={styles.footerLinkTouchable}
+              >
+                <Text style={styles.footerLink}>
+                  {t("Privacy Policy", "プライバシーポリシー")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.footerCopy}>
+              {"\u00A9"} {new Date().getFullYear()}{" "}
+              {t("Ryusei Ishida", "石田 琉聖")} — AI Practice Book
+            </Text>
           </View>
         </ScrollView>
 
@@ -590,13 +705,6 @@ export default function Home() {
       </View>
     );
   }
-
-  // ログイン済みの場合はダッシュボードにリダイレクト
-  useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      router.replace("/(app)/dashboard");
-    }
-  }, [isLoading, isAuthenticated, router]);
 
   return null;
 }
@@ -909,5 +1017,90 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     textAlign: "center",
+  },
+  serviceSection: {
+    width: "100%",
+    marginBottom: 32,
+    paddingHorizontal: 4,
+  },
+  serviceSectionTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#333",
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  serviceCard: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  serviceCardPremium: {
+    backgroundColor: "#FFF8E7",
+    borderWidth: 1,
+    borderColor: "#E6C200",
+  },
+  serviceCardLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 4,
+  },
+  serviceCardPrice: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#007AFF",
+    marginBottom: 6,
+  },
+  serviceCardPricePremium: {
+    color: "#B8860B",
+  },
+  serviceCardDesc: {
+    fontSize: 13,
+    color: "#555",
+    lineHeight: 19,
+  },
+  servicePaymentNote: {
+    fontSize: 12,
+    color: "#888",
+    textAlign: "center",
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  footer: {
+    backgroundColor: "#f5f5f5",
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderTopColor: "#e0e0e0",
+  },
+  footerLinks: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  footerLinksColumn: {
+    flexDirection: "column",
+    gap: 10,
+  },
+  footerLinkTouchable: {
+    paddingVertical: 2,
+  },
+  footerLink: {
+    fontSize: 13,
+    color: "#007AFF",
+  },
+  footerSep: {
+    fontSize: 13,
+    color: "#999",
+  },
+  footerCopy: {
+    fontSize: 12,
+    color: "#999",
   },
 });

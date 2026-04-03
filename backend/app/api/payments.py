@@ -3,6 +3,7 @@ Stripe Connect決済APIエンドポイント
 """
 import stripe
 import logging
+from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -11,7 +12,7 @@ from typing import Optional
 import uuid
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from ..core.database import get_db
 from ..core.auth import get_current_active_user
@@ -52,6 +53,43 @@ class PurchaseResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class QuestionSetBreakdown(BaseModel):
+    id: str
+    title: str
+    price: int
+    sales_count: int
+    total_revenue: int
+    seller_revenue: int
+
+
+class RecentTransaction(BaseModel):
+    purchased_at: datetime
+    question_set_title: str
+    amount: int
+    platform_fee: int
+    seller_amount: int
+
+
+class MonthlySummary(BaseModel):
+    month: str
+    total_sales: int
+    total_earnings: int
+    order_count: int
+
+
+class SellerDashboardResponse(BaseModel):
+    is_connected: bool
+    stripe_account_id: Optional[str] = None
+    stripe_configured: bool
+    total_sales: int
+    total_earnings: int
+    total_orders: int
+    question_sets_count: int
+    question_set_breakdown: list[QuestionSetBreakdown]
+    recent_transactions: list[RecentTransaction]
+    monthly_summary: list[MonthlySummary]
 
 
 @router.post("/create-payment-intent", response_model=CreatePaymentIntentResponse)
@@ -239,6 +277,12 @@ async def create_connect_account_link(
 
     販売者がStripe Connectアカウントを作成・管理するためのリンク
     """
+    if not stripe_service.is_configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripeが設定されていません。管理者にお問い合わせください。",
+        )
+
     try:
         if not current_user.stripe_account_id:
             result = stripe_service.create_connect_account(current_user.email)
@@ -346,13 +390,15 @@ async def export_seller_revenue(
     )
 
 
-@router.get("/seller-dashboard")
+@router.get("/seller-dashboard", response_model=SellerDashboardResponse)
 async def get_seller_dashboard(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
     販売者ダッシュボード情報を取得
+
+    集計値に加え、問題集別内訳・直近取引・月次推移を返す。
     """
     if not current_user.is_seller:
         raise HTTPException(
@@ -360,26 +406,88 @@ async def get_seller_dashboard(
             detail="販売者権限が必要です"
         )
 
-    # 自分の問題集の購入履歴を取得
     question_sets = db.query(QuestionSet).filter(
         QuestionSet.creator_id == current_user.id
     ).all()
-
-    question_set_ids = [qs.id for qs in question_sets]
+    qs_map = {qs.id: qs for qs in question_sets}
+    question_set_ids = list(qs_map.keys())
 
     purchases = db.query(Purchase).filter(
         Purchase.question_set_id.in_(question_set_ids)
-    ).all()
+    ).order_by(Purchase.purchased_at.desc()).all()
 
     total_sales = sum(p.amount for p in purchases)
     total_earnings = sum(p.seller_amount for p in purchases)
     total_orders = len(purchases)
 
-    return {
-        "is_connected": bool(current_user.stripe_account_id),
-        "stripe_account_id": current_user.stripe_account_id,
-        "total_sales": total_sales,
-        "total_earnings": total_earnings,
-        "total_orders": total_orders,
-        "question_sets_count": len(question_sets),
-    }
+    # --- 問題集別内訳 ---
+    breakdown_map: dict[str, dict] = {}
+    for qs in question_sets:
+        breakdown_map[qs.id] = {
+            "id": qs.id,
+            "title": qs.title,
+            "price": qs.price or 0,
+            "sales_count": 0,
+            "total_revenue": 0,
+            "seller_revenue": 0,
+        }
+    for p in purchases:
+        entry = breakdown_map.get(p.question_set_id)
+        if entry:
+            entry["sales_count"] += 1
+            entry["total_revenue"] += p.amount
+            entry["seller_revenue"] += p.seller_amount
+
+    question_set_breakdown = sorted(
+        breakdown_map.values(),
+        key=lambda x: x["total_revenue"],
+        reverse=True,
+    )
+
+    # --- 直近取引 (20件) ---
+    recent_transactions = []
+    for p in purchases[:20]:
+        qs = qs_map.get(p.question_set_id)
+        recent_transactions.append(RecentTransaction(
+            purchased_at=p.purchased_at,
+            question_set_title=qs.title if qs else "(削除済み)",
+            amount=p.amount,
+            platform_fee=p.platform_fee,
+            seller_amount=p.seller_amount,
+        ))
+
+    # --- 月次集計 (直近6ヶ月、当月含む) ---
+    now = datetime.utcnow()
+    m = now.month - 5
+    if m <= 0:
+        six_months_ago = datetime(now.year - 1, m + 12, 1)
+    else:
+        six_months_ago = datetime(now.year, m, 1)
+
+    monthly_buckets: dict[str, dict] = defaultdict(
+        lambda: {"total_sales": 0, "total_earnings": 0, "order_count": 0}
+    )
+    for p in purchases:
+        if p.purchased_at and p.purchased_at >= six_months_ago:
+            key = p.purchased_at.strftime("%Y-%m")
+            monthly_buckets[key]["total_sales"] += p.amount
+            monthly_buckets[key]["total_earnings"] += p.seller_amount
+            monthly_buckets[key]["order_count"] += 1
+
+    monthly_summary = [
+        MonthlySummary(month=k, **v)
+        for k, v in sorted(monthly_buckets.items(), reverse=True)
+    ]
+
+    return SellerDashboardResponse(
+        is_connected=bool(current_user.stripe_account_id),
+        stripe_account_id=current_user.stripe_account_id,
+        stripe_configured=stripe_service.is_configured,
+        total_sales=total_sales,
+        total_earnings=total_earnings,
+        total_orders=total_orders,
+        question_sets_count=len(question_sets),
+        question_set_breakdown=question_set_breakdown,
+        recent_transactions=recent_transactions,
+        monthly_summary=monthly_summary,
+    )

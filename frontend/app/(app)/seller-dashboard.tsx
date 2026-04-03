@@ -58,10 +58,14 @@ export default function SellerDashboardScreen() {
         setDashboard({
           is_connected: false,
           stripe_account_id: null,
+          stripe_configured: false,
           total_sales: 0,
           total_earnings: 0,
           total_orders: 0,
           question_sets_count: 0,
+          question_set_breakdown: [],
+          recent_transactions: [],
+          monthly_summary: [],
         });
       } else {
         console.error('Failed to load seller dashboard:', error);
@@ -328,13 +332,21 @@ export default function SellerDashboardScreen() {
       ) : (
         // 登録済み — ダッシュボード表示
         <>
+          {!dashboard.stripe_configured && (
+            <View style={styles.stripeBanner}>
+              <Text style={styles.stripeBannerText}>
+                Stripeキーが未設定です。テスト環境で動作しています。
+              </Text>
+            </View>
+          )}
+
           <View style={styles.statsContainer}>
             <View style={styles.statCard}>
-              <Text style={styles.statValue}>¥{dashboard.total_sales.toLocaleString()}</Text>
+              <Text style={styles.statValue}>{'\u00A5'}{dashboard.total_sales.toLocaleString()}</Text>
               <Text style={styles.statLabel}>総売上</Text>
             </View>
             <View style={styles.statCard}>
-              <Text style={styles.statValue}>¥{dashboard.total_earnings.toLocaleString()}</Text>
+              <Text style={styles.statValue}>{'\u00A5'}{dashboard.total_earnings.toLocaleString()}</Text>
               <Text style={styles.statLabel}>あなたの収益</Text>
             </View>
           </View>
@@ -349,6 +361,89 @@ export default function SellerDashboardScreen() {
               <Text style={styles.statLabel}>問題集数</Text>
             </View>
           </View>
+
+          {/* 問題集別売上 */}
+          {dashboard.question_set_breakdown.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>問題集別売上</Text>
+              <View style={styles.breakdownCard}>
+                {dashboard.question_set_breakdown.map((qs, idx) => (
+                  <React.Fragment key={qs.id}>
+                    {idx > 0 && <View style={styles.breakdownDivider} />}
+                    <TouchableOpacity
+                      style={styles.breakdownRow}
+                      onPress={() => router.push(`/(app)/question-sets/${qs.id}` as any)}
+                    >
+                      <View style={styles.breakdownInfo}>
+                        <Text style={styles.breakdownTitle} numberOfLines={1}>{qs.title}</Text>
+                        <Text style={styles.breakdownMeta}>
+                          {'\u00A5'}{qs.price.toLocaleString()} / {qs.sales_count}件販売
+                        </Text>
+                      </View>
+                      <View style={styles.breakdownNumbers}>
+                        <Text style={styles.breakdownRevenue}>{'\u00A5'}{qs.seller_revenue.toLocaleString()}</Text>
+                        <Text style={styles.breakdownRevenueLabel}>収益</Text>
+                      </View>
+                    </TouchableOpacity>
+                  </React.Fragment>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* 直近の取引 */}
+          {dashboard.recent_transactions.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>直近の取引</Text>
+              <View style={styles.transactionsCard}>
+                {dashboard.recent_transactions.map((tx, idx) => (
+                  <React.Fragment key={idx}>
+                    {idx > 0 && <View style={styles.breakdownDivider} />}
+                    <View style={styles.transactionRow}>
+                      <View style={styles.transactionInfo}>
+                        <Text style={styles.transactionTitle} numberOfLines={1}>{tx.question_set_title}</Text>
+                        <Text style={styles.transactionDate}>
+                          {new Date(tx.purchased_at).toLocaleDateString('ja-JP')}
+                        </Text>
+                      </View>
+                      <View style={styles.transactionNumbers}>
+                        <Text style={styles.transactionAmount}>{'\u00A5'}{tx.amount.toLocaleString()}</Text>
+                        <Text style={styles.transactionFee}>手数料 {'\u00A5'}{tx.platform_fee.toLocaleString()}</Text>
+                      </View>
+                    </View>
+                  </React.Fragment>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* 月次推移 */}
+          {dashboard.monthly_summary.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>月次推移</Text>
+              <View style={styles.monthlyCard}>
+                {dashboard.monthly_summary.map((m, idx) => {
+                  const maxSales = Math.max(...dashboard.monthly_summary.map(s => s.total_sales), 1);
+                  const barWidth = Math.max((m.total_sales / maxSales) * 100, 2);
+                  return (
+                    <React.Fragment key={m.month}>
+                      {idx > 0 && <View style={styles.breakdownDivider} />}
+                      <View style={styles.monthlyRow}>
+                        <Text style={styles.monthlyLabel}>{m.month}</Text>
+                        <View style={styles.monthlyBarContainer}>
+                          <View style={[styles.monthlyBar, { width: `${barWidth}%` }]} />
+                        </View>
+                        <View style={styles.monthlyNumbers}>
+                          <Text style={styles.monthlyAmount}>{'\u00A5'}{m.total_earnings.toLocaleString()}</Text>
+                          <Text style={styles.monthlyCount}>{m.order_count}件</Text>
+                        </View>
+                      </View>
+                    </React.Fragment>
+                  );
+                })}
+              </View>
+            </View>
+          )}
 
           {/* Stripe接続情報 */}
           <View style={styles.section}>
@@ -749,6 +844,159 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#f0f0f0',
     marginHorizontal: 16,
+  },
+  stripeBanner: {
+    backgroundColor: '#FFF3CD',
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF9500',
+    padding: 12,
+    margin: 16,
+    marginBottom: 0,
+    borderRadius: 8,
+  },
+  stripeBannerText: {
+    fontSize: 13,
+    color: '#856404',
+    lineHeight: 18,
+  },
+  breakdownCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    overflow: 'hidden',
+    ...platformShadow({
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 4,
+    }),
+    elevation: 3,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+  },
+  breakdownDivider: {
+    height: 1,
+    backgroundColor: '#f0f0f0',
+    marginHorizontal: 14,
+  },
+  breakdownInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  breakdownTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 2,
+  },
+  breakdownMeta: {
+    fontSize: 12,
+    color: '#888',
+  },
+  breakdownNumbers: {
+    alignItems: 'flex-end',
+  },
+  breakdownRevenue: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#34C759',
+  },
+  breakdownRevenueLabel: {
+    fontSize: 11,
+    color: '#888',
+  },
+  transactionsCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    overflow: 'hidden',
+    ...platformShadow({
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 4,
+    }),
+    elevation: 3,
+  },
+  transactionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+  },
+  transactionInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  transactionTitle: {
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 2,
+  },
+  transactionDate: {
+    fontSize: 12,
+    color: '#999',
+  },
+  transactionNumbers: {
+    alignItems: 'flex-end',
+  },
+  transactionAmount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  transactionFee: {
+    fontSize: 11,
+    color: '#999',
+  },
+  monthlyCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    overflow: 'hidden',
+    ...platformShadow({
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 4,
+    }),
+    elevation: 3,
+  },
+  monthlyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+  },
+  monthlyLabel: {
+    fontSize: 13,
+    color: '#555',
+    width: 64,
+    fontWeight: '500',
+  },
+  monthlyBarContainer: {
+    flex: 1,
+    height: 12,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 6,
+    marginHorizontal: 10,
+    overflow: 'hidden',
+  },
+  monthlyBar: {
+    height: '100%',
+    backgroundColor: '#34C759',
+    borderRadius: 6,
+  },
+  monthlyNumbers: {
+    alignItems: 'flex-end',
+    minWidth: 80,
+  },
+  monthlyAmount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#333',
+  },
+  monthlyCount: {
+    fontSize: 11,
+    color: '#999',
   },
   errorText: {
     fontSize: 15,

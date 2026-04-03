@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { platformShadow } from "@/src/styles/platformShadow";
 import {
   View,
@@ -25,6 +25,11 @@ import {
   getAvailableTextbooks,
   Textbook,
 } from "../../../src/services/textbookService";
+import {
+  localStorageService,
+  LocalQuestionSet,
+} from "../../../src/services/localStorageService";
+import { loadDefaultQuestionSets } from "../../../src/data/defaultQuestionSets";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
 import AdBanner from "../../../src/components/AdBanner";
@@ -35,11 +40,13 @@ export default function MyQuestionSetsScreen() {
   const [purchasedQuestionSets, setPurchasedQuestionSets] = useState<
     QuestionSet[]
   >([]);
+  const [trialQuestionSets, setTrialQuestionSets] = useState<LocalQuestionSet[]>([]);
   const [dueCounts, setDueCounts] = useState<Record<string, number>>({});
   const [availableTextbooks, setAvailableTextbooks] = useState<Textbook[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [languageFilter, setLanguageFilter] = useState<LanguageFilter>("all");
+  const [showDefaultSets, setShowDefaultSets] = useState(true);
   const router = useRouter();
   const { user, isLoading: isAuthLoading } = useAuth();
   const { t } = useLanguage();
@@ -47,13 +54,27 @@ export default function MyQuestionSetsScreen() {
   const isSmallScreen = width < 600;
 
   useEffect(() => {
-    // 認証済みの場合のみ問題セットを読み込む
+    const loadPrefs = async () => {
+      try {
+        const val = await AsyncStorage.getItem("pref_showDefaultSets");
+        if (val !== null) setShowDefaultSets(val === "true");
+      } catch (_) {}
+    };
+    loadPrefs();
+  }, []);
+
+  const toggleShowDefaultSets = useCallback(async () => {
+    const next = !showDefaultSets;
+    setShowDefaultSets(next);
+    await AsyncStorage.setItem("pref_showDefaultSets", String(next));
+  }, [showDefaultSets]);
+
+  useEffect(() => {
     if (user) {
       loadQuestionSets();
       return;
     }
 
-    // 未認証で、認証チェックが終わったらログインへ
     if (!isAuthLoading && !user) {
       setIsLoading(false);
     }
@@ -62,19 +83,25 @@ export default function MyQuestionSetsScreen() {
 
   const loadQuestionSets = async () => {
     try {
-      const [myData, purchasedData] = await Promise.all([
+      await loadDefaultQuestionSets();
+
+      const [myData, purchasedData, trialData, textbooksData] = await Promise.all([
         questionSetsApi.getMy(),
         questionSetsApi.getPurchased(),
+        localStorageService.getTrialQuestionSets(),
+        getAvailableTextbooks(),
       ]);
-
-      const textbooksData = await getAvailableTextbooks();
 
       setMyQuestionSets(myData);
       setPurchasedQuestionSets(purchasedData);
+      setTrialQuestionSets(trialData);
       setAvailableTextbooks(textbooksData);
 
       const counts: Record<string, number> = {};
       for (const set of [...myData, ...purchasedData]) {
+        counts[set.id] = await srsService.getDueCount(set.id);
+      }
+      for (const set of trialData) {
         counts[set.id] = await srsService.getDueCount(set.id);
       }
       setDueCounts(counts);
@@ -181,6 +208,20 @@ export default function MyQuestionSetsScreen() {
           resolvedContentLanguage(q.content_language) === languageFilter
       ),
     [purchasedQuestionSets, languageFilter]
+  );
+
+  const filteredTrialQuestionSets = useMemo(
+    () =>
+      trialQuestionSets
+        .filter((item) =>
+          showDefaultSets ? true : !item.id.startsWith("default_")
+        )
+        .filter(
+          (item) =>
+            languageFilter === "all" ||
+            resolvedContentLanguage(item.content_language) === languageFilter
+        ),
+    [trialQuestionSets, showDefaultSets, languageFilter]
   );
 
   const filteredTextbooks = useMemo(
@@ -309,6 +350,51 @@ export default function MyQuestionSetsScreen() {
     </View>
   );
 
+  const renderTrialQuestionSetItem = ({ item }: { item: LocalQuestionSet }) => (
+    <TouchableOpacity
+      style={[
+        styles.card,
+        {
+          padding: isSmallScreen ? 12 : 16,
+          marginBottom: isSmallScreen ? 10 : 12,
+        },
+      ]}
+      onPress={() => router.push(`/(trial)/set/${item.id}`)}
+      testID={`trial-qs-card-${item.id}`}
+    >
+      <View style={styles.cardHeader}>
+        <Text style={[styles.cardTitle, { fontSize: isSmallScreen ? 16 : 18 }]}>
+          {item.title}
+        </Text>
+        {(dueCounts[item.id] || 0) > 0 && (
+          <View style={styles.dueBadge}>
+            <Text style={styles.dueBadgeText}>
+              {t(`${dueCounts[item.id]} due`, `${dueCounts[item.id]}問 要復習`)}
+            </Text>
+          </View>
+        )}
+        <View style={styles.trialBadge}>
+          <Text style={styles.trialBadgeText}>
+            {t("Trial Mode", "お試しモード")}
+          </Text>
+        </View>
+      </View>
+      {item.description ? (
+        <Text style={styles.cardDescription} numberOfLines={2}>
+          {item.description}
+        </Text>
+      ) : null}
+      <View style={styles.cardFooter}>
+        <Text style={styles.cardCategory}>
+          {contentLanguageDisplayLabel(item.content_language, t)}
+        </Text>
+        <Text style={styles.cardQuestions}>
+          {t(`${item.questions.length} questions`, `${item.questions.length} 問`)}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+
   const renderTextbookItem = ({ item }: { item: Textbook }) => (
     <View
       style={[
@@ -432,6 +518,30 @@ export default function MyQuestionSetsScreen() {
           {renderLangFilterChip("en", "English", "my-qs-filter-en")}
         </View>
 
+        {trialQuestionSets.length > 0 && (
+          <View style={styles.filterRow}>
+            <TouchableOpacity
+              style={[
+                styles.filterChip,
+                showDefaultSets && styles.filterChipActive,
+              ]}
+              onPress={toggleShowDefaultSets}
+              testID="my-qs-toggle-default-sets"
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  showDefaultSets && styles.filterChipTextActive,
+                ]}
+              >
+                {showDefaultSets
+                  ? t("Hide Defaults", "デフォルトを非表示")
+                  : t("Show Defaults", "デフォルトを表示")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* My Question Sets Section */}
         <View style={styles.section} nativeID="my-qs-section">
           <Text style={[styles.sectionTitle, { fontSize: isSmallScreen ? 18 : 20 }]}>
@@ -483,6 +593,29 @@ export default function MyQuestionSetsScreen() {
             ) : (
               filteredPurchasedQuestionSets.map((item) => (
                 <View key={item.id}>{renderPurchasedItem({ item })}</View>
+              ))
+            )}
+          </View>
+        )}
+
+        {/* Trial / Default Question Sets Section */}
+        {trialQuestionSets.length > 0 && (
+          <View style={styles.section} nativeID="trial-qs-section">
+            <Text style={[styles.sectionTitle, { fontSize: isSmallScreen ? 18 : 20 }]}>
+              {t("Trial Question Sets", "お試し問題セット")}
+            </Text>
+            {filteredTrialQuestionSets.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>
+                  {t(
+                    "No trial sets match this filter",
+                    "この条件に一致するお試し問題セットがありません"
+                  )}
+                </Text>
+              </View>
+            ) : (
+              filteredTrialQuestionSets.map((item) => (
+                <View key={item.id}>{renderTrialQuestionSetItem({ item })}</View>
               ))
             )}
           </View>
@@ -645,6 +778,17 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   purchasedText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  trialBadge: {
+    backgroundColor: "#34C759",
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  trialBadgeText: {
     color: "#fff",
     fontSize: 12,
     fontWeight: "600",

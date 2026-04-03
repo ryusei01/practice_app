@@ -33,5 +33,27 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://ai-practice-book.com/tokusho?lang=en" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://ai-practice-book.com/tokusho" />
   </url>
+
+  <!-- 利用規約 -->
+  <url>
+    <loc>https://ai-practice-book.com/terms-of-service</loc>
+    <lastmod>2026-04-03</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://ai-practice-book.com/terms-of-service?lang=ja" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://ai-practice-book.com/terms-of-service?lang=en" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://ai-practice-book.com/terms-of-service" />
+  </url>
+
+  <!-- プライバシーポリシー -->
+  <url>
+    <loc>https://ai-practice-book.com/privacy-policy</loc>
+    <lastmod>2026-04-03</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://ai-practice-book.com/privacy-policy?lang=ja" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://ai-practice-book.com/privacy-policy?lang=en" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://ai-practice-book.com/privacy-policy" />
+  </url>
 </urlset>
 
