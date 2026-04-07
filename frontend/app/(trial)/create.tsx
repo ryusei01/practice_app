@@ -87,6 +87,7 @@ export default function TrialCreateScreen() {
   const [aiTextInput, setAiTextInput] = useState("");
   const [aiTextGenerating, setAiTextGenerating] = useState(false);
   const [aiTextQuestions, setAiTextQuestions] = useState<LocalQuestion[] | null>(null);
+  const [aiTextPreviewModalVisible, setAiTextPreviewModalVisible] = useState(false);
 
   const { t, language } = useLanguage();
   const [contentLanguage, setContentLanguage] = useState<ContentLanguage>(
@@ -374,7 +375,7 @@ export default function TrialCreateScreen() {
     setAiTextQuestions(null);
     try {
       const res = await aiApi.generateFromText(aiTextInput, undefined, contentLanguage);
-      setAiTextQuestions(res.questions.map((q, i) => ({
+      const mapped = res.questions.map((q, i) => ({
         id: `aitxt_${Date.now()}_${i}`,
         question: q.question_text,
         answer: q.correct_answer,
@@ -382,7 +383,16 @@ export default function TrialCreateScreen() {
         question_type: (q.question_type as LocalQuestion["question_type"]) || "text_input",
         options: q.options || undefined,
         category: q.category || undefined,
-      })));
+      }));
+      if (mapped.length === 0) {
+        Alert.alert(
+          t("No questions generated", "問題が生成されませんでした"),
+          t("Try different or longer text.", "別のテキストか、もう少し長い内容を試してください。"),
+        );
+        return;
+      }
+      setAiTextQuestions(mapped);
+      setAiTextPreviewModalVisible(true);
     } catch (error: any) {
       Alert.alert(
         t("Error", "エラー"),
@@ -498,6 +508,54 @@ export default function TrialCreateScreen() {
   return (
     <View style={styles.container}>
       <Header title={t("Create Question Set", "問題セットを作成")} />
+      <Modal
+        visible={aiTextPreviewModalVisible}
+        title={t("Generated questions preview", "生成結果のプレビュー")}
+        onClose={() => setAiTextPreviewModalVisible(false)}
+      >
+        <Text style={styles.aiPreviewModalSummary}>
+          {aiTextQuestions
+            ? t(
+                `${aiTextQuestions.length} question(s). Review below, then close to create the set.`,
+                `${aiTextQuestions.length}問が生成されました。内容を確認してから閉じ、問題セットを作成できます。`,
+              )
+            : ""}
+        </Text>
+        {aiTextQuestions?.map((q, i) => (
+          <View key={q.id || i} style={styles.previewItem}>
+            <Text style={styles.previewBadge}>
+              {q.question_type === "multiple_choice"
+                ? t("MC", "選択")
+                : q.question_type === "true_false"
+                ? t("TF", "正誤")
+                : t("Text", "記述")}
+            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.previewQ}>{q.question}</Text>
+              <Text style={styles.previewA}>
+                {t("Answer", "答え")}: {getMultipleChoiceAnswerText(q.answer, q.options)}
+              </Text>
+              {q.options && q.options.length > 0 && (
+                <Text style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
+                  {q.options.join(" / ")}
+                </Text>
+              )}
+              {q.explanation ? (
+                <Text style={styles.aiPreviewExplanation}>
+                  {t("Explanation", "解説")}: {q.explanation}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        ))}
+        <TouchableOpacity
+          style={styles.aiPreviewModalCloseBtn}
+          onPress={() => setAiTextPreviewModalVisible(false)}
+        >
+          <Text style={styles.aiPreviewModalCloseBtnText}>{t("Close", "閉じる")}</Text>
+        </TouchableOpacity>
+      </Modal>
+
       <Modal
         visible={showCsvPromptModal}
         title={t(
@@ -1267,7 +1325,13 @@ export default function TrialCreateScreen() {
                     </View>
                   </View>
                 ))}
-                <TouchableOpacity style={styles.addButton} onPress={() => setAiTextQuestions(null)}>
+                <TouchableOpacity
+                  style={styles.addButton}
+                  onPress={() => {
+                    setAiTextQuestions(null);
+                    setAiTextPreviewModalVisible(false);
+                  }}
+                >
                   <Text style={styles.addButtonText}>{t("Try Again", "やり直す")}</Text>
                 </TouchableOpacity>
               </View>
@@ -1858,6 +1922,31 @@ const styles = StyleSheet.create({
   csvPromptCloseBtnText: {
     color: "#333",
     fontSize: 15,
+    fontWeight: "600",
+  },
+  aiPreviewModalSummary: {
+    fontSize: 14,
+    color: "#555",
+    lineHeight: 20,
+    marginBottom: 14,
+    textAlign: "center",
+  },
+  aiPreviewExplanation: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  aiPreviewModalCloseBtn: {
+    marginTop: 16,
+    backgroundColor: "#5856D6",
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  aiPreviewModalCloseBtnText: {
+    color: "#fff",
+    fontSize: 16,
     fontWeight: "600",
   },
   sectionDesc: {

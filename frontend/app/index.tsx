@@ -19,7 +19,7 @@ import Modal from "../src/components/Modal";
 import { Platform } from "react-native";
 import { submitPublicContact } from "../src/api/contact";
 import { getApiErrorMessage } from "../src/utils/apiError";
-import { APP_TITLE, APP_TAGLINE } from "../src/constants/branding";
+import { APP_TITLE, APP_TAGLINE, SEO_SITE_NAME } from "../src/constants/branding";
 
 const BETA_NOTICE_SEEN_KEY = "@beta_notice_seen";
 
@@ -148,7 +148,8 @@ export default function Home() {
         setMetaTag("og:description", ogDescription, true);
         setMetaTag("og:type", "website", true);
         setMetaTag("og:url", baseUrl, true);
-        setMetaTag("og:site_name", APP_TITLE, true);
+        setMetaTag("og:site_name", SEO_SITE_NAME, true);
+        setMetaTag("application-name", SEO_SITE_NAME);
         setMetaTag("og:locale", currentLang === "ja" ? "ja_JP" : "en_US", true);
         if (currentLang === "ja") {
           setMetaTag("og:locale:alternate", "en_US", true);
@@ -164,7 +165,7 @@ export default function Home() {
         // その他のSEOタグ
         setMetaTag("robots", "index, follow");
         setMetaTag("language", currentLang === "ja" ? "Japanese" : "English");
-        setMetaTag("author", APP_TITLE);
+        setMetaTag("author", SEO_SITE_NAME);
 
         // Canonical URL
         setLinkTag("canonical", baseUrl);

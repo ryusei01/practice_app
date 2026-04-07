@@ -35,7 +35,7 @@ import { useAuth } from "../../src/contexts/AuthContext";
 import Header from "../../src/components/Header";
 import Modal from "../../src/components/Modal";
 import { srsService } from "../../src/services/srsService";
-import { APP_TITLE } from "../../src/constants/branding";
+import { APP_TITLE, APP_TAGLINE, SEO_SITE_NAME } from "../../src/constants/branding";
 
 export default function TrialQuestionSetsScreen() {
   const [questionSets, setQuestionSets] = useState<LocalQuestionSet[]>([]);
@@ -173,8 +173,8 @@ export default function TrialQuestionSetsScreen() {
       const isJa = language === "ja";
 
       document.title = isJa
-        ? `${APP_TITLE} - 無料お試し | 登録不要で問題セットを練習`
-        : `${APP_TITLE} - Free Trial | Practice Question Sets Without Sign Up`;
+        ? `${APP_TITLE}（${APP_TAGLINE}）- 無料お試し | 登録不要で問題セットを練習`
+        : `${APP_TITLE} - ${APP_TAGLINE} | Free Trial · Practice Without Sign Up`;
 
       setMetaTag(
         "description",
@@ -191,8 +191,8 @@ export default function TrialQuestionSetsScreen() {
       setMetaTag(
         "og:title",
         isJa
-          ? `${APP_TITLE} 無料お試し - 登録不要で体験`
-          : `Try ${APP_TITLE} Free - No Sign Up Required`,
+          ? `${APP_TITLE}（${APP_TAGLINE}）無料お試し - 登録不要で体験`
+          : `Try ${APP_TITLE} (${APP_TAGLINE}) Free - No Sign Up Required`,
         "property"
       );
       setMetaTag(
@@ -201,6 +201,22 @@ export default function TrialQuestionSetsScreen() {
           ? "AI学習を無料で体験。アカウント作成不要でクイズと単語帳を試せます。"
           : "Experience AI-powered learning for free. Create quizzes and practice with flashcards without creating an account.",
         "property"
+      );
+      setMetaTag("og:site_name", SEO_SITE_NAME, "property");
+      setMetaTag("application-name", SEO_SITE_NAME);
+      setMetaTag("author", SEO_SITE_NAME);
+      setMetaTag("twitter:card", "summary_large_image");
+      setMetaTag(
+        "twitter:title",
+        isJa
+          ? `${APP_TITLE}（${APP_TAGLINE}）無料お試し - 登録不要で体験`
+          : `Try ${APP_TITLE} (${APP_TAGLINE}) Free - No Sign Up Required`
+      );
+      setMetaTag(
+        "twitter:description",
+        isJa
+          ? "AI学習を無料で体験。アカウント作成不要でクイズと単語帳を試せます。"
+          : "Experience AI-powered learning for free. Create quizzes and practice with flashcards without creating an account."
       );
       setMetaTag("og:locale", isJa ? "ja_JP" : "en_US", "property");
       setMetaTag("robots", "index, follow");
