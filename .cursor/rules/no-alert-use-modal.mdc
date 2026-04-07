@@ -18,3 +18,5 @@ window.alert('削除しますか？');
 // モーダルやダイアログコンポーネントを使用する
 showModal({ title: '完了', message: '保存しました' });
 ```
+
+API 失敗のデフォルト表示は `apiClient` のグローバルエラーモーダル（`api-error-handling` ルール参照）。`Alert.alert` で API エラーを重ねない。

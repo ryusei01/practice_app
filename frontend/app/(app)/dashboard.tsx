@@ -11,6 +11,7 @@ import { useAuth } from "../../src/contexts/AuthContext";
 import { useLanguage } from "../../src/contexts/LanguageContext";
 import Header from "../../src/components/Header";
 import AdBanner from "../../src/components/AdBanner";
+import LoadingScreen from "../../src/components/LoadingScreen";
 import { useEffect } from "react";
 
 export default function DashboardScreen() {
@@ -29,11 +30,7 @@ export default function DashboardScreen() {
   }, [isLoading, isAuthenticated, router]);
 
   if (isLoading) {
-    return (
-      <View style={styles.container}>
-        <Text>{t("Loading...", "読み込み中...")}</Text>
-      </View>
-    );
+    return <LoadingScreen />;
   }
 
   if (!isAuthenticated || !user) {

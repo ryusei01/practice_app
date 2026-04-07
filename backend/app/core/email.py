@@ -25,7 +25,8 @@ async def send_email(
     to_email: str,
     subject: str,
     body: str,
-    html_body: Optional[str] = None
+    html_body: Optional[str] = None,
+    reply_to: Optional[str] = None,
 ) -> bool:
     """
     メールを送信
@@ -59,6 +60,8 @@ async def send_email(
         message["Subject"] = subject
         message["From"] = settings.SMTP_FROM_EMAIL
         message["To"] = to_email
+        if reply_to:
+            message["Reply-To"] = reply_to
 
         # テキストパートを追加
         text_part = MIMEText(body, "plain", "utf-8")

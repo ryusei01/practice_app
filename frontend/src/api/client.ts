@@ -2,6 +2,8 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import Constants from "expo-constants";
 import { tokenStorage } from "../utils/secureStorage";
 import { authEvents } from "../utils/authEvents";
+import { getApiErrorMessage } from "../utils/apiError";
+import { emitGlobalApiError } from "../utils/globalApiErrorBus";
 
 // 環境変数からAPI URLを取得（デフォルトは開発環境用）
 const API_URL =
@@ -122,6 +124,25 @@ apiClient.interceptors.response.use(
         authEvents.emitSessionExpired();
         return Promise.reject(refreshError);
       }
+    }
+
+    if (axios.isCancel(error)) {
+      return Promise.reject(error);
+    }
+
+    // 401 はログイン／リフレッシュ側で扱う（二重モーダル防止）
+    if (error.response?.status === 401) {
+      return Promise.reject(error);
+    }
+
+    const cfg = error.config as InternalAxiosRequestConfig | undefined;
+    if (!cfg?.skipGlobalErrorModal) {
+      const msg = getApiErrorMessage(
+        error,
+        "Something went wrong",
+        "リクエストに失敗しました"
+      );
+      emitGlobalApiError(msg);
     }
 
     return Promise.reject(error);

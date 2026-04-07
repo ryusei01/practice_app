@@ -2,10 +2,13 @@
 
 表示・設定の整合は [`.cursor/plans/有料プラン整合修正_e7f6a463.plan.md`](../.cursor/plans/有料プラン整合修正_e7f6a463.plan.md) の todos 完了分を前提とする。ここでは **運用・インフラ・残作業** を追う。
 
+有料プランの価格・特典・提供条件などに **固定的な終了期限は設けない** 想定とし、運用上の都合により **予告なく変更される可能性がある**。
+
 ## 本番・検証前（必須）
 
 - [ ] **Stripe**
-  - [ ] `STRIPE_PREMIUM_PRICE_ID` を本番用 `price_...` に設定（`price_placeholder` のままでは Checkout が 503）
+  - [ ] `STRIPE_PREMIUM_MONTHLY_PRICE_ID` と `STRIPE_PREMIUM_YEARLY_PRICE_ID` を本番用 `price_...` に設定
+  - [ ] 旧設定 `STRIPE_PREMIUM_PRICE_ID` を使う場合は、年額プラン向けの互換値として扱う
   - [ ] `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` を本番値に設定（Webhook 署名検証は本番では必須）
 - [ ] **Webhook**
   - [ ] エンドポイント URL: `https://<API>/api/v1/subscriptions/webhook`
@@ -22,7 +25,8 @@
 ## 任意・改善
 
 - [ ] README またはデプロイ手順に Stripe / Webhook / フロント env の一覧を追記（整合修正プランではスコープ外）
-- [ ] 年額プラン（1,800円/年・365日有効）のワンタイム Checkout で運用中。Stripe サブスクリプション（自動更新）への移行は別タスク
+- [ ] 月額プラン（350円・30日・100クレジット）と年間プラン（1,800円・365日・0クレジット）の運用設計を確定する
+- [ ] Stripe サブスクリプション（自動更新）への移行は別タスク
 - [ ] モバイルアプリ内ブラウザで決済後に同一セッションで戻る挙動の追加検証
 
 ## 参照

@@ -9,6 +9,7 @@ import {
   ScrollView,
   useWindowDimensions,
   Platform,
+  Pressable,
 } from "react-native";
 
 interface ModalProps {
@@ -43,21 +44,22 @@ export default function Modal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <TouchableOpacity
-        style={styles.overlay}
-        activeOpacity={1}
-        onPress={onClose}
-      >
-        <TouchableOpacity
+      <View style={styles.overlay}>
+        <Pressable
+          style={StyleSheet.absoluteFillObject}
+          onPress={onClose}
+          accessibilityLabel="Close"
+          accessibilityRole="none"
+        />
+        <View
           style={[
             styles.modalContainer,
             {
               width: isSmallScreen ? "95%" : "90%",
               maxWidth: isSmallScreen ? 400 : 500,
+              zIndex: 1,
             },
           ]}
-          activeOpacity={1}
-          onPress={(e) => e.stopPropagation()}
         >
           <View
             style={[
@@ -113,8 +115,8 @@ export default function Modal({
               </View>
             )}
           </View>
-        </TouchableOpacity>
-      </TouchableOpacity>
+        </View>
+      </View>
     </RNModal>
   );
 }

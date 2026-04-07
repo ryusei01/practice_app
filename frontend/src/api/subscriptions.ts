@@ -11,11 +11,19 @@ export interface CheckoutSession {
   session_id: string;
 }
 
-/** GET /subscriptions/plan-display（バックエンド settings 由来の表示用） */
-export interface PlanDisplay {
+export type PremiumPlanType = 'monthly' | 'yearly';
+
+export interface PlanOptionDisplay {
   price_jpy: number;
   credit_jpy: number;
   validity_days: number;
+  is_available: boolean;
+}
+
+/** GET /subscriptions/plan-display（バックエンド settings 由来の表示用） */
+export interface PlanDisplay {
+  monthly: PlanOptionDisplay;
+  yearly: PlanOptionDisplay;
 }
 
 export const subscriptionsApi = {
@@ -33,10 +41,15 @@ export const subscriptionsApi = {
    * モバイル: expo-web-browser で開く
    */
   createPremiumCheckout: async (
+    planType: PremiumPlanType,
     successUrl: string,
     cancelUrl: string,
   ): Promise<CheckoutSession> => {
-    const params = new URLSearchParams({ success_url: successUrl, cancel_url: cancelUrl });
+    const params = new URLSearchParams({
+      plan_type: planType,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+    });
     const response = await apiClient.post(
       `/subscriptions/create-checkout?${params.toString()}`,
     );

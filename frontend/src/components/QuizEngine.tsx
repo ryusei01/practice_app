@@ -15,6 +15,11 @@ import {
 } from "react-native";
 import { useLanguage } from "../contexts/LanguageContext";
 import { evaluateTextAnswer } from "../utils/aiEvaluator";
+import {
+  getMultipleChoiceAnswerText,
+  isMultipleChoiceCorrect,
+  normalizeMultipleChoiceAnswer,
+} from "../utils/multipleChoice";
 import { translateText, translateQuestion } from "../api/translate";
 import MediaPlayer from "./MediaPlayer";
 import MathText from "./MathText";
@@ -95,9 +100,7 @@ export default function QuizEngine({
   const [showAnswerTranslation, setShowAnswerTranslation] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
-  const [showOverrideModal, setShowOverrideModal] = useState(false);
   const [showAdModal, setShowAdModal] = useState(false);
-  const [overrideType, setOverrideType] = useState<'correct' | 'incorrect'>('correct');
   const [overrideMessage, setOverrideMessage] = useState("");
 
   const answersRef = useRef(answers);
@@ -174,10 +177,17 @@ export default function QuizEngine({
     try {
       // 現在の言語に基づいて翻訳先を決定
       const targetLang = language === "ja" ? "en" : "ja";
+      const answerForDisplay =
+        currentQuestion.question_type === "multiple_choice" || currentQuestion.options?.length
+          ? getMultipleChoiceAnswerText(
+              currentQuestion.correct_answer,
+              currentQuestion.options
+            )
+          : currentQuestion.correct_answer;
 
       const result = await translateQuestion({
         question_text: currentQuestion.question_text,
-        correct_answer: currentQuestion.correct_answer,
+        correct_answer: answerForDisplay,
         explanation: currentQuestion.explanation,
         target_lang: targetLang,
       });
@@ -215,16 +225,23 @@ export default function QuizEngine({
 
   const checkAnswer = (answer: string): boolean => {
     const currentQuestion = questions[currentQuestionIndex];
-    const correctAnswer = currentQuestion.correct_answer.trim().toLowerCase();
-    const userAnswerLower = answer.trim().toLowerCase();
+    const questionType =
+      currentQuestion.question_type ||
+      (currentQuestion.options && currentQuestion.options.length > 0
+        ? "multiple_choice"
+        : "text_input");
 
-    if (currentQuestion.question_type === "multiple_choice") {
-      return userAnswerLower === correctAnswer;
-    } else if (currentQuestion.question_type === "true_false") {
-      return userAnswerLower === correctAnswer;
-    } else {
-      return userAnswerLower === correctAnswer;
+    if (questionType === "multiple_choice") {
+      return isMultipleChoiceCorrect(
+        answer,
+        currentQuestion.correct_answer,
+        currentQuestion.options
+      );
     }
+
+    const userTrimmed = answer.trim();
+    const correctTrimmed = currentQuestion.correct_answer.trim();
+    return userTrimmed === correctTrimmed;
   };
 
   const handleSubmitAnswer = async () => {
@@ -328,45 +345,38 @@ export default function QuizEngine({
   };
 
   const handleOverrideCorrect = () => {
-    setOverrideType('correct');
-    setShowOverrideModal(true);
+    const updatedAnswers = [...answers];
+    const last = updatedAnswers[updatedAnswers.length - 1];
+    if (!last || last.admitted_unknown) return;
+
+    last.is_correct = true;
+    setAnswers(updatedAnswers);
+    setIsCorrect(true);
+    setScore(score + 1);
+    const message = t("✓ Marked as correct", "✓ 正解として記録しました");
+    setEvaluationFeedback(message);
+    setOverrideMessage(message);
+
+    setTimeout(() => {
+      setOverrideMessage("");
+    }, 3000);
   };
 
   const handleOverrideIncorrect = () => {
-    setOverrideType('incorrect');
-    setShowOverrideModal(true);
-  };
-
-  const confirmOverride = () => {
     const updatedAnswers = [...answers];
     const last = updatedAnswers[updatedAnswers.length - 1];
-    if (!last || last.admitted_unknown) {
-      setShowOverrideModal(false);
-      return;
-    }
-    last.is_correct = overrideType === 'correct';
+    if (!last || last.admitted_unknown) return;
+
+    last.is_correct = false;
     setAnswers(updatedAnswers);
-
-    if (overrideType === 'correct') {
-      setIsCorrect(true);
-      setScore(score + 1);
-      const message = t("✓ Marked as correct by user", "✓ ユーザーが正解として記録しました");
-      setEvaluationFeedback(message);
-      setOverrideMessage(message);
-    } else {
-      setIsCorrect(false);
-      if (isCorrect) {
-        setScore(score - 1);
-      }
-      const message = t("✗ Marked as incorrect by user", "✗ ユーザーが不正解として記録しました");
-      setEvaluationFeedback(message);
-      setOverrideMessage(message);
+    setIsCorrect(false);
+    if (isCorrect) {
+      setScore(score - 1);
     }
+    const message = t("✗ Marked as incorrect", "✗ 不正解として記録しました");
+    setEvaluationFeedback(message);
+    setOverrideMessage(message);
 
-    setCanOverride(false);
-    setShowOverrideModal(false);
-
-    // 3秒後にメッセージを消す
     setTimeout(() => {
       setOverrideMessage("");
     }, 3000);
@@ -415,11 +425,13 @@ export default function QuizEngine({
 
   const renderAnswerInput = () => {
     const currentQuestion = questions[currentQuestionIndex];
+    const questionType =
+      currentQuestion.question_type ||
+      (currentQuestion.options && currentQuestion.options.length > 0
+        ? "multiple_choice"
+        : "text_input");
 
-    if (
-      currentQuestion.question_type === "multiple_choice" &&
-      currentQuestion.options
-    ) {
+    if (questionType === "multiple_choice" && currentQuestion.options) {
       return (
         <View style={styles.optionsContainer}>
           {currentQuestion.options.map((option, index) => (
@@ -427,15 +439,17 @@ export default function QuizEngine({
               key={index}
               style={[
                 styles.optionButton,
-                userAnswer === option && styles.optionButtonSelected,
+                normalizeMultipleChoiceAnswer(userAnswer, currentQuestion.options) ===
+                  String(index + 1) && styles.optionButtonSelected,
               ]}
-              onPress={() => setUserAnswer(option)}
+              onPress={() => setUserAnswer(String(index + 1))}
               disabled={showResult}
             >
               <Text
                 style={[
                   styles.optionText,
-                  userAnswer === option && styles.optionTextSelected,
+                  normalizeMultipleChoiceAnswer(userAnswer, currentQuestion.options) ===
+                    String(index + 1) && styles.optionTextSelected,
                 ]}
               >
                 {option}
@@ -444,7 +458,7 @@ export default function QuizEngine({
           ))}
         </View>
       );
-    } else if (currentQuestion.question_type === "true_false") {
+    } else if (questionType === "true_false") {
       return (
         <View style={styles.optionsContainer}>
           <TouchableOpacity
@@ -579,7 +593,7 @@ export default function QuizEngine({
           </View>
         )}
 
-        {currentQuestion.category && (
+        {!!currentQuestion.category && (
           <View style={styles.categoryBadge}>
             <Text style={styles.categoryText}>{currentQuestion.category}</Text>
           </View>
@@ -610,7 +624,7 @@ export default function QuizEngine({
             {isCorrect ? "✓ " + t("Correct!", "正解！") : "✗ " + t("Incorrect", "不正解")}
           </Text>
 
-          {evaluationFeedback && (
+          {!!evaluationFeedback && (
             <View style={styles.feedbackContainer}>
               <Text style={styles.feedbackText}>{evaluationFeedback}</Text>
               {evaluationConfidence < 1.0 && evaluationConfidence > 0 && (
@@ -643,7 +657,10 @@ export default function QuizEngine({
             <Text style={styles.correctAnswerValue}>
               {showAnswerTranslation && translatedAnswer
                 ? translatedAnswer.split('\n')[0]
-                : currentQuestion.correct_answer.split('\n')[0]}
+                : getMultipleChoiceAnswerText(
+                    currentQuestion.correct_answer.split('\n')[0],
+                    currentQuestion.options
+                  )}
             </Text>
             {showAnswerTranslation && translatedAnswer && (
               <View style={styles.translationContainer}>
@@ -659,7 +676,7 @@ export default function QuizEngine({
           {!answers[answers.length - 1]?.admitted_unknown && (
             <View style={styles.manualRecordContainer}>
               <Text style={styles.manualRecordTitle}>
-                {t("Record result:", "結果を記録:")}
+                {t("Correct result:", "結果を訂正:")}
               </Text>
               <View style={styles.manualRecordButtons}>
                 <TouchableOpacity
@@ -705,7 +722,7 @@ export default function QuizEngine({
             />
           )}
 
-          {currentQuestion.explanation && (
+          {!!currentQuestion.explanation && (
             <View style={styles.explanationContainer}>
               <Text style={styles.explanationLabel}>{t("Explanation:", "解説:")}</Text>
               <MathText text={currentQuestion.explanation} style={styles.explanationText} />
@@ -852,51 +869,10 @@ export default function QuizEngine({
         </View>
       </Modal>
 
-      {/* Override Confirmation Modal */}
-      <Modal
-        transparent={true}
-        visible={showOverrideModal}
-        animationType="fade"
-        onRequestClose={() => setShowOverrideModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              {overrideType === 'correct'
-                ? t("Mark as Correct?", "正解として記録しますか？")
-                : t("Mark as Incorrect?", "不正解として記録しますか？")}
-            </Text>
-            <Text style={styles.modalMessage}>
-              {overrideType === 'correct'
-                ? t("Save this answer as correct.", "この回答を正解として保存します。")
-                : t("Save this answer as incorrect.", "この回答を不正解として保存します。")}
-            </Text>
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCancel]}
-                onPress={() => setShowOverrideModal(false)}
-              >
-                <Text style={styles.modalButtonTextCancel}>
-                  {t("Cancel", "キャンセル")}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, overrideType === 'correct' ? styles.modalButtonConfirm : styles.modalButtonDanger]}
-                onPress={confirmOverride}
-              >
-                <Text style={styles.modalButtonTextConfirm}>
-                  {overrideType === 'correct'
-                    ? t("Mark Correct", "正解として記録")
-                    : t("Mark Incorrect", "不正解として記録")}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Override Confirmation Modal removed - direct toggle now */}
 
       {/* Override Message */}
-      {overrideMessage && (
+      {!!overrideMessage && (
         <View style={styles.overrideMessageContainer}>
           <Text style={styles.overrideMessageText}>{overrideMessage}</Text>
         </View>

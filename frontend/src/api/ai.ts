@@ -37,6 +37,21 @@ export interface ImprovementSuggestion {
   priority: number;
 }
 
+export interface GeneratedQuestion {
+  question_text: string;
+  question_type: string;
+  options: string[] | null;
+  correct_answer: string;
+  explanation: string | null;
+  difficulty: number;
+  category: string | null;
+}
+
+export interface GeneratedQuestionsResponse {
+  questions: GeneratedQuestion[];
+  total: number;
+}
+
 export const aiApi = {
   recommendQuestions: async (data: RecommendationRequest): Promise<RecommendationResponse> => {
     const response = await apiClient.post('/ai/recommend', data);
@@ -65,18 +80,7 @@ export const aiApi = {
     return response.data;
   },
 
-  generateFromImage: async (file: { uri: string; name: string; type: string }, count: number = 5): Promise<{
-    questions: Array<{
-      question_text: string;
-      question_type: string;
-      options: string[] | null;
-      correct_answer: string;
-      explanation: string | null;
-      difficulty: number;
-      category: string | null;
-    }>;
-    total: number;
-  }> => {
+  generateFromImage: async (file: { uri: string; name: string; type: string }, count: number = 5): Promise<GeneratedQuestionsResponse> => {
     const formData = new FormData();
     if (file.uri.startsWith('blob:')) {
       const response = await fetch(file.uri);
@@ -89,6 +93,18 @@ export const aiApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 120000,
     });
+    return response.data;
+  },
+
+  generateFromText: async (
+    text: string,
+    count?: number,
+    contentLanguage?: string,
+  ): Promise<GeneratedQuestionsResponse> => {
+    const body: Record<string, unknown> = { text };
+    if (count != null) body.count = count;
+    if (contentLanguage) body.content_language = contentLanguage;
+    const response = await apiClient.post('/ai/generate-from-text', body, { timeout: 120000 });
     return response.data;
   },
 };

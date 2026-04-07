@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime, timedelta
 
 import uuid
@@ -38,19 +38,78 @@ class PremiumStatusResponse(BaseModel):
     account_credit_jpy: int
 
 
-class PlanDisplayResponse(BaseModel):
+class PlanOptionResponse(BaseModel):
     price_jpy: int
     credit_jpy: int
     validity_days: int
+    is_available: bool
+
+
+class PlanDisplayResponse(BaseModel):
+    monthly: PlanOptionResponse
+    yearly: PlanOptionResponse
+
+
+def _get_yearly_price_id() -> str:
+    """新設定が未投入の環境では旧 Price ID を年額プランとして扱う。"""
+    if (
+        settings.STRIPE_PREMIUM_YEARLY_PRICE_ID
+        and settings.STRIPE_PREMIUM_YEARLY_PRICE_ID != "price_placeholder"
+    ):
+        return settings.STRIPE_PREMIUM_YEARLY_PRICE_ID
+    return settings.STRIPE_PREMIUM_PRICE_ID
+
+
+def _build_plan_option(
+    *,
+    price_jpy: int,
+    credit_jpy: int,
+    validity_days: int,
+    stripe_price_id: str,
+) -> PlanOptionResponse:
+    return PlanOptionResponse(
+        price_jpy=price_jpy,
+        credit_jpy=credit_jpy,
+        validity_days=validity_days,
+        is_available=bool(
+            stripe_price_id and stripe_price_id != "price_placeholder"
+        ),
+    )
+
+
+def _get_plan_settings(plan_type: Literal["monthly", "yearly"]) -> dict:
+    if plan_type == "monthly":
+        return {
+            "stripe_price_id": settings.STRIPE_PREMIUM_MONTHLY_PRICE_ID,
+            "price_jpy": settings.PREMIUM_MONTHLY_PRICE_JPY,
+            "credit_jpy": settings.PREMIUM_MONTHLY_CREDIT_JPY,
+            "validity_days": settings.PREMIUM_MONTHLY_VALIDITY_DAYS,
+        }
+
+    return {
+        "stripe_price_id": _get_yearly_price_id(),
+        "price_jpy": settings.PREMIUM_YEARLY_PRICE_JPY,
+        "credit_jpy": settings.PREMIUM_YEARLY_CREDIT_JPY,
+        "validity_days": settings.PREMIUM_YEARLY_VALIDITY_DAYS,
+    }
 
 
 @router.get("/plan-display", response_model=PlanDisplayResponse)
 async def get_plan_display():
     """プレミアム画面用の表示データ（認証不要）"""
     return PlanDisplayResponse(
-        price_jpy=settings.PREMIUM_PLAN_PRICE_JPY,
-        credit_jpy=settings.PREMIUM_PLAN_CREDIT_JPY,
-        validity_days=settings.PREMIUM_PLAN_VALIDITY_DAYS,
+        monthly=_build_plan_option(
+            price_jpy=settings.PREMIUM_MONTHLY_PRICE_JPY,
+            credit_jpy=settings.PREMIUM_MONTHLY_CREDIT_JPY,
+            validity_days=settings.PREMIUM_MONTHLY_VALIDITY_DAYS,
+            stripe_price_id=settings.STRIPE_PREMIUM_MONTHLY_PRICE_ID,
+        ),
+        yearly=_build_plan_option(
+            price_jpy=settings.PREMIUM_YEARLY_PRICE_JPY,
+            credit_jpy=settings.PREMIUM_YEARLY_CREDIT_JPY,
+            validity_days=settings.PREMIUM_YEARLY_VALIDITY_DAYS,
+            stripe_price_id=_get_yearly_price_id(),
+        ),
     )
 
 
@@ -61,6 +120,7 @@ async def create_premium_checkout(
     request: Request,
     success_url: str,
     cancel_url: str,
+    plan_type: Literal["monthly", "yearly"] = "yearly",
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -68,10 +128,15 @@ async def create_premium_checkout(
     有料プランの Stripe Checkout セッション（一回払い）を作成する。
     フロントエンドはレスポンスの checkout_url へリダイレクトする。
     """
-    if not settings.STRIPE_PREMIUM_PRICE_ID or settings.STRIPE_PREMIUM_PRICE_ID == "price_placeholder":
+    plan_settings = _get_plan_settings(plan_type)
+
+    if (
+        not plan_settings["stripe_price_id"]
+        or plan_settings["stripe_price_id"] == "price_placeholder"
+    ):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="決済システムが設定されていません。管理者にお問い合わせください。",
+            detail="選択したプランはまだ購入できません。管理者にお問い合わせください。",
         )
 
     try:
@@ -91,7 +156,7 @@ async def create_premium_checkout(
             payment_method_types=["card"],
             line_items=[
                 {
-                    "price": settings.STRIPE_PREMIUM_PRICE_ID,
+                    "price": plan_settings["stripe_price_id"],
                     "quantity": 1,
                 }
             ],
@@ -101,6 +166,7 @@ async def create_premium_checkout(
             metadata={
                 "user_id": current_user.id,
                 "type": "premium_plan",
+                "plan_type": plan_type,
             },
         )
 
@@ -131,7 +197,7 @@ async def get_premium_status(current_user: User = Depends(get_current_active_use
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     """
     Stripe Webhook: checkout.session.completed を受け取り
-    is_premium を有効化し PREMIUM_PLAN_CREDIT_JPY 分のクレジットを付与する。
+    is_premium を有効化する。
     冪等処理のため processed_checkout_sessions で重複チェックする。
     """
     payload = await request.body()
@@ -191,13 +257,23 @@ def _handle_checkout_completed(session: dict, db: Session) -> None:
         logger.error(f"Webhook: ユーザーが見つかりません user_id={user_id}")
         return
 
-    # プレミアム有効化（settings で定義した日数倍）
+    plan_type = metadata.get("plan_type") or "yearly"
+    if plan_type not in ("monthly", "yearly"):
+        logger.warning(f"Webhook: 不正なプラン種別です plan_type={plan_type}")
+        return
+
+    plan_settings = _get_plan_settings(plan_type)
+
+    # プレミアム有効化（選択プランで定義した日数分）
     user.is_premium = True
     user.premium_expires_at = datetime.utcnow() + timedelta(
-        days=settings.PREMIUM_PLAN_VALIDITY_DAYS
+        days=plan_settings["validity_days"]
     )
 
-    user.account_credit_jpy = (user.account_credit_jpy or 0) + settings.PREMIUM_PLAN_CREDIT_JPY
+    if plan_settings["credit_jpy"] > 0:
+        user.account_credit_jpy = (
+            (user.account_credit_jpy or 0) + plan_settings["credit_jpy"]
+        )
 
     # 処理済みとして記録
     db.add(ProcessedCheckoutSession(
@@ -206,9 +282,12 @@ def _handle_checkout_completed(session: dict, db: Session) -> None:
     ))
 
     db.commit()
-    logger.info(
-        f"プレミアム有効化 & {settings.PREMIUM_PLAN_CREDIT_JPY}円クレジット付与: user_id={user_id}"
-    )
+    if plan_settings["credit_jpy"] > 0:
+        logger.info(
+            f"プレミアム有効化 ({plan_type}) & {plan_settings['credit_jpy']}円クレジット付与: user_id={user_id}"
+        )
+    else:
+        logger.info(f"プレミアム有効化 ({plan_type}): user_id={user_id}")
 
 
 def _handle_payment_intent_succeeded(pi: dict, db: Session) -> None:

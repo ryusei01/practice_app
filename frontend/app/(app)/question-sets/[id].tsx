@@ -136,8 +136,8 @@ export default function QuestionSetDetailScreen() {
   const loadData = async () => {
     try {
       const [setData, questionsData] = await Promise.all([
-        questionSetsApi.getById(id),
-        questionsApi.getAll({ question_set_id: id }),
+        questionSetsApi.getById(id, { skipGlobalErrorModal: true }),
+        questionsApi.getAll({ question_set_id: id }, { skipGlobalErrorModal: true }),
       ]);
       setQuestionSet(setData);
       setQuestions(questionsData);
@@ -146,7 +146,9 @@ export default function QuestionSetDetailScreen() {
       // 購入済みかチェック（他ユーザーの問題集の場合）
       if (user && setData.creator_id !== user.id) {
         try {
-          const purchased = await questionSetsApi.getPurchased();
+          const purchased = await questionSetsApi.getPurchased({
+            skipGlobalErrorModal: true,
+          });
           setIsPurchased(purchased.some((p) => p.id === id));
         } catch {
           // 未ログインやエラー時は無視
@@ -155,7 +157,9 @@ export default function QuestionSetDetailScreen() {
 
       // カテゴリグループを取得
       try {
-        const groups = await questionsApi.getGroups(id, "category");
+        const groups = await questionsApi.getGroups(id, "category", {
+          skipGlobalErrorModal: true,
+        });
         setQuestionGroups(groups);
       } catch (error) {
         console.error("Failed to load question groups:", error);
@@ -511,7 +515,7 @@ ${t("Optional fields", "任意フィールド")}:
 
 ${t("Example CSV", "CSV例")}:
 question_text,question_type,option_1,option_2,option_3,option_4,correct_answer,explanation,difficulty,category,subcategory1,subcategory2
-What is 2+2?,multiple_choice,2,3,4,5,4,Basic addition,0.2,math,arithmetic,addition
+What is 2+2?,multiple_choice,2,3,4,5,3,Basic addition,0.2,math,arithmetic,addition
 The sky is blue,true_false,,,,,true,Common knowledge,0.1,general,nature,sky
 Capital of France?,text_input,,,,,Paris,Paris is the capital,0.3,geography,europe,capitals
 
@@ -527,6 +531,10 @@ ${t("Important notes", "注意事項")}:
 • ${t(
     "difficulty is a number from 0 to 1.",
     "difficultyは0〜1の数値です。"
+  )}
+• ${t(
+    "For multiple-choice questions, put 1, 2, 3, or 4 in correct_answer to indicate the correct option.",
+    "多肢選択問題は correct_answer に 1 / 2 / 3 / 4 を入れて正解の選択肢番号を指定してください。"
   )}
 • ${t(
     "For true/false questions, put true or false in correct_answer.",
@@ -908,7 +916,15 @@ ${t("Important notes", "注意事項")}:
   if (!questionSet) {
     return (
       <View style={styles.centerContainer}>
-        <Text>{t("Question set not found", "問題集が見つかりません")}</Text>
+        <Text style={styles.notFoundText}>
+          {t("Question set not found", "問題集が見つかりません")}
+        </Text>
+        <TouchableOpacity
+          style={styles.notFoundBack}
+          onPress={() => router.back()}
+        >
+          <Text style={styles.notFoundBackText}>{t("Go Back", "戻る")}</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -917,7 +933,7 @@ ${t("Important notes", "注意事項")}:
     console.log("downloadCSVSample called");
 
     const csvSample = `question_text,question_type,option_1,option_2,option_3,option_4,correct_answer,explanation,difficulty,category,subcategory1,subcategory2
-What is 2 + 2?,multiple_choice,2,3,4,5,4,Basic addition,0.1,math,arithmetic,addition
+What is 2 + 2?,multiple_choice,2,3,4,5,3,Basic addition,0.1,math,arithmetic,addition
 Is the sky blue?,true_false,,,,,true,The sky appears blue due to Rayleigh scattering,0.1,science,physics,light
 What is the capital of Japan?,text_input,,,,,Tokyo,Japan's capital is Tokyo,0.3,geography,asia,capitals
 What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter is the largest planet,0.4,science,astronomy,planets`;
@@ -1983,6 +1999,23 @@ What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter i
 
 const styles = StyleSheet.create({
   ...commonStyles,
+  notFoundText: {
+    fontSize: 16,
+    color: "#333",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  notFoundBack: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  notFoundBackText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
   setupGuide: {
     backgroundColor: "#FFF8E1",
     padding: 16,

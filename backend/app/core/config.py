@@ -26,14 +26,20 @@ class Settings(BaseSettings):
     STRIPE_PUBLISHABLE_KEY: str = "pk_test_placeholder"
     STRIPE_WEBHOOK_SECRET: Optional[str] = None
     PLATFORM_FEE_PERCENT: int = 20
-    # 有料プランの Stripe Price ID（請求額は Stripe 側が正。表示用金額は下記と一致させること）
+    # 旧年額プラン用の互換 Price ID。未移行環境では年額 Price ID として扱う
     STRIPE_PREMIUM_PRICE_ID: str = "price_placeholder"
-    # UI 表示用の税込価格（円）。Stripe Price の金額と揃える
-    PREMIUM_PLAN_PRICE_JPY: int = 1800
-    # 年額プランの有効日数
-    PREMIUM_PLAN_VALIDITY_DAYS: int = 365
-    # 有料プラン購入時に付与するクレジット（円）
-    PREMIUM_PLAN_CREDIT_JPY: int = 500
+    # 月額 / 年額の Stripe Price ID（請求額は Stripe 側が正。表示用金額は下記と一致させること）
+    STRIPE_PREMIUM_MONTHLY_PRICE_ID: str = "price_placeholder"
+    STRIPE_PREMIUM_YEARLY_PRICE_ID: str = "price_placeholder"
+    # UI 表示用の税込価格（円）
+    PREMIUM_MONTHLY_PRICE_JPY: int = 350
+    PREMIUM_YEARLY_PRICE_JPY: int = 1800
+    # プランの有効日数
+    PREMIUM_MONTHLY_VALIDITY_DAYS: int = 30
+    PREMIUM_YEARLY_VALIDITY_DAYS: int = 365
+    # 購入時に付与するクレジット（円）
+    PREMIUM_MONTHLY_CREDIT_JPY: int = 100
+    PREMIUM_YEARLY_CREDIT_JPY: int = 0
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""
@@ -63,8 +69,8 @@ class Settings(BaseSettings):
     # True のとき、CORS_ORIGINS の列挙に加えて本番ドメインを正規表現で許可（列挙漏れ対策）
     CORS_ALLOW_PRODUCT_ORIGIN_REGEX: bool = True
 
-    # ML機能フラグ (sentence-transformers 等を使う機能。本番では False に設定)
-    ENABLE_ML: bool = True
+    # ML機能フラグ（現在は独自テキスト類似度のみ使用。外部MLライブラリ不要）
+    ENABLE_ML: bool = False
 
     # Ollama (Local LLM)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
@@ -73,6 +79,7 @@ class Settings(BaseSettings):
     OLLAMA_COPYRIGHT_CHECK_MODEL: str = "gpt-oss-20b"  # 著作権チェック用モデル（GPT-OSS 20B）
     OLLAMA_LEARNING_PLAN_MODEL: str = "gpt-oss-20b"  # AI学習プラン生成用（Ollama）
     OLLAMA_VISION_MODEL: str = "llava"  # 画像認識+問題生成用（Ollama vision model）
+    OLLAMA_TEXT_GENERATION_MODEL: str = "gpt-oss-20b"  # テキスト→問題生成用（Ollama）
 
     class Config:
         env_file = ".env"

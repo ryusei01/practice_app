@@ -108,12 +108,15 @@ async def health():
 
 
 # APIルーターを追加
+from .api.contact import router as contact_router
 from .api import ai_router, answers_router, auth_router, feedback_router, question_sets_router, questions_router, payments_router, admin_router, two_factor_router, translate_router, textbooks_router, reports_router, subscriptions_router
+from .api.ai_llm import router as ai_llm_router
 
 app.include_router(auth_router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 app.include_router(question_sets_router, prefix=f"{settings.API_V1_STR}/question-sets", tags=["question-sets"])
 app.include_router(questions_router, prefix=f"{settings.API_V1_STR}/questions", tags=["questions"])
 app.include_router(ai_router, prefix=f"{settings.API_V1_STR}/ai", tags=["ai"])
+app.include_router(ai_llm_router, prefix=f"{settings.API_V1_STR}/ai", tags=["ai"])
 app.include_router(answers_router, prefix=f"{settings.API_V1_STR}/answers", tags=["answers"])
 app.include_router(payments_router, prefix=f"{settings.API_V1_STR}/payments", tags=["payments"])
 app.include_router(admin_router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])
@@ -123,6 +126,7 @@ app.include_router(textbooks_router, prefix=f"{settings.API_V1_STR}/textbooks", 
 app.include_router(reports_router, prefix=f"{settings.API_V1_STR}/reports", tags=["reports"])
 app.include_router(subscriptions_router, prefix=f"{settings.API_V1_STR}/subscriptions", tags=["subscriptions"])
 app.include_router(feedback_router, prefix=f"{settings.API_V1_STR}/feedback", tags=["feedback"])
+app.include_router(contact_router, prefix=f"{settings.API_V1_STR}/contact", tags=["contact"])
 
 # Static files for uploaded media (images, audio)
 import os

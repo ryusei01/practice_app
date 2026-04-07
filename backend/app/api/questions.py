@@ -53,6 +53,38 @@ async def _read_upload_capped(file: UploadFile, max_bytes: int) -> bytes:
         chunks.append(chunk)
     return b"".join(chunks)
 
+
+def _normalize_multiple_choice_correct_answer(
+    correct_answer: str | None,
+    options: list[str] | None,
+) -> str | None:
+    value = (correct_answer or "").strip()
+    if not value:
+        return None
+
+    if value in {"1", "2", "3", "4"}:
+        index = int(value) - 1
+        if not options or index < len(options):
+            return value
+        return None
+
+    if value.upper() in {"A", "B", "C", "D"}:
+        index = ord(value.upper()) - ord("A")
+        if not options or index < len(options):
+            return str(index + 1)
+        return None
+
+    stripped = value
+    if len(value) > 2 and value[0] in "ABCDabcd1234" and value[1] in ").、:：":
+        stripped = value[2:].strip()
+
+    if options:
+        for index, option in enumerate(options):
+            if option.strip() == value or option.strip() == stripped:
+                return str(index + 1)
+
+    return None
+
 router = APIRouter()
 
 
@@ -142,13 +174,25 @@ async def create_question(
             detail="この問題集に問題を追加する権限がありません"
         )
 
+    normalized_correct_answer = request.correct_answer
+    if request.question_type == "multiple_choice":
+        normalized_correct_answer = _normalize_multiple_choice_correct_answer(
+            request.correct_answer,
+            request.options,
+        )
+        if not normalized_correct_answer:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="multiple_choice の correct_answer は 1-4、または選択肢本文と一致する必要があります。",
+            )
+
     new_question = Question(
         id=str(uuid.uuid4()),
         question_set_id=request.question_set_id,
         question_text=request.question_text,
         question_type=request.question_type,
         options=request.options,
-        correct_answer=request.correct_answer,
+        correct_answer=normalized_correct_answer,
         explanation=request.explanation,
         difficulty=request.difficulty,
         category=request.category,
@@ -306,8 +350,22 @@ async def update_question(
         question.question_type = request.question_type
     if request.options is not None:
         question.options = request.options
+    next_question_type = request.question_type or question.question_type
+    next_options = request.options if request.options is not None else question.options
     if request.correct_answer is not None:
-        question.correct_answer = request.correct_answer
+        if next_question_type == "multiple_choice":
+            normalized_correct_answer = _normalize_multiple_choice_correct_answer(
+                request.correct_answer,
+                next_options,
+            )
+            if not normalized_correct_answer:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="multiple_choice の correct_answer は 1-4、または選択肢本文と一致する必要があります。",
+                )
+            question.correct_answer = normalized_correct_answer
+        else:
+            question.correct_answer = request.correct_answer
     if request.explanation is not None:
         question.explanation = request.explanation
     if request.difficulty is not None:
@@ -486,7 +544,7 @@ async def bulk_upload_questions(
     question_type は任意。未指定時は option 列の有無で自動判定。
 
     例（新フォーマット）:
-    What is 2+2?,,2,3,4,5,4,Basic addition,0.2,math,arithmetic,addition
+    What is 2+2?,,2,3,4,5,3,Basic addition,0.2,math,arithmetic,addition
     Capital of France?,,,,,,Paris,Paris is the capital,0.3,geography,europe,capitals
     """
     # 問題集の存在と権限を確認
@@ -556,6 +614,16 @@ async def bulk_upload_questions(
                 else:
                     difficulty = None
 
+                normalized_correct_answer = correct_answer_raw
+                if question_type == 'multiple_choice':
+                    normalized_correct_answer = _normalize_multiple_choice_correct_answer(
+                        correct_answer_raw,
+                        options,
+                    )
+                    if not normalized_correct_answer:
+                        errors.append(f"Row {idx}: Invalid multiple_choice correct_answer '{correct_answer_raw}'")
+                        continue
+
                 # 問題を作成
                 new_question = Question(
                     id=str(uuid.uuid4()),
@@ -563,7 +631,7 @@ async def bulk_upload_questions(
                     question_text=row['question_text'].strip(),
                     question_type=question_type,
                     options=options,
-                    correct_answer=row['correct_answer'].strip(),
+                    correct_answer=normalized_correct_answer,
                     explanation=row.get('explanation', '').strip() or None,
                     difficulty=difficulty,
                     category=row.get('category', '').strip() or None,

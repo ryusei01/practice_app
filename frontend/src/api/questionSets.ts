@@ -100,8 +100,11 @@ export const questionSetsApi = {
     return response.data;
   },
 
-  getById: async (id: string): Promise<QuestionSet> => {
-    const response = await apiClient.get(`/question-sets/${id}`);
+  getById: async (
+    id: string,
+    extra?: { skipGlobalErrorModal?: boolean }
+  ): Promise<QuestionSet> => {
+    const response = await apiClient.get(`/question-sets/${id}`, extra);
     return response.data;
   },
 
@@ -124,8 +127,10 @@ export const questionSetsApi = {
     await apiClient.delete(`/question-sets/${id}`);
   },
 
-  getPurchased: async (): Promise<QuestionSet[]> => {
-    const response = await apiClient.get('/question-sets/purchased');
+  getPurchased: async (extra?: {
+    skipGlobalErrorModal?: boolean;
+  }): Promise<QuestionSet[]> => {
+    const response = await apiClient.get("/question-sets/purchased", extra);
     return response.data;
   },
 

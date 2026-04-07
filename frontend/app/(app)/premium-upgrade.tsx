@@ -10,20 +10,35 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Header from '../../src/components/Header';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { answersApi, LocalAnswerData, LocalQuestionSetData } from '../../src/api/answers';
-import { subscriptionsApi } from '../../src/api/subscriptions';
+import {
+  subscriptionsApi,
+  type PlanDisplay,
+  type PlanOptionDisplay,
+  type PremiumPlanType,
+} from '../../src/api/subscriptions';
+import { TEMPORARILY_REDIRECT_PREMIUM_PLAN } from '../../src/config/featureFlags';
 
 const BASE_WEB_URL = process.env.EXPO_PUBLIC_WEB_URL || 'https://ai-practice-book.com';
 
-const FALLBACK_PLAN_DISPLAY = {
-  price_jpy: 1800,
-  credit_jpy: 500,
-  validity_days: 365,
+const FALLBACK_PLAN_DISPLAY: PlanDisplay = {
+  monthly: {
+    price_jpy: 350,
+    credit_jpy: 100,
+    validity_days: 30,
+    is_available: true,
+  },
+  yearly: {
+    price_jpy: 1800,
+    credit_jpy: 0,
+    validity_days: 365,
+    is_available: true,
+  },
 };
 
 export default function PremiumUpgradeScreen() {
@@ -31,6 +46,7 @@ export default function PremiumUpgradeScreen() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [migrationComplete, setMigrationComplete] = useState(false);
   const [planDisplay, setPlanDisplay] = useState(FALLBACK_PLAN_DISPLAY);
+  const [selectedPlanType, setSelectedPlanType] = useState<PremiumPlanType>('yearly');
   const [planLoading, setPlanLoading] = useState(true);
   const { user } = useAuth();
   const router = useRouter();
@@ -41,11 +57,7 @@ export default function PremiumUpgradeScreen() {
       try {
         const d = await subscriptionsApi.getPlanDisplay();
         if (!cancelled) {
-          setPlanDisplay({
-            price_jpy: d.price_jpy,
-            credit_jpy: d.credit_jpy,
-            validity_days: d.validity_days,
-          });
+          setPlanDisplay(d);
         }
       } catch {
         if (!cancelled) setPlanDisplay(FALLBACK_PLAN_DISPLAY);
@@ -58,12 +70,19 @@ export default function PremiumUpgradeScreen() {
     };
   }, []);
 
-  const handleUpgradeToPremium = async () => {
+  const selectedPlan = planDisplay[selectedPlanType];
+
+  if (TEMPORARILY_REDIRECT_PREMIUM_PLAN) {
+    return <Redirect href="/(app)/premium-preparing" />;
+  }
+
+  const handleUpgradeToPremium = async (planType: PremiumPlanType) => {
     if (!user) {
       Alert.alert('ログインが必要です', 'アップグレードにはログインしてください。');
       return;
     }
 
+    setSelectedPlanType(planType);
     setIsCheckingOut(true);
     try {
       let successUrl: string;
@@ -78,6 +97,7 @@ export default function PremiumUpgradeScreen() {
       }
 
       const { checkout_url } = await subscriptionsApi.createPremiumCheckout(
+        planType,
         successUrl,
         cancelUrl,
       );
@@ -100,6 +120,19 @@ export default function PremiumUpgradeScreen() {
     } finally {
       setIsCheckingOut(false);
     }
+  };
+
+  const getPlanLabel = (planType: PremiumPlanType) =>
+    planType === 'monthly' ? '月額プラン' : '年間プラン';
+
+  const getPlanPriceSuffix = (planType: PremiumPlanType) =>
+    planType === 'monthly' ? '/ 月' : '/ 年';
+
+  const getPlanSummary = (planType: PremiumPlanType, plan: PlanOptionDisplay) => {
+    if (planType === 'monthly') {
+      return `${plan.validity_days}日ごと・${plan.credit_jpy.toLocaleString()}クレジット付き`;
+    }
+    return `${plan.validity_days}日間有効・クレジット付与なし`;
   };
 
   const handleMigrateData = async () => {
@@ -180,26 +213,52 @@ export default function PremiumUpgradeScreen() {
       <ScrollView style={styles.container}>
         <View style={styles.content}>
 
-        {/* 価格カード（表示値は GET /subscriptions/plan-display） */}
-        <View style={styles.priceCard}>
+        {/* プランカード（表示値は GET /subscriptions/plan-display） */}
+        <View style={styles.planCardsContainer}>
           {planLoading ? (
             <ActivityIndicator color="#fff" size="large" />
           ) : (
-            <>
-              <Text style={styles.priceLabel}>年額プラン</Text>
-              <Text style={styles.priceValue}>
-                ¥{planDisplay.price_jpy.toLocaleString()} / 年
-              </Text>
-              <Text style={styles.priceNote}>税込</Text>
-              <Text style={styles.validityNote}>
-                1年間有効・購入から365日間
-              </Text>
-              <View style={styles.creditBadge}>
-                <Text style={styles.creditBadgeText}>
-                  ¥{planDisplay.credit_jpy.toLocaleString()} クレジット付与
-                </Text>
-              </View>
-            </>
+            (['monthly', 'yearly'] as PremiumPlanType[]).map((planType) => {
+              const plan = planDisplay[planType];
+              const isSelected = selectedPlanType === planType;
+
+              return (
+                <TouchableOpacity
+                  key={planType}
+                  style={[
+                    styles.planCard,
+                    isSelected && styles.planCardSelected,
+                    !plan.is_available && styles.planCardDisabled,
+                  ]}
+                  onPress={() => setSelectedPlanType(planType)}
+                  disabled={isCheckingOut || planLoading}
+                >
+                  <Text style={styles.priceLabel}>{getPlanLabel(planType)}</Text>
+                  <Text style={styles.priceValue}>
+                    ¥{plan.price_jpy.toLocaleString()} {getPlanPriceSuffix(planType)}
+                  </Text>
+                  <Text style={styles.priceNote}>税込</Text>
+                  <Text style={styles.validityNote}>
+                    {getPlanSummary(planType, plan)}
+                  </Text>
+                  <View
+                    style={[
+                      styles.creditBadge,
+                      plan.credit_jpy === 0 && styles.creditBadgeMuted,
+                    ]}
+                  >
+                    <Text style={styles.creditBadgeText}>
+                      {plan.credit_jpy > 0
+                        ? `${plan.credit_jpy.toLocaleString()}クレジット付与`
+                        : 'クレジット付与なし'}
+                    </Text>
+                  </View>
+                  {!plan.is_available && (
+                    <Text style={styles.planUnavailableText}>現在準備中</Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })
           )}
         </View>
 
@@ -212,12 +271,10 @@ export default function PremiumUpgradeScreen() {
         </View>
 
         <View style={styles.featureCard}>
-          <Text style={styles.featureTitle}>
-            ¥{planDisplay.credit_jpy.toLocaleString()} クレジット付与
-          </Text>
+          <Text style={styles.featureTitle}>プラン別クレジット</Text>
           <Text style={styles.featureDescription}>
-            購入時に¥{planDisplay.credit_jpy.toLocaleString()}
-            分のアプリ内クレジットをプレゼント。問題集の購入にお使いいただけます
+            月額プランは100クレジット付き、年間プランは0クレジットです。
+            クレジットは問題集マーケットプレイスの購入に使えます。
           </Text>
         </View>
 
@@ -239,16 +296,18 @@ export default function PremiumUpgradeScreen() {
           <TouchableOpacity
             style={[
               styles.upgradeButton,
-              (isCheckingOut || planLoading) && styles.buttonDisabled,
+              (isCheckingOut || planLoading || !selectedPlan.is_available) && styles.buttonDisabled,
             ]}
-            onPress={handleUpgradeToPremium}
-            disabled={isCheckingOut || planLoading}
+            onPress={() => handleUpgradeToPremium(selectedPlanType)}
+            disabled={isCheckingOut || planLoading || !selectedPlan.is_available}
           >
             {isCheckingOut ? (
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.upgradeButtonText}>
-                ¥{planDisplay.price_jpy.toLocaleString()} でプレミアムにアップグレード
+                {selectedPlan.is_available
+                  ? `${getPlanLabel(selectedPlanType)}を開始する`
+                  : `${getPlanLabel(selectedPlanType)}は現在準備中`}
               </Text>
             )}
           </TouchableOpacity>
@@ -310,12 +369,22 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
   },
-  priceCard: {
+  planCardsContainer: {
+    marginBottom: 20,
+    gap: 12,
+  },
+  planCard: {
     backgroundColor: '#007AFF',
     borderRadius: 16,
     padding: 24,
     alignItems: 'center',
-    marginBottom: 20,
+  },
+  planCardSelected: {
+    borderWidth: 3,
+    borderColor: '#FFCC00',
+  },
+  planCardDisabled: {
+    opacity: 0.75,
   },
   priceLabel: {
     color: 'rgba(255,255,255,0.8)',
@@ -346,10 +415,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
   },
+  creditBadgeMuted: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+  },
   creditBadgeText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  planUnavailableText: {
+    color: '#fff',
+    fontSize: 12,
+    marginTop: 10,
+    opacity: 0.9,
   },
   featureCard: {
     backgroundColor: '#fff',

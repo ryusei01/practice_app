@@ -28,6 +28,8 @@ import { localStorageService, LocalQuestionSet, RedSheetProgress } from "../../.
 import { srsService } from "../../../src/services/srsService";
 import MediaPlayer from "../../../src/components/MediaPlayer";
 import MathText from "../../../src/components/MathText";
+import { getMultipleChoiceAnswerText } from "../../../src/utils/multipleChoice";
+import { getApiErrorMessage } from "../../../src/utils/apiError";
 
 // expo-speechはモバイルのみ対応なので条件付きインポート
 let Speech: any = null;
@@ -42,6 +44,7 @@ interface UnifiedQuestion {
   id: string;
   question_text: string;
   correct_answer: string;
+  question_type?: string;
   options?: string[];
   explanation?: string;
   difficulty?: number | string;
@@ -61,6 +64,7 @@ export default function FlashcardScreen() {
   const [currentIndex, setCurrentIndex] = useState(parseInt(startIndex || "0"));
   const [showAnswer, setShowAnswer] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [pan] = useState(new Animated.ValueXY());
   const [autoPlay, setAutoPlay] = useState(true);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -140,9 +144,16 @@ export default function FlashcardScreen() {
     if (!Speech || questions.length === 0) return;
 
     const currentQuestion = questions[currentIndex];
-    const language = detectLanguage(currentQuestion.correct_answer);
+    const answerText =
+      currentQuestion.question_type === "multiple_choice"
+        ? getMultipleChoiceAnswerText(
+            currentQuestion.correct_answer,
+            currentQuestion.options
+          )
+        : currentQuestion.correct_answer;
+    const language = detectLanguage(answerText);
 
-    Speech.speak(currentQuestion.correct_answer, {
+    Speech.speak(answerText, {
       language,
       pitch: 1.0,
       rate: 0.9,
@@ -199,6 +210,7 @@ export default function FlashcardScreen() {
   });
 
   const loadData = async () => {
+    setLoadError(null);
     try {
       console.log('[Flashcard] Loading data for question_set_id:', id);
 
@@ -216,6 +228,9 @@ export default function FlashcardScreen() {
 
         if (!localSet) {
           console.warn('[Flashcard] Trial question set not found');
+          setLoadError(
+            t("Question set not found", "問題セットが見つかりません")
+          );
           setIsLoading(false);
           return;
         }
@@ -236,6 +251,9 @@ export default function FlashcardScreen() {
           id: q.id,
           question_text: q.question,
           correct_answer: q.answer,
+          question_type: q.question_type,
+          options: q.options,
+          explanation: q.explanation,
           difficulty: q.difficulty,
           media_urls: q.media_urls as any,
         }));
@@ -245,8 +263,8 @@ export default function FlashcardScreen() {
       } else {
         console.log('[Flashcard] Loading from API (normal mode)');
         const [setData, questionsData] = await Promise.all([
-          questionSetsApi.getById(id),
-          questionsApi.getAll({ question_set_id: id }),
+          questionSetsApi.getById(id, { skipGlobalErrorModal: true }),
+          questionsApi.getAll({ question_set_id: id }, { skipGlobalErrorModal: true }),
         ]);
 
         setQuestionSet(setData);
@@ -263,6 +281,13 @@ export default function FlashcardScreen() {
     } catch (error) {
       console.error("Failed to load flashcard data:", error);
       console.error("Error details:", JSON.stringify(error, null, 2));
+      setLoadError(
+        getApiErrorMessage(
+          error,
+          "Failed to load question set",
+          "問題集の読み込みに失敗しました"
+        )
+      );
     } finally {
       setIsLoading(false);
     }
@@ -334,7 +359,13 @@ export default function FlashcardScreen() {
             await answersApi.submitAnswer({
               user_id: user.id,
               question_id: ans.question_id,
-              user_answer: question.correct_answer,
+              user_answer:
+                question.question_type === "multiple_choice"
+                  ? getMultipleChoiceAnswerText(
+                      question.correct_answer,
+                      question.options
+                    )
+                  : question.correct_answer,
               is_correct: ans.is_correct,
               answer_time_sec: ans.answer_time_sec,
             });
@@ -415,6 +446,30 @@ export default function FlashcardScreen() {
     );
   }
 
+  if (loadError) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.emptyText}>{loadError}</Text>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => {
+            setIsLoading(true);
+            loadData();
+          }}
+        >
+          <Text style={styles.backButtonText}>
+            {t("Retry", "再試行")}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Text style={styles.backButtonText}>
+            {t("Go Back", "戻る")}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   if (!questionSet || questions.length === 0) {
     return (
       <View style={styles.centerContainer}>
@@ -443,6 +498,13 @@ export default function FlashcardScreen() {
   }
 
   const currentQuestion = questions[currentIndex];
+  const currentAnswerText =
+    currentQuestion.question_type === "multiple_choice"
+      ? getMultipleChoiceAnswerText(
+          currentQuestion.correct_answer,
+          currentQuestion.options
+        )
+      : currentQuestion.correct_answer;
   const progress = ((currentIndex + 1) / questions.length) * 100;
 
   return (
@@ -600,7 +662,7 @@ export default function FlashcardScreen() {
                     </TouchableOpacity>
                   </View>
                   <Text style={styles.answerText}>
-                    {currentQuestion.correct_answer}
+                    {currentAnswerText}
                   </Text>
                   {currentQuestion.explanation && (
                     <>
@@ -648,7 +710,7 @@ export default function FlashcardScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
-              <MathText text={currentQuestion.correct_answer} style={styles.answerText} />
+              <MathText text={currentAnswerText} style={styles.answerText} />
               {currentQuestion.media_urls && currentQuestion.media_urls.length > 0 && (
                 <MediaPlayer
                   media={currentQuestion.media_urls as any}

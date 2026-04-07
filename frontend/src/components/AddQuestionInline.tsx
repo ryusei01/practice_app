@@ -41,7 +41,15 @@ function parseBulkText(text: string): ParsedQuestion[] {
     if (optionLines.length >= 2 && answerLine) {
       const options = optionLines.map(o => o.text);
       const answerByLabel = optionLines.find(o => o.label === answerLine!.toUpperCase());
-      results.push({ question_text: lines[0], correct_answer: answerByLabel ? answerByLabel.text : answerLine, question_type: "multiple_choice", options });
+      const answerIndex = answerByLabel
+        ? optionLines.findIndex((o) => o.label === answerByLabel.label)
+        : -1;
+      results.push({
+        question_text: lines[0],
+        correct_answer: answerIndex >= 0 ? String(answerIndex + 1) : answerLine,
+        question_type: "multiple_choice",
+        options,
+      });
     } else if (answerLine && /^(true|false)$/i.test(answerLine)) {
       results.push({ question_text: lines[0], correct_answer: answerLine.toLowerCase(), question_type: "true_false" });
     } else {
@@ -91,7 +99,7 @@ export default function AddQuestionInline({ questionSetId, onQuestionAdded }: Ad
       const validOpts = options.filter(o => o.trim());
       if (validOpts.length < 2 || correctIndex === null) return;
       payload.options = validOpts;
-      payload.correct_answer = options[correctIndex].trim();
+      payload.correct_answer = String(correctIndex + 1);
     } else if (qType === "true_false") {
       if (!correctAnswerText) return;
       payload.correct_answer = correctAnswerText;

@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   TextInput,
   ScrollView,
+  Alert,
 } from "react-native";
 import {
   useRouter,
@@ -150,6 +151,14 @@ export default function TrialSetDetailScreen() {
   const [flashcardCategory, setFlashcardCategory] = useState<string | null>(null);
   const [flashcardDifficulty, setFlashcardDifficulty] = useState<string | null>(null);
   const [redSheetProgress, setRedSheetProgress] = useState<RedSheetProgress | null>(null);
+
+  // 問題追加モーダル用のstate
+  const [addQuestionModalVisible, setAddQuestionModalVisible] = useState(false);
+  const [newQuestionText, setNewQuestionText] = useState("");
+  const [newAnswerText, setNewAnswerText] = useState("");
+  const [newQuestionType, setNewQuestionType] = useState<"text_input" | "multiple_choice" | "true_false">("text_input");
+  const [newOptions, setNewOptions] = useState(["", "", "", ""]);
+  const [isAddingQuestion, setIsAddingQuestion] = useState(false);
 
   // エラーモーダル用のstate
   const [errorModalVisible, setErrorModalVisible] = useState(false);
@@ -502,10 +511,12 @@ export default function TrialSetDetailScreen() {
         );
         selectedQuestions = group?.questions || [];
       } else {
-        // countモード: 指定した問題数をランダムに選出
-        const shuffled = [...questionSet.questions].sort(
-          () => Math.random() - 0.5
-        );
+        // countモード: Fisher-Yatesシャッフルでランダムに選出
+        const shuffled = [...questionSet.questions];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
         selectedQuestions = shuffled.slice(0, questionCount);
       }
 
@@ -598,6 +609,44 @@ export default function TrialSetDetailScreen() {
       return;
     }
     router.push(`/(trial)/quiz/${id}?questionIds=${reviewIds.join(",")}`);
+  };
+
+  const handleAddQuestion = async () => {
+    if (!newQuestionText.trim() || !newAnswerText.trim()) {
+      showErrorModal(
+        t("Error", "エラー"),
+        t("Please enter both question and answer", "問題文と答えの両方を入力してください")
+      );
+      return;
+    }
+    setIsAddingQuestion(true);
+    try {
+      const options =
+        newQuestionType === "multiple_choice"
+          ? newOptions.filter((o) => o.trim() !== "")
+          : undefined;
+
+      await localStorageService.addQuestionToTrialSet(id, {
+        question: newQuestionText.trim(),
+        answer: newAnswerText.trim(),
+        question_type: newQuestionType,
+        options,
+      });
+      setNewQuestionText("");
+      setNewAnswerText("");
+      setNewQuestionType("text_input");
+      setNewOptions(["", "", "", ""]);
+      setAddQuestionModalVisible(false);
+      await loadData();
+    } catch (error) {
+      console.error("Failed to add question:", error);
+      showErrorModal(
+        t("Error", "エラー"),
+        t("Failed to add question", "問題の追加に失敗しました")
+      );
+    } finally {
+      setIsAddingQuestion(false);
+    }
   };
 
   const handleStartFlashcard = () => {
@@ -795,7 +844,7 @@ export default function TrialSetDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <Header title={questionSet.title} />
+      <Header title={questionSet.title} compact />
 
       <View style={styles.header} nativeID="question-set-header">
         <View style={styles.titleContainer}>
@@ -868,32 +917,28 @@ export default function TrialSetDetailScreen() {
         </View>
       </View>
 
-      <View style={styles.statsContainer} nativeID="stats-container">
-        <View style={styles.stat} nativeID="stat-questions">
-          <Text style={styles.statValue} nativeID="stat-questions-value">
-            {questionSet.questions.length}
-          </Text>
-          <Text style={styles.statLabel} nativeID="stat-questions-label">
-            {t("Questions", "問題数")}
-          </Text>
-        </View>
-        {dueCount > 0 && (
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: "#FF9500" }]}>
-              {dueCount}
+      <View style={styles.statsAndToggleBar} nativeID="stats-and-toggle-bar">
+        <View style={styles.statsInlineGroup} nativeID="stats-container">
+          <View style={styles.headerStat} nativeID="stat-questions">
+            <Text style={styles.statValue} nativeID="stat-questions-value">
+              {questionSet.questions.length}
             </Text>
-            <Text style={styles.statLabel}>
-              {t("Due for Review", "要復習")}
+            <Text style={styles.statLabel} nativeID="stat-questions-label">
+              {t("Questions", "問題数")}
             </Text>
           </View>
-        )}
-      </View>
-
-      {questionGroups.length > 0 && (
-        <View
-          style={styles.listOrderToggleRow}
-          nativeID="list-order-toggle-row"
-        >
+          {dueCount > 0 && (
+            <View style={styles.headerStat}>
+              <Text style={[styles.statValue, { color: "#FF9500" }]}>
+                {dueCount}
+              </Text>
+              <Text style={styles.statLabel}>
+                {t("Due for Review", "要復習")}
+              </Text>
+            </View>
+          )}
+        </View>
+        {questionGroups.length > 0 && (
           <TouchableOpacity
             style={styles.listOrderToggleButton}
             onPress={() =>
@@ -912,8 +957,8 @@ export default function TrialSetDetailScreen() {
                 : t("View by category", "カテゴリ別に表示")}
             </Text>
           </TouchableOpacity>
-        </View>
-      )}
+        )}
+      </View>
 
       {/* カテゴリ別にグループ化して表示 / 問題番号順はフラット一覧 */}
       {questionGroups.length > 0 && listOrderMode === "category" ? (
@@ -1040,6 +1085,14 @@ export default function TrialSetDetailScreen() {
             </Text>
           </TouchableOpacity>
         )}
+        <TouchableOpacity
+          style={styles.addQuestionButton}
+          onPress={() => setAddQuestionModalVisible(true)}
+        >
+          <Text style={styles.addQuestionButtonText}>
+            + {t("Add Question", "問題を追加")}
+          </Text>
+        </TouchableOpacity>
         {questionSet?.textbook_path ? (
           <View style={styles.textbookButtonRow}>
             <TouchableOpacity
@@ -1618,6 +1671,100 @@ export default function TrialSetDetailScreen() {
         </View>
       </Modal>
 
+      {/* 問題追加モーダル */}
+      <Modal
+        visible={addQuestionModalVisible}
+        title={t("Add Question", "問題を追加")}
+        onClose={() => setAddQuestionModalVisible(false)}
+      >
+        <ScrollView style={styles.addQuestionModalContent} keyboardShouldPersistTaps="handled">
+          <Text style={styles.addQuestionLabel}>{t("Question Type", "問題タイプ")}</Text>
+          <View style={styles.questionTypeRow}>
+            {(["text_input", "multiple_choice", "true_false"] as const).map((qt) => (
+              <TouchableOpacity
+                key={qt}
+                style={[
+                  styles.questionTypeChip,
+                  newQuestionType === qt && styles.questionTypeChipActive,
+                ]}
+                onPress={() => setNewQuestionType(qt)}
+              >
+                <Text style={[
+                  styles.questionTypeChipText,
+                  newQuestionType === qt && styles.questionTypeChipTextActive,
+                ]}>
+                  {qt === "text_input" ? t("Text", "記述")
+                    : qt === "multiple_choice" ? t("MC", "選択")
+                    : t("TF", "正誤")}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.addQuestionLabel}>{t("Question", "問題文")}</Text>
+          <TextInput
+            style={styles.addQuestionInput}
+            value={newQuestionText}
+            onChangeText={setNewQuestionText}
+            placeholder={t("Enter your question...", "問題文を入力...")}
+            placeholderTextColor="#999"
+            multiline
+          />
+
+          {newQuestionType === "multiple_choice" && (
+            <>
+              <Text style={styles.addQuestionLabel}>{t("Options", "選択肢")}</Text>
+              {newOptions.map((opt, i) => (
+                <TextInput
+                  key={i}
+                  style={styles.addQuestionOptionInput}
+                  value={opt}
+                  onChangeText={(text) => {
+                    const updated = [...newOptions];
+                    updated[i] = text;
+                    setNewOptions(updated);
+                  }}
+                  placeholder={`${String.fromCharCode(65 + i)})`}
+                  placeholderTextColor="#999"
+                />
+              ))}
+            </>
+          )}
+
+          <Text style={styles.addQuestionLabel}>
+            {newQuestionType === "true_false"
+              ? t("Answer (true/false)", "答え (true/false)")
+              : t("Answer", "答え")}
+          </Text>
+          <TextInput
+            style={styles.addQuestionInput}
+            value={newAnswerText}
+            onChangeText={setNewAnswerText}
+            placeholder={
+              newQuestionType === "true_false"
+                ? "true / false"
+                : t("Enter the answer...", "答えを入力...")
+            }
+            placeholderTextColor="#999"
+            multiline={newQuestionType !== "true_false"}
+          />
+
+          <TouchableOpacity
+            style={[styles.addQuestionSubmitButton, isAddingQuestion && styles.buttonDisabled]}
+            onPress={handleAddQuestion}
+            disabled={isAddingQuestion}
+          >
+            {isAddingQuestion ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.addQuestionSubmitText}>
+                {t("Add", "追加する")}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      </Modal>
+
       {/* エラーモーダル */}
       <Modal
         visible={errorModalVisible}
@@ -1634,6 +1781,58 @@ export default function TrialSetDetailScreen() {
 
 const styles = StyleSheet.create({
   ...commonStyles,
+  header: {
+    ...commonStyles.header,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  title: {
+    ...commonStyles.title,
+    fontSize: 21,
+    marginBottom: 6,
+  },
+  description: {
+    ...commonStyles.description,
+    fontSize: 15,
+  },
+  descriptionRow: {
+    ...commonStyles.descriptionRow,
+    marginBottom: 8,
+    gap: 8,
+  },
+  /** 問題数・要復習 と 表示切替 を同一行に並べる */
+  statsAndToggleBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 10,
+    backgroundColor: "#fff",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  statsInlineGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    gap: 20,
+  },
+  headerStat: {
+    alignItems: "center",
+  },
+  statValue: {
+    ...commonStyles.statValue,
+    fontSize: 21,
+  },
+  statLabel: {
+    ...commonStyles.statLabel,
+    fontSize: 13,
+    marginTop: 2,
+  },
   titleContainer: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -1643,10 +1842,10 @@ const styles = StyleSheet.create({
   titleBadges: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 6,
     alignItems: "center",
     alignSelf: "flex-start",
-    marginTop: 8,
+    marginTop: 6,
   },
   langBadge: {
     backgroundColor: "#5856D6",
@@ -1672,21 +1871,15 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     ...commonStyles.listContainer,
-    paddingBottom: 180,
-  },
-  listOrderToggleRow: {
-    backgroundColor: "#fff",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    paddingBottom: 168,
   },
   listOrderToggleButton: {
-    alignSelf: "flex-start",
+    flexShrink: 0,
+    alignSelf: "center",
     backgroundColor: "#E8F4FF",
     borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: "#007AFF",
   },
@@ -1759,13 +1952,14 @@ const styles = StyleSheet.create({
   reviewButton: {
     backgroundColor: "#FF9500",
     borderRadius: 8,
-    padding: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
     alignItems: "center",
-    marginTop: 8,
+    marginTop: 6,
   },
   reviewButtonText: {
     color: "#fff",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
   },
   errorText: {
@@ -1775,8 +1969,33 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     ...commonStyles.buttonContainer,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    gap: 6,
     zIndex: 1000,
     elevation: 10,
+  },
+  buttonRow: {
+    ...commonStyles.buttonRow,
+    gap: 6,
+  },
+  startQuizButton: {
+    ...commonStyles.startQuizButton,
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+  },
+  flashcardButton: {
+    ...commonStyles.flashcardButton,
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+  },
+  startQuizButtonText: {
+    ...commonStyles.startQuizButtonText,
+    fontSize: 14,
+  },
+  flashcardButtonText: {
+    ...commonStyles.flashcardButtonText,
+    fontSize: 14,
   },
   buttonDisabled: {
     backgroundColor: "#B0B0B0",
@@ -1784,14 +2003,15 @@ const styles = StyleSheet.create({
   backToListButton: {
     backgroundColor: "#fff",
     borderRadius: 8,
-    padding: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#007AFF",
   },
   backToListButtonText: {
     color: "#007AFF",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
   },
   backButton: {
@@ -1922,31 +2142,33 @@ const styles = StyleSheet.create({
   },
   textbookButtonRow: {
     flexDirection: "row",
-    gap: 8,
-    marginTop: 8,
+    gap: 6,
+    marginTop: 6,
   },
   textbookButton: {
     backgroundColor: "#007AFF",
     borderRadius: 8,
-    padding: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 10,
     alignItems: "center",
     flex: 1,
   },
   textbookButtonText: {
     color: "#fff",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
   },
   removeTextbookButton: {
     backgroundColor: "#FF3B30",
     borderRadius: 8,
-    padding: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 10,
     alignItems: "center",
     flex: 1,
   },
   removeTextbookButtonText: {
     color: "#fff",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
   },
   textbookModalContent: {
@@ -1976,6 +2198,89 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     padding: 20,
+  },
+  addQuestionButton: {
+    backgroundColor: "#007AFF",
+    borderRadius: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    marginTop: 6,
+  },
+  addQuestionButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  addQuestionModalContent: {
+    padding: 16,
+    maxHeight: 500,
+  },
+  addQuestionLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 6,
+    marginTop: 12,
+  },
+  addQuestionInput: {
+    backgroundColor: "#f5f5f5",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 15,
+    color: "#333",
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    minHeight: 60,
+    textAlignVertical: "top",
+  },
+  addQuestionOptionInput: {
+    backgroundColor: "#f5f5f5",
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 14,
+    color: "#333",
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    marginBottom: 6,
+  },
+  addQuestionSubmitButton: {
+    backgroundColor: "#34C759",
+    borderRadius: 8,
+    padding: 14,
+    alignItems: "center",
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  addQuestionSubmitText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  questionTypeRow: {
+    flexDirection: "row" as const,
+    gap: 8,
+    marginBottom: 4,
+  },
+  questionTypeChip: {
+    backgroundColor: "#f0f0f0",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  questionTypeChipActive: {
+    backgroundColor: "#E8F4FF",
+    borderColor: "#007AFF",
+  },
+  questionTypeChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#666",
+  },
+  questionTypeChipTextActive: {
+    color: "#007AFF",
   },
   flashcardProgressText: {
     fontSize: 11,

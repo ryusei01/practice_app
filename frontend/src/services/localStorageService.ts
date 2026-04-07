@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { ContentLanguage } from "../api/questionSets";
+import { normalizeMultipleChoiceAnswer } from "../utils/multipleChoice";
 
 export interface LocalQuestionSet {
   id: string;
@@ -27,6 +28,7 @@ export interface LocalQuestion {
   id: string;
   question: string;
   answer: string;
+  explanation?: string;
   difficulty?: "easy" | "medium" | "hard";
   category?: string;
   subcategory1?: string;
@@ -137,6 +139,23 @@ export const localStorageService = {
       console.error("Error updating trial question set:", error);
       throw error;
     }
+  },
+
+  async addQuestionToTrialSet(
+    setId: string,
+    question: Omit<LocalQuestion, "id">
+  ): Promise<LocalQuestion> {
+    const sets = await this.getTrialQuestionSets();
+    const index = sets.findIndex((s) => s.id === setId);
+    if (index === -1) throw new Error("Question set not found");
+
+    const newQuestion: LocalQuestion = {
+      ...question,
+      id: `q_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    };
+    sets[index].questions.push(newQuestion);
+    await AsyncStorage.setItem(TRIAL_QUESTION_SETS_KEY, JSON.stringify(sets));
+    return newQuestion;
   },
 
   // クイズ結果を保存
@@ -375,11 +394,21 @@ export const localStorageService = {
         question_type = "text_input";
       }
 
-      if (question_text && correct_answer) {
+      const normalizedMultipleChoiceAnswer =
+        question_type === "multiple_choice"
+          ? normalizeMultipleChoiceAnswer(correct_answer, options)
+          : null;
+      const normalizedCorrectAnswer =
+        question_type === "multiple_choice"
+          ? normalizedMultipleChoiceAnswer || ""
+          : correct_answer.trim();
+
+      if (question_text && normalizedCorrectAnswer) {
         questions.push({
           id: `q_${i}`,
           question: question_text,
-          answer: correct_answer + (explanation ? `\n\n${explanation}` : ""),
+          answer: normalizedCorrectAnswer,
+          explanation: explanation || undefined,
           difficulty:
             difficulty < 0.3 ? "easy" : difficulty > 0.6 ? "hard" : "medium",
           category: category,

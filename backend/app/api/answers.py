@@ -14,7 +14,6 @@ from ..models import Answer, User, QuestionSet, Question
 from ..ai import StatsUpdater
 from ..services.ai_evaluator import evaluate_text_answer
 from ..services.embedding_grading import (
-    MLDisabledError,
     RubricItem,
     MisconceptionItem,
     evaluate_with_rubric_and_misconceptions,
@@ -118,11 +117,11 @@ async def evaluate_text_with_rubric_endpoint(
     db: Session = Depends(get_db),
 ):
     """
-    記述式をルーブリック + 埋め込み類似度で採点（sentence-transformers）。
+    記述式をルーブリック + 独自テキスト類似度で採点。
 
     ルーブリック項目ごとに部分点を付け、誤概念があれば分類結果も返す。
     既存の evaluate-text と同様の is_correct / confidence / feedback に加え、
-    embedding_grading で詳細（項目別スコア・誤概念）を返す。
+    項目別スコア・誤概念の詳細を返す。
     """
     try:
         question = db.query(Question).filter(Question.id == request.question_id).first()
@@ -154,11 +153,6 @@ async def evaluate_text_with_rubric_endpoint(
         return to_legacy_evaluation_format(result, pass_threshold=60.0)
     except HTTPException:
         raise
-    except MLDisabledError as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"ML採点機能は現在利用できません: {e}",
-        )
     except Exception as e:
         import traceback
         traceback.print_exc()

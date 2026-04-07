@@ -1,69 +1,81 @@
 """
-記述式採点サービス（sentence-transformers 利用）
+記述式採点サービス（独自テキスト類似度ベース）
 
-- 埋め込み類似度 + ルーブリックによる部分点採点
-- 誤概念（ミスタイプ）の分類
-- 同義語・言い換えは埋め込みで吸収
+- ルーブリック項目ごとに独自テキスト類似度で部分点を付与
+- 誤概念（ミスコンセプション）の分類
+- 同義語・言い換えはレーベンシュタイン距離 + トークン重複で吸収
+- 外部ライブラリ不使用
 """
 from __future__ import annotations
 
-import math
+import re
+import unicodedata
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Optional
 
 
-class MLDisabledError(RuntimeError):
-    """ENABLE_ML=false のときに ML 機能を呼び出すと送出されるエラー。"""
+def _normalize(text: str) -> str:
+    """NFKC正規化 + 小文字 + 空白正規化"""
+    t = unicodedata.normalize('NFKC', text).strip().lower()
+    return re.sub(r'\s+', ' ', t)
 
 
-# モデルは初回利用時に遅延ロード
-_embedding_model: Any = None
-_embedding_model_name: str = ""
+def _remove_punctuation(text: str) -> str:
+    return re.sub(
+        r'[、。，．,!！?？;；:：\'\"\'\'""（）()\[\]【】『』「」\-\s]',
+        '', text,
+    )
 
 
-def get_embedding_model(model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"):
-    """
-    sentence-transformers のモデルをシングルトンで取得。
-    日本語・英語両対応の軽量モデルをデフォルトに。
-    ENABLE_ML=false の場合は MLDisabledError を送出する。
-    """
-    import os
-    if os.getenv("ENABLE_ML", "true").lower() == "false":
-        raise MLDisabledError(
-            "ML機能は無効化されています (ENABLE_ML=false)。"
-            "開発環境では ENABLE_ML=true を設定してください。"
-        )
-
-    global _embedding_model, _embedding_model_name
-    if _embedding_model is None or _embedding_model_name != model_name:
-        try:
-            from sentence_transformers import SentenceTransformer
-            _embedding_model = SentenceTransformer(model_name)
-            _embedding_model_name = model_name
-        except ImportError:
-            raise ImportError(
-                "sentence-transformers が必要です: pip install sentence-transformers"
-            )
-    return _embedding_model
+def _levenshtein(s1: str, s2: str) -> int:
+    if len(s1) < len(s2):
+        return _levenshtein(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+    prev = list(range(len(s2) + 1))
+    for i, c1 in enumerate(s1):
+        curr = [i + 1]
+        for j, c2 in enumerate(s2):
+            cost = 0 if c1 == c2 else 1
+            curr.append(min(curr[j] + 1, prev[j + 1] + 1, prev[j] + cost))
+        prev = curr
+    return prev[-1]
 
 
-def embed_texts(model: Any, texts: list[str], batch_size: int = 32) -> list[list[float]]:
-    """テキストリストを埋め込みベクトルに変換。"""
-    if not texts:
-        return []
-    vectors = model.encode(texts, batch_size=batch_size, show_progress_bar=False)
-    return [v.tolist() for v in vectors]
+def _levenshtein_similarity(s1: str, s2: str) -> float:
+    longer = max(len(s1), len(s2))
+    if longer == 0:
+        return 1.0
+    return (longer - _levenshtein(s1, s2)) / longer
 
 
-def cosine_similarity(a: list[float], b: list[float]) -> float:
-    """コサイン類似度 (0〜1 の範囲で返す)。"""
-    dot = sum(x * y for x, y in zip(a, b))
-    na = math.sqrt(sum(x * x for x in a))
-    nb = math.sqrt(sum(x * x for x in b))
-    if na == 0 or nb == 0:
+def _token_overlap(a: str, b: str) -> float:
+    """トークン（単語 or 文字 n-gram）の重複率"""
+    ta = set(a.split()) if ' ' in a else set(_char_ngrams(a, 2))
+    tb = set(b.split()) if ' ' in b else set(_char_ngrams(b, 2))
+    if not ta or not tb:
         return 0.0
-    sim = dot / (na * nb)
-    return max(0.0, min(1.0, (sim + 1) / 2))  # [-1,1] -> [0,1]
+    inter = ta & tb
+    return len(inter) / max(len(ta), len(tb))
+
+
+def _char_ngrams(text: str, n: int = 2) -> list[str]:
+    """文字 n-gram を生成"""
+    return [text[i:i + n] for i in range(max(0, len(text) - n + 1))]
+
+
+def text_similarity(a: str, b: str) -> float:
+    """
+    独自テキスト類似度（0.0–1.0）。
+    レーベンシュタイン類似度とトークン重複率の加重平均。
+    """
+    na = _remove_punctuation(_normalize(a))
+    nb = _remove_punctuation(_normalize(b))
+    if not na or not nb:
+        return 0.0
+    lev_sim = _levenshtein_similarity(na, nb)
+    tok_sim = _token_overlap(na, nb)
+    return 0.6 * lev_sim + 0.4 * tok_sim
 
 
 # --- ルーブリック・誤概念の型 ---
@@ -78,7 +90,7 @@ class RubricItem:
 
 @dataclass
 class MisconceptionItem:
-    """誤概念の定義（代表フレーズのリストで埋め込み）"""
+    """誤概念の定義（代表フレーズのリストで照合）"""
     id: str
     label: str
     example_phrases: list[str]
@@ -103,25 +115,23 @@ class MisconceptionMatch:
 
 @dataclass
 class EmbeddingGradingResult:
-    """埋め込み採点の結果"""
+    """採点の結果"""
     total_raw: float
     max_raw: float
-    normalized_score: float  # 0〜100
+    normalized_score: float  # 0–100
     details: list[RubricScoreDetail] = field(default_factory=list)
     misconceptions: list[MisconceptionMatch] = field(default_factory=list)
     feedback_summary: str = ""
 
 
-# --- 閾値（設定可能にしてもよい）---
 DEFAULT_FULL_MATCH_THRESHOLD = 0.78
 DEFAULT_PARTIAL_MATCH_THRESHOLD = 0.58
 
 
-def _partial_score(similarity: float, full_thresh: float, partial_thresh: float) -> float:
-    """類似度から部分点 (0 / 0.5 / 1.0) を付与。"""
-    if similarity >= full_thresh:
+def _partial_score(sim: float, full_thresh: float, partial_thresh: float) -> float:
+    if sim >= full_thresh:
         return 1.0
-    if similarity >= partial_thresh:
+    if sim >= partial_thresh:
         return 0.5
     return 0.0
 
@@ -129,56 +139,35 @@ def _partial_score(similarity: float, full_thresh: float, partial_thresh: float)
 def score_with_rubric(
     answer: str,
     rubrics: list[RubricItem],
-    model_name: str = "paraphrase-multilingual-MiniLM-L12-v2",
     full_threshold: float = DEFAULT_FULL_MATCH_THRESHOLD,
     partial_threshold: float = DEFAULT_PARTIAL_MATCH_THRESHOLD,
+    **_kwargs,
 ) -> EmbeddingGradingResult:
     """
     ルーブリックに基づき記述式回答を採点。
-
-    Args:
-        answer: 受験者の回答
-        rubrics: ルーブリック項目リスト
-        model_name: 使用する sentence-transformers モデル名
-        full_threshold: この類似度以上で満点 (1.0)
-        partial_threshold: この類似度以上で半分 (0.5)
-
-    Returns:
-        EmbeddingGradingResult（総合点・項目別・正規化スコア）
+    独自テキスト類似度を使用。
     """
+    max_raw = sum(r.weight for r in rubrics)
     if not answer or not rubrics:
-        max_raw = sum(r.weight for r in rubrics)
         return EmbeddingGradingResult(
-            total_raw=0.0,
-            max_raw=max_raw,
-            normalized_score=0.0,
-            details=[],
-            feedback_summary="回答が空です。",
+            total_raw=0.0, max_raw=max_raw, normalized_score=0.0,
+            details=[], feedback_summary="回答が空です。",
         )
-
-    model = get_embedding_model(model_name)
-    rubric_texts = [r.text for r in rubrics]
-    rubric_embs = embed_texts(model, rubric_texts)
-    ans_emb = embed_texts(model, [answer])[0]
 
     details: list[RubricScoreDetail] = []
     total_raw = 0.0
-    max_raw = 0.0
 
-    for r, emb in zip(rubrics, rubric_embs):
-        sim = cosine_similarity(ans_emb, emb)
+    for r in rubrics:
+        sim = text_similarity(answer, r.text)
         partial = _partial_score(sim, full_threshold, partial_threshold)
         weighted = partial * r.weight
         total_raw += weighted
-        max_raw += r.weight
-        details.append(
-            RubricScoreDetail(
-                rubric_id=r.id,
-                similarity=round(sim, 4),
-                partial_score=partial,
-                weight=r.weight,
-            )
-        )
+        details.append(RubricScoreDetail(
+            rubric_id=r.id,
+            similarity=round(sim, 4),
+            partial_score=partial,
+            weight=r.weight,
+        ))
 
     normalized = (total_raw / max_raw * 100.0) if max_raw > 0 else 0.0
     feedback = _build_rubric_feedback(details, rubrics)
@@ -196,8 +185,6 @@ def _build_rubric_feedback(
     details: list[RubricScoreDetail],
     rubrics: list[RubricItem],
 ) -> str:
-    """項目別の達成状況から短いフィードバック文を生成。"""
-    by_id = {r.id: r for r in rubrics}
     achieved = [d for d in details if d.partial_score >= 0.5]
     missing = [d for d in details if d.partial_score < 0.5]
     if not missing:
@@ -210,40 +197,22 @@ def _build_rubric_feedback(
 def classify_misconceptions(
     answer: str,
     misconceptions: list[MisconceptionItem],
-    model_name: str = "paraphrase-multilingual-MiniLM-L12-v2",
     min_similarity: float = 0.65,
     top_k: int = 3,
+    **_kwargs,
 ) -> list[MisconceptionMatch]:
-    """
-    回答がどの誤概念に近いかを類似度で分類。
-
-    Args:
-        answer: 受験者の回答
-        misconceptions: 誤概念の定義リスト
-        model_name: 使用するモデル名
-        min_similarity: この値以上を「マッチ」とする
-        top_k: 返すマッチ数の上限
-
-    Returns:
-        類似度の高い順の MisconceptionMatch リスト
-    """
+    """回答がどの誤概念に近いかをテキスト類似度で分類。"""
     if not answer or not misconceptions:
         return []
 
-    model = get_embedding_model(model_name)
-    ans_emb = embed_texts(model, [answer])[0]
-
-    # 各誤概念の代表フレーズの平均ベクトル（または最大類似度）で比較
     matches: list[tuple[str, str, float]] = []
-
     for mc in misconceptions:
         if not mc.example_phrases:
             continue
-        phrase_embs = embed_texts(model, mc.example_phrases)
-        sims = [cosine_similarity(ans_emb, pe) for pe in phrase_embs]
-        best_sim = max(sims) if sims else 0.0
-        if best_sim >= min_similarity:
-            matches.append((mc.id, mc.label, best_sim))
+        sims = [text_similarity(answer, phrase) for phrase in mc.example_phrases]
+        best = max(sims) if sims else 0.0
+        if best >= min_similarity:
+            matches.append((mc.id, mc.label, best))
 
     matches.sort(key=lambda x: -x[2])
     return [
@@ -256,18 +225,15 @@ def evaluate_with_rubric_and_misconceptions(
     answer: str,
     rubrics: list[RubricItem],
     misconceptions: Optional[list[MisconceptionItem]] = None,
-    model_name: str = "paraphrase-multilingual-MiniLM-L12-v2",
     full_threshold: float = DEFAULT_FULL_MATCH_THRESHOLD,
     partial_threshold: float = DEFAULT_PARTIAL_MATCH_THRESHOLD,
     misconception_min_sim: float = 0.65,
+    **_kwargs,
 ) -> EmbeddingGradingResult:
-    """
-    ルーブリック採点 + 誤概念分類をまとめて実行。
-    """
+    """ルーブリック採点 + 誤概念分類をまとめて実行。"""
     result = score_with_rubric(
         answer=answer,
         rubrics=rubrics,
-        model_name=model_name,
         full_threshold=full_threshold,
         partial_threshold=partial_threshold,
     )
@@ -276,7 +242,6 @@ def evaluate_with_rubric_and_misconceptions(
         result.misconceptions = classify_misconceptions(
             answer=answer,
             misconceptions=misconceptions,
-            model_name=model_name,
             min_similarity=misconception_min_sim,
         )
         if result.misconceptions and result.feedback_summary:
@@ -287,16 +252,11 @@ def evaluate_with_rubric_and_misconceptions(
     return result
 
 
-# --- 既存 API と合わせるための変換 ---
-
 def to_legacy_evaluation_format(
     result: EmbeddingGradingResult,
     pass_threshold: float = 60.0,
 ) -> dict:
-    """
-    既存の evaluate_text_answer が返す形式に近い dict に変換。
-    is_correct, confidence, feedback, および embedding 由来の詳細を付与。
-    """
+    """既存 API 互換の dict に変換。"""
     is_correct = result.normalized_score >= pass_threshold
     return {
         "is_correct": is_correct,

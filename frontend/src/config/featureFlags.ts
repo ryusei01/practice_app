@@ -1,0 +1,1 @@
+export const TEMPORARILY_REDIRECT_PREMIUM_PLAN = true;

@@ -21,6 +21,7 @@ import Modal from "../../../../../src/components/Modal";
 import MathText from "../../../../../src/components/MathText";
 import MediaAttachment from "../../../../../src/components/MediaAttachment";
 import MediaPlayer from "../../../../../src/components/MediaPlayer";
+import { getMultipleChoiceAnswerText } from "../../../../../src/utils/multipleChoice";
 
 export default function QuestionDetailScreen() {
   const { id, questionIndex } = useLocalSearchParams<{
@@ -151,6 +152,10 @@ export default function QuestionDetailScreen() {
   }
 
   const currentQuestion = questionSet.questions[currentIndex];
+  const answerText =
+    currentQuestion.question_type === "multiple_choice"
+      ? getMultipleChoiceAnswerText(currentQuestion.answer, currentQuestion.options)
+      : currentQuestion.answer;
 
   return (
     <View style={styles.container} nativeID="question-detail-container">
@@ -202,7 +207,7 @@ export default function QuestionDetailScreen() {
               <Text style={styles.answerLabel} nativeID="answer-label">
                 {t("Answer", "答え")}:
               </Text>
-              <MathText text={currentQuestion.answer} style={styles.answerText} />
+              <MathText text={answerText} style={styles.answerText} />
               {mediaItems.length > 0 && (
                 <MediaPlayer media={mediaItems as any} position="answer" />
               )}

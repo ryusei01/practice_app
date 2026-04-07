@@ -1,0 +1,39 @@
+---
+description: API エラーはグローバルモーダルと getApiErrorMessage を前提に扱う
+globs: **/*.{ts,tsx}
+alwaysApply: true
+---
+
+# API エラーハンドリング（必須）
+
+## グローバル表示（デフォルト）
+
+- `frontend/src/api/client.ts`（`apiClient`）経由のリクエストが失敗すると、`getApiErrorMessage` の文言で **グローバルエラーモーダル** が開く（401・キャンセルは除く）。
+- 新規の API 呼び出しは **原則 `apiClient` 経由**。別インスタンスの axios を増やさない。
+
+## 画面側でエラーを出す場合（二重表示を防ぐ）
+
+- 専用の全画面エラーやインライン表示で **自分でメッセージを出す** ときは、該当リクエストに `skipGlobalErrorModal: true` を付ける。
+
+```typescript
+await apiClient.get("/path", { params, skipGlobalErrorModal: true });
+await apiClient.post("/path", body, { skipGlobalErrorModal: true });
+```
+
+- `questionsApi.getAll` / `questionSetsApi.getById` などラッパーは、第 2 引数で `{ skipGlobalErrorModal: true }` を渡せるようにする。
+
+## メッセージの組み立て
+
+- `catch` でユーザー向け文を組むときは **`getApiErrorMessage`**（`frontend/src/utils/apiError.ts`）を使う。FastAPI の `detail` やステータスを踏まえた文言に揃える。
+
+## 実装時のチェックリスト
+
+- [ ] 非同期処理は `try/catch`（または `.catch`）で失敗を握りつぶさない。
+- [ ] ユーザーに伝える必要がある失敗はグローバルモーダル（デフォルト）か、明示的な UI のどちらかで見せる。
+- [ ] 独自 UI を出すリクエストには `skipGlobalErrorModal` を付け、同じ内容をモーダルと二重に出さない。
+- [ ] `.catch(() => null)` のように **意図的に黙らせる** リクエストにも `skipGlobalErrorModal: true` を付ける（さもないとインターセプターが先にモーダルを出す）。
+
+## 参考
+
+- ルートの描画例外: `app/_layout.tsx` の `ErrorBoundary`
+- 未定義ルート: `app/+not-found.tsx`

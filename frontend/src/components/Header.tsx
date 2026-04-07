@@ -12,9 +12,16 @@ interface HeaderProps {
   rightComponent?: ReactNode;
   // 既存画面との互換性のため（現状はHeader内部で未使用）
   showLanguageSwitcher?: boolean;
+  /** 一覧など縦スペースを確保したい画面用のコンパクト表示 */
+  compact?: boolean;
 }
 
-export default function Header({ title, leftComponent, rightComponent }: HeaderProps) {
+export default function Header({
+  title,
+  leftComponent,
+  rightComponent,
+  compact = false,
+}: HeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated } = useAuth();
@@ -33,8 +40,13 @@ export default function Header({ title, leftComponent, rightComponent }: HeaderP
   const showMyPageLink = isAuthenticated && !isMyPage && rightComponent == null;
   const showLoginLink = !isAuthenticated && rightComponent == null;
 
+  const topPad = Math.max(insets.top, compact ? 6 : 10) + (compact ? 4 : 8);
+
   return (
-    <View style={[styles.header, { paddingTop: Math.max(insets.top, 10) + 8 }]} nativeID="app-header">
+    <View
+      style={[styles.header, compact && styles.headerCompact, { paddingTop: topPad }]}
+      nativeID="app-header"
+    >
       <View style={styles.headerContent}>
         {leftComponent ? (
           <View
@@ -51,7 +63,10 @@ export default function Header({ title, leftComponent, rightComponent }: HeaderP
               onPress={() => router.canGoBack() ? router.back() : router.replace("/")}
               testID="header-back-btn"
             >
-              <Text style={styles.backButtonText} nativeID="header-back-text">
+              <Text
+                style={[styles.backButtonText, compact && styles.backButtonTextCompact]}
+                nativeID="header-back-text"
+              >
                 ←
               </Text>
             </TouchableOpacity>
@@ -62,14 +77,14 @@ export default function Header({ title, leftComponent, rightComponent }: HeaderP
           activeOpacity={0.7}
           style={styles.titleContainer}
         >
-          <Text style={styles.appName} nativeID="app-name">
+          <Text style={[styles.appName, compact && styles.appNameCompact]} nativeID="app-name">
             AI Practice Book{" "}
-            <Text style={styles.beta} nativeID="app-version">
+            <Text style={[styles.beta, compact && styles.betaCompact]} nativeID="app-version">
               Ver.β
             </Text>
           </Text>
           {title && (
-            <Text style={styles.pageTitle} nativeID="page-title">
+            <Text style={[styles.pageTitle, compact && styles.pageTitleCompact]} nativeID="page-title">
               {title}
             </Text>
           )}
@@ -87,7 +102,10 @@ export default function Header({ title, leftComponent, rightComponent }: HeaderP
                 testID="header-mypage-link"
               >
                 <Text
-                  style={[styles.myPageLinkText, { fontSize: isSmallScreen ? 14 : 16 }]}
+                  style={[
+                    styles.myPageLinkText,
+                    { fontSize: compact ? (isSmallScreen ? 12 : 13) : isSmallScreen ? 14 : 16 },
+                  ]}
                   nativeID="header-mypage-text"
                 >
                   {t("My Profile", "マイページ")}
@@ -100,7 +118,10 @@ export default function Header({ title, leftComponent, rightComponent }: HeaderP
                 testID="header-login-link"
               >
                 <Text
-                  style={[styles.myPageLinkText, { fontSize: isSmallScreen ? 14 : 16 }]}
+                  style={[
+                    styles.myPageLinkText,
+                    { fontSize: compact ? (isSmallScreen ? 12 : 13) : isSmallScreen ? 14 : 16 },
+                  ]}
                   nativeID="header-login-text"
                 >
                   {t("Sign In", "ログイン")}
@@ -126,6 +147,10 @@ const styles = StyleSheet.create({
       shadowRadius: 4,
     }),
     elevation: 3,
+  },
+  headerCompact: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
   },
   headerContent: {
     flexDirection: "row",
@@ -155,6 +180,9 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
   },
+  backButtonTextCompact: {
+    fontSize: 22,
+  },
   titleContainer: {
     alignItems: "center",
     flex: 1,
@@ -164,16 +192,26 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#fff",
   },
+  appNameCompact: {
+    fontSize: 17,
+  },
   beta: {
     fontSize: 14,
     fontWeight: "normal",
     fontStyle: "italic",
     color: "#E0E0E0",
   },
+  betaCompact: {
+    fontSize: 12,
+  },
   pageTitle: {
     fontSize: 14,
     color: "#E0E0E0",
     marginTop: 4,
+  },
+  pageTitleCompact: {
+    fontSize: 12,
+    marginTop: 2,
   },
   rightComponent: {
     position: "absolute",

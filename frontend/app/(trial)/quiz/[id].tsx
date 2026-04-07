@@ -16,6 +16,26 @@ import Header from "../../../src/components/Header";
 import QuizEngine, { QuizQuestion, QuizAnswer } from "../../../src/components/QuizEngine";
 import Modal from "../../../src/components/Modal";
 
+function getTrialQuestionContent(question: LocalQuestion): {
+  correctAnswer: string;
+  explanation?: string;
+} {
+  if (question.explanation?.trim()) {
+    return {
+      correctAnswer: question.answer,
+      explanation: question.explanation.trim(),
+    };
+  }
+
+  const [correctAnswer, ...rest] = question.answer.split(/\n\s*\n/);
+  const explanation = rest.join("\n\n").trim();
+
+  return {
+    correctAnswer: correctAnswer?.trim() || question.answer,
+    explanation: explanation || undefined,
+  };
+}
+
 export default function TrialQuizScreen() {
   const { id, startIndex, questionIds, mode } = useLocalSearchParams<{ 
     id: string; 
@@ -289,14 +309,19 @@ export default function TrialQuizScreen() {
   // 使用する問題を決定（選択された問題があればそれを使用、なければ全て）
   const questionsToUse = selectedQuestions || questionSet.questions;
 
-  const quizQuestions: QuizQuestion[] = questionsToUse.map((q, index) => ({
-    id: q.id || `${questionSet.id}_q${index}`,
-    question_text: q.question,
-    correct_answer: q.answer,
-    question_type: q.question_type || "text_input",
-    options: q.options,
-    media_urls: q.media_urls as any,
-  }));
+  const quizQuestions: QuizQuestion[] = questionsToUse.map((q, index) => {
+    const { correctAnswer, explanation } = getTrialQuestionContent(q);
+
+    return {
+      id: q.id || `${questionSet.id}_q${index}`,
+      question_text: q.question,
+      correct_answer: correctAnswer,
+      explanation,
+      question_type: q.question_type || "text_input",
+      options: q.options,
+      media_urls: q.media_urls as any,
+    };
+  });
 
   return (
     <View style={styles.container}>

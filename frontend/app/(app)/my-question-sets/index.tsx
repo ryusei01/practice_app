@@ -250,12 +250,23 @@ export default function MyQuestionSetsScreen() {
       const rows = item.questions.map((q) => {
         const diffVal =
           q.difficulty === "easy" ? "0.2" : q.difficulty === "hard" ? "0.8" : "0.5";
+        const questionType =
+          q.question_type ||
+          (q.options && q.options.length > 0
+            ? "multiple_choice"
+            : q.answer.trim().toLowerCase() === "true" || q.answer.trim().toLowerCase() === "false"
+              ? "true_false"
+              : "text_input");
+        const options = q.options || [];
         return [
           escapeCSV(q.question || ""),
-          "text_input",
-          "", "", "", "",
+          questionType,
+          escapeCSV(options[0] || ""),
+          escapeCSV(options[1] || ""),
+          escapeCSV(options[2] || ""),
+          escapeCSV(options[3] || ""),
           escapeCSV(q.answer || ""),
-          "",
+          escapeCSV(q.explanation || ""),
           diffVal,
           escapeCSV(q.category || ""),
           escapeCSV(q.subcategory1 || ""),

@@ -60,7 +60,9 @@ export default function AIDashboardScreen() {
       const [predictions, improvementSuggestions, statsRes] = await Promise.all([
         aiApi.getCategoryPredictions(user.id),
         aiApi.getImprovementSuggestions(user.id),
-        answersApi.getUserStats(user.id).catch(() => null),
+        answersApi
+          .getUserStats(user.id, { skipGlobalErrorModal: true })
+          .catch(() => null),
       ]);
 
       const listPred = Array.isArray(predictions)

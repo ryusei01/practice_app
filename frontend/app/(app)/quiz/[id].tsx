@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from "react";
 import {
   View,
+  Text,
   StyleSheet,
   ActivityIndicator,
   Alert,
+  TouchableOpacity,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../../../src/contexts/AuthContext";
+import { useLanguage } from "../../../src/contexts/LanguageContext";
 import { questionsApi, Question } from "../../../src/api/questions";
 import { answersApi } from "../../../src/api/answers";
 import QuizEngine, { QuizQuestion, QuizAnswer } from "../../../src/components/QuizEngine";
 import { srsService } from "../../../src/services/srsService";
+import { getApiErrorMessage } from "../../../src/utils/apiError";
 
 export default function QuizScreen() {
   const { id, questionIds, startIndex, mode } = useLocalSearchParams<{
@@ -22,9 +26,11 @@ export default function QuizScreen() {
   }>();
   const { user } = useAuth();
   const router = useRouter();
+  const { t } = useLanguage();
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [sessionId] = useState<string>(
     `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
   );
@@ -37,8 +43,13 @@ export default function QuizScreen() {
   }, [id, user, questionIds]);
 
   const loadQuestions = async () => {
+    setLoadError(null);
+    setIsLoading(true);
     try {
-      const data = await questionsApi.getAll({ question_set_id: id as string });
+      const data = await questionsApi.getAll(
+        { question_set_id: id as string },
+        { skipGlobalErrorModal: true }
+      );
       console.log("[loadQuestions] Loaded questions:", data);
       console.log("[loadQuestions] First question details:", data[0]);
 
@@ -70,7 +81,13 @@ export default function QuizScreen() {
       }
     } catch (error) {
       console.error("Failed to load questions:", error);
-      Alert.alert("Error", "Failed to load questions");
+      setLoadError(
+        getApiErrorMessage(
+          error,
+          "Failed to load questions",
+          "問題の読み込みに失敗しました"
+        )
+      );
     } finally {
       setIsLoading(false);
     }
@@ -113,6 +130,9 @@ export default function QuizScreen() {
           ...answer,
           question_text: question?.question_text || '',
           correct_answer: question?.correct_answer || '',
+          question_type: question?.question_type || '',
+          options: question?.options || undefined,
+          explanation: question?.explanation || undefined,
           category: question?.category,
         };
       });
@@ -185,6 +205,23 @@ export default function QuizScreen() {
     );
   }
 
+  if (loadError) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.errorText}>{loadError}</Text>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => loadQuestions()}
+        >
+          <Text style={styles.retryButtonText}>{t("Retry", "再試行")}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.backLink}>{t("Go Back", "戻る")}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   // QuestionをQuizQuestionに変換
   const quizQuestions: QuizQuestion[] = questions.map((q) => ({
     id: q.id,
@@ -217,5 +254,29 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#f5f5f5",
+    paddingHorizontal: 24,
+  },
+  errorText: {
+    fontSize: 16,
+    color: "#333",
+    textAlign: "center",
+    marginBottom: 20,
+    lineHeight: 24,
+  },
+  retryButton: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 10,
+    marginBottom: 16,
+  },
+  retryButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  backLink: {
+    color: "#007AFF",
+    fontSize: 16,
   },
 });

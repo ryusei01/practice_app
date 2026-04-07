@@ -1,4 +1,4 @@
-import api from './api';
+import apiClient from "../api/client";
 
 export interface SubmitAnswerRequest {
   user_id: string;
@@ -31,7 +31,7 @@ class AnswerService {
    * 回答を提出
    */
   async submitAnswer(request: SubmitAnswerRequest): Promise<Answer> {
-    const response = await api.post('/answers/submit', request);
+    const response = await apiClient.post("/answers/submit", request);
     return response.data;
   }
 
@@ -44,7 +44,7 @@ class AnswerService {
     limit: number = 50,
     offset: number = 0
   ) {
-    const response = await api.get(`/answers/history/${userId}`, {
+    const response = await apiClient.get(`/answers/history/${userId}`, {
       params: {
         question_set_id: questionSetId,
         limit,
@@ -58,7 +58,7 @@ class AnswerService {
    * ユーザー統計を取得
    */
   async getUserStats(userId: string): Promise<UserStats> {
-    const response = await api.get(`/answers/stats/${userId}`);
+    const response = await apiClient.get(`/answers/stats/${userId}`);
     return response.data;
   }
 
@@ -66,7 +66,7 @@ class AnswerService {
    * 統計を再計算
    */
   async recalculateStats(userId: string): Promise<void> {
-    await api.post(`/answers/recalculate-stats/${userId}`);
+    await apiClient.post(`/answers/recalculate-stats/${userId}`);
   }
 }
 

@@ -90,9 +90,17 @@ export default function MyPageScreen() {
       const [userData, statsData, answersResponse, purchasedData] =
         await Promise.all([
           authApi.getCurrentUser(),
-          answersApi.getUserStats(user.id).catch(() => null),
-          answersApi.getAnswerHistory(user.id).catch(() => []),
-          questionSetsApi.getPurchased().catch(() => []),
+          answersApi
+            .getUserStats(user.id, { skipGlobalErrorModal: true })
+            .catch(() => null),
+          answersApi
+            .getAnswerHistory(user.id, undefined, {
+              skipGlobalErrorModal: true,
+            })
+            .catch(() => []),
+          questionSetsApi
+            .getPurchased({ skipGlobalErrorModal: true })
+            .catch(() => []),
         ]);
 
       setUserInfo(userData);

@@ -23,7 +23,7 @@ import {
   LocalQuestionSet,
 } from "../../src/services/localStorageService";
 import {
-  LanguageFilter,
+  ContentLanguage,
   resolvedContentLanguage,
   contentLanguageDisplayLabel,
 } from "../../src/api/questionSets";
@@ -43,7 +43,11 @@ export default function TrialQuestionSetsScreen() {
   const isLoadingRef = useRef(false); // 重複読み込み防止用
   const [showDefaultSets, setShowDefaultSets] = useState(true);
   const [showTextbooks, setShowTextbooks] = useState(true);
-  const [languageFilter, setLanguageFilter] = useState<LanguageFilter>("all");
+  /** 日本語・English をトグルで絞り込み（初期は両方オン＝従来の「すべて」相当） */
+  const [languageMask, setLanguageMask] = useState<{
+    ja: boolean;
+    en: boolean;
+  }>({ ja: true, en: true });
   const [dueCounts, setDueCounts] = useState<Record<string, number>>({});
   const { user } = useAuth();
   const { t, language } = useLanguage();
@@ -313,12 +317,23 @@ export default function TrialQuestionSetsScreen() {
       const rows = item.questions.map((q) => {
         const diffVal =
           q.difficulty === "easy" ? "0.2" : q.difficulty === "hard" ? "0.8" : "0.5";
+        const questionType =
+          q.question_type ||
+          (q.options && q.options.length > 0
+            ? "multiple_choice"
+            : q.answer.trim().toLowerCase() === "true" || q.answer.trim().toLowerCase() === "false"
+              ? "true_false"
+              : "text_input");
+        const options = q.options || [];
         return [
           escapeCSV(q.question || ""),
-          "text_input",
-          "", "", "", "",
+          questionType,
+          escapeCSV(options[0] || ""),
+          escapeCSV(options[1] || ""),
+          escapeCSV(options[2] || ""),
+          escapeCSV(options[3] || ""),
           escapeCSV(q.answer || ""),
-          "",
+          escapeCSV(q.explanation || ""),
           diffVal,
           escapeCSV(q.category || ""),
           escapeCSV(q.subcategory1 || ""),
@@ -503,26 +518,37 @@ export default function TrialQuestionSetsScreen() {
     );
   };
 
+  const contentMatchesLanguageMask = (lang: ContentLanguage) =>
+    (lang === "ja" && languageMask.ja) || (lang === "en" && languageMask.en);
+
   const visibleQuestionSets = useMemo(() => {
     return questionSets
       .filter((item) =>
         showDefaultSets ? true : !item.id.startsWith("default_")
       )
-      .filter(
-        (item) =>
-          languageFilter === "all" ||
-          resolvedContentLanguage(item.content_language) === languageFilter
+      .filter((item) =>
+        contentMatchesLanguageMask(resolvedContentLanguage(item.content_language))
       );
-  }, [questionSets, showDefaultSets, languageFilter]);
+  }, [questionSets, showDefaultSets, languageMask.ja, languageMask.en]);
 
   const visibleTextbooks = useMemo(
     () =>
-      availableTextbooks.filter(
-        (tb) =>
-          languageFilter === "all" || tb.language === languageFilter
+      availableTextbooks.filter((tb) =>
+        contentMatchesLanguageMask(tb.language === "en" ? "en" : "ja")
       ),
-    [availableTextbooks, languageFilter]
+    [availableTextbooks, languageMask.ja, languageMask.en]
   );
+
+  const setLanguageMaskSafe = (updater: (prev: { ja: boolean; en: boolean }) => {
+    ja: boolean;
+    en: boolean;
+  }) => {
+    setLanguageMask((prev) => {
+      const next = updater(prev);
+      if (!next.ja && !next.en) return prev;
+      return next;
+    });
+  };
 
   const handleTextbookPress = (textbook: Textbook) => {
     const encodedPath = encodeURIComponent(textbook.path);
@@ -623,32 +649,17 @@ export default function TrialQuestionSetsScreen() {
           <TouchableOpacity
             style={[
               styles.filterChip,
-              languageFilter === "all" && styles.filterChipActive,
+              languageMask.ja && styles.filterChipActive,
             ]}
-            onPress={() => setLanguageFilter("all")}
-            testID="trial-filter-lang-all"
-          >
-            <Text
-              style={[
-                styles.filterChipText,
-                languageFilter === "all" && styles.filterChipTextActive,
-              ]}
-            >
-              {t("All languages", "すべて")}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.filterChip,
-              languageFilter === "ja" && styles.filterChipActive,
-            ]}
-            onPress={() => setLanguageFilter("ja")}
+            onPress={() =>
+              setLanguageMaskSafe((m) => ({ ...m, ja: !m.ja }))
+            }
             testID="trial-filter-lang-ja"
           >
             <Text
               style={[
                 styles.filterChipText,
-                languageFilter === "ja" && styles.filterChipTextActive,
+                languageMask.ja && styles.filterChipTextActive,
               ]}
             >
               {t("Japanese", "日本語")}
@@ -657,15 +668,17 @@ export default function TrialQuestionSetsScreen() {
           <TouchableOpacity
             style={[
               styles.filterChip,
-              languageFilter === "en" && styles.filterChipActive,
+              languageMask.en && styles.filterChipActive,
             ]}
-            onPress={() => setLanguageFilter("en")}
+            onPress={() =>
+              setLanguageMaskSafe((m) => ({ ...m, en: !m.en }))
+            }
             testID="trial-filter-lang-en"
           >
             <Text
               style={[
                 styles.filterChipText,
-                languageFilter === "en" && styles.filterChipTextActive,
+                languageMask.en && styles.filterChipTextActive,
               ]}
             >
               English
@@ -703,7 +716,11 @@ export default function TrialQuestionSetsScreen() {
           </View>
         )}
 
-        {questionSets.length === 0 && !isLoading ? (
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#007AFF" />
+          </View>
+        ) : questionSets.length === 0 ? (
           <View style={styles.emptyState} nativeID="trial-sets-empty">
             <Text
               style={[styles.emptyText, { fontSize: isSmallScreen ? 14 : 16 }]}
@@ -715,7 +732,7 @@ export default function TrialQuestionSetsScreen() {
               )}
             </Text>
           </View>
-        ) : visibleQuestionSets.length === 0 && !isLoading ? (
+        ) : visibleQuestionSets.length === 0 ? (
           <View style={styles.emptyState} nativeID="trial-sets-filter-empty">
             <Text
               style={[styles.emptyText, { fontSize: isSmallScreen ? 14 : 16 }]}
@@ -1028,6 +1045,12 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 12,
     fontWeight: "bold",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
   },
   emptyState: {
     padding: 30,

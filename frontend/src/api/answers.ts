@@ -93,15 +93,23 @@ export const answersApi = {
     return response.data;
   },
 
-  getAnswerHistory: async (userId: string, questionSetId?: string): Promise<Answer[]> => {
+  getAnswerHistory: async (
+    userId: string,
+    questionSetId?: string,
+    extra?: { skipGlobalErrorModal?: boolean }
+  ): Promise<Answer[]> => {
     const response = await apiClient.get(`/answers/history/${userId}`, {
       params: questionSetId ? { question_set_id: questionSetId } : undefined,
+      ...extra,
     });
     return response.data;
   },
 
-  getUserStats: async (userId: string): Promise<UserStats> => {
-    const response = await apiClient.get(`/answers/stats/${userId}`);
+  getUserStats: async (
+    userId: string,
+    extra?: { skipGlobalErrorModal?: boolean }
+  ): Promise<UserStats> => {
+    const response = await apiClient.get(`/answers/stats/${userId}`, extra);
     return response.data;
   },
 

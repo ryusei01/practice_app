@@ -1,4 +1,4 @@
-import api from './api';
+import apiClient from "../api/client";
 
 export interface RecommendationRequest {
   user_id: string;
@@ -67,7 +67,7 @@ class AIService {
    * AIによる問題推薦を取得
    */
   async getRecommendations(request: RecommendationRequest): Promise<string[]> {
-    const response = await api.post('/ai/recommend', request);
+    const response = await apiClient.post('/ai/recommend', request);
     return response.data.question_ids;
   }
 
@@ -75,7 +75,7 @@ class AIService {
    * 予想スコアを取得
    */
   async predictScore(request: ScorePredictionRequest): Promise<ScorePrediction> {
-    const response = await api.post('/ai/predict-score', request);
+    const response = await apiClient.post('/ai/predict-score', request);
     return response.data;
   }
 
@@ -83,7 +83,7 @@ class AIService {
    * カテゴリ別の予想スコアを取得
    */
   async getCategoryPredictions(userId: string, maxScore: number = 100) {
-    const response = await api.get(`/ai/category-predictions/${userId}`, {
+    const response = await apiClient.get(`/ai/category-predictions/${userId}`, {
       params: { max_score: maxScore },
     });
     return response.data;
@@ -93,7 +93,7 @@ class AIService {
    * 改善提案を取得
    */
   async getImprovementSuggestions(userId: string): Promise<ImprovementSuggestion[]> {
-    const response = await api.get(`/ai/improvement-suggestions/${userId}`);
+    const response = await apiClient.get(`/ai/improvement-suggestions/${userId}`);
     return response.data.suggestions;
   }
 
@@ -101,7 +101,7 @@ class AIService {
    * 適応型難易度を取得
    */
   async getAdaptiveDifficulty(userId: string, category: string): Promise<number> {
-    const response = await api.get(`/ai/adaptive-difficulty/${userId}/${category}`);
+    const response = await apiClient.get(`/ai/adaptive-difficulty/${userId}/${category}`);
     return response.data.recommended_difficulty;
   }
 
@@ -109,7 +109,7 @@ class AIService {
    * Ollama 経由で学習プランを生成（タイムアウト長め）
    */
   async generateLearningPlan(body: GenerateLearningPlanBody): Promise<LearningPlanResponse> {
-    const response = await api.post<LearningPlanResponse>('/ai/generate-learning-plan', body, {
+    const response = await apiClient.post<LearningPlanResponse>('/ai/generate-learning-plan', body, {
       timeout: 180000,
     });
     return response.data;

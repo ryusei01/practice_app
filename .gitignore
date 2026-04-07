@@ -133,6 +133,8 @@ docs/TROUBLESHOOTING.md
 docs/sql/
 
 # Backend
+# ローカルJWT発行（各自の .env / ユーザーID 用。共有しない）
+backend/generate_dev_token.py
 backend/check_enum_values.sql
 backend/check_user.sql
 backend/CORS_SETUP.md

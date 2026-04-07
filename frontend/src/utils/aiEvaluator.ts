@@ -1,6 +1,6 @@
 /**
  * AI回答評価ユーティリティ
- * 無料のルールベース・NLP手法を使用してtext_input問題の回答を意味的に評価
+ * 独自ルールベース手法のみでtext_input問題の回答を評価
  */
 
 interface EvaluationResult {
@@ -11,16 +11,20 @@ interface EvaluationResult {
 }
 
 /**
+ * 不可視文字（ゼロ幅スペース、BOM等）を除去
+ */
+function stripInvisible(text: string): string {
+  return text.replace(/[\u200B-\u200D\uFEFF\u00AD\u200E\u200F\u2060\u2061-\u2064\u2066-\u2069]/g, '');
+}
+
+/**
  * テキストを正規化（全角半角、大文字小文字、空白など）
  */
 function normalizeText(text: string): string {
-  // Unicode正規化（NFKC: 全角→半角）
   let normalized = text.normalize('NFKC');
-  // 前後の空白削除
+  normalized = stripInvisible(normalized);
   normalized = normalized.trim();
-  // 小文字化
   normalized = normalized.toLowerCase();
-  // 連続する空白を1つに
   normalized = normalized.replace(/\s+/g, ' ');
   return normalized;
 }
@@ -210,6 +214,76 @@ function readingMatch(correctAnswer: string, userAnswer: string): { match: boole
 }
 
 /**
+ * 選択肢記号の先頭プレフィックスを除去（例: "A. 東京" → "東京", "A) answer" → "answer"）
+ */
+function stripOptionPrefix(text: string): string {
+  return text.replace(/^[A-Za-z\uFF21-\uFF3A\uFF41-\uFF5A\u30A2\u30A4\u30A6\u30A8\u30AA]\s*[.):\s、．）]\s*/, '').trim();
+}
+
+/**
+ * 一方が他方を含んでいるかチェック
+ */
+function containsMatch(correctAnswer: string, userAnswer: string): { match: boolean; confidence: number } {
+  const cleanCorrect = removePunctuation(normalizeText(correctAnswer));
+  const cleanUser = removePunctuation(normalizeText(userAnswer));
+
+  if (!cleanCorrect || !cleanUser) return { match: false, confidence: 0 };
+
+  if (cleanCorrect.includes(cleanUser) || cleanUser.includes(cleanCorrect)) {
+    const shorter = Math.min(cleanCorrect.length, cleanUser.length);
+    const longer = Math.max(cleanCorrect.length, cleanUser.length);
+    const ratio = shorter / longer;
+    if (ratio >= 0.5) {
+      return { match: true, confidence: 0.85 };
+    }
+  }
+
+  return { match: false, confidence: 0 };
+}
+
+/**
+ * 選択肢記号としてのマッチ（"A" → "A. 東京" の先頭記号と一致）
+ */
+function optionLabelMatch(correctAnswer: string, userAnswer: string): { match: boolean; confidence: number } {
+  const normUser = normalizeText(userAnswer);
+  if (normUser.length > 3) return { match: false, confidence: 0 };
+
+  const normCorrect = normalizeText(correctAnswer);
+  const optionPattern = /^([a-z\uFF41-\uFF5A\u30A2\u30A4\u30A6\u30A8\u30AA])\s*[.):\s、．）]/;
+  const m = normCorrect.match(optionPattern);
+  if (m && m[1] === normUser) {
+    return { match: true, confidence: 0.92 };
+  }
+  return { match: false, confidence: 0 };
+}
+
+/**
+ * 単語レベルの一致をチェック（英語向け）
+ */
+function wordOverlapMatch(correctAnswer: string, userAnswer: string): { match: boolean; confidence: number } {
+  const correctWords = normalizeText(correctAnswer).split(/\s+/).filter(w => w.length > 0);
+  const userWords = normalizeText(userAnswer).split(/\s+/).filter(w => w.length > 0);
+
+  if (correctWords.length === 0 || userWords.length === 0) return { match: false, confidence: 0 };
+
+  const correctSet = new Set(correctWords);
+  const userSet = new Set(userWords);
+  const intersection = correctWords.filter((w, i, arr) => arr.indexOf(w) === i && userSet.has(w));
+
+  const precision = intersection.length / userSet.size;
+  const recall = intersection.length / correctSet.size;
+
+  if (precision === 0 || recall === 0) return { match: false, confidence: 0 };
+  const f1 = 2 * (precision * recall) / (precision + recall);
+
+  if (f1 >= 0.7) {
+    return { match: true, confidence: Math.min(0.9, f1) };
+  }
+
+  return { match: false, confidence: f1 };
+}
+
+/**
  * 意味的類似度を評価
  */
 function evaluateSemanticSimilarity(correctAnswer: string, userAnswer: string, lang: 'en' | 'ja' = 'en'): {
@@ -217,11 +291,9 @@ function evaluateSemanticSimilarity(correctAnswer: string, userAnswer: string, l
   confidence: number;
   feedback: string;
 } {
-  // 正規化
   const normCorrect = normalizeText(correctAnswer);
   const normUser = normalizeText(userAnswer);
 
-  // 1. 完全一致チェック（正規化後）
   if (normCorrect === normUser) {
     return {
       isCorrect: true,
@@ -230,7 +302,6 @@ function evaluateSemanticSimilarity(correctAnswer: string, userAnswer: string, l
     };
   }
 
-  // 2. 句読点を除いた一致チェック
   const cleanCorrect = removePunctuation(normCorrect);
   const cleanUser = removePunctuation(normUser);
 
@@ -242,17 +313,8 @@ function evaluateSemanticSimilarity(correctAnswer: string, userAnswer: string, l
     };
   }
 
-  // 2.5. 数字表現の正規化後に一致チェック
   const numNormCorrect = normalizeNumbers(cleanCorrect);
   const numNormUser = normalizeNumbers(cleanUser);
-
-  console.log('[AI Evaluator] Number normalization:', {
-    cleanCorrect,
-    cleanUser,
-    numNormCorrect,
-    numNormUser,
-    match: numNormCorrect === numNormUser
-  });
 
   if (numNormCorrect === numNormUser) {
     return {
@@ -262,7 +324,6 @@ function evaluateSemanticSimilarity(correctAnswer: string, userAnswer: string, l
     };
   }
 
-  // 3. 漢字の読み（ひらがな・カタカナ）チェック
   const { match: isReadingMatch, confidence: readingConfidence } = readingMatch(correctAnswer, userAnswer);
   if (isReadingMatch) {
     return {
@@ -272,7 +333,6 @@ function evaluateSemanticSimilarity(correctAnswer: string, userAnswer: string, l
     };
   }
 
-  // 4. 数値問題の場合
   const { match: isNumberMatch, confidence: numConfidence } = numbersMatch(correctAnswer, userAnswer);
   if (isNumberMatch) {
     return {
@@ -282,38 +342,72 @@ function evaluateSemanticSimilarity(correctAnswer: string, userAnswer: string, l
     };
   }
 
-  // 5. 文字列類似度チェック
+  // 選択肢記号マッチ（"A" → "A. 東京" の先頭ラベル一致）
+  const { match: isOptionLabel, confidence: optionConf } = optionLabelMatch(correctAnswer, userAnswer);
+  if (isOptionLabel) {
+    return {
+      isCorrect: true,
+      confidence: optionConf,
+      feedback: lang === 'ja' ? '正解です！' : 'Correct!',
+    };
+  }
+
+  // プレフィックスを除去して再比較（"A. 東京" vs "東京" → 一致）
+  const strippedCorrect = stripOptionPrefix(normalizeText(correctAnswer));
+  const strippedUser = stripOptionPrefix(normalizeText(userAnswer));
+  if (strippedCorrect && strippedUser && strippedCorrect === strippedUser) {
+    return {
+      isCorrect: true,
+      confidence: 0.93,
+      feedback: lang === 'ja' ? '正解です！' : 'Correct!',
+    };
+  }
+
+  // 包含チェック（一方がもう一方を含む）
+  const { match: isContains, confidence: containsConf } = containsMatch(correctAnswer, userAnswer);
+  if (isContains) {
+    return {
+      isCorrect: true,
+      confidence: containsConf,
+      feedback: lang === 'ja' ? '正解です！' : 'Correct!',
+    };
+  }
+
+  // 単語レベル一致（英語等スペース区切り言語向け）
+  const { match: isWordMatch, confidence: wordConf } = wordOverlapMatch(correctAnswer, userAnswer);
+  if (isWordMatch) {
+    return {
+      isCorrect: true,
+      confidence: wordConf,
+      feedback: lang === 'ja' ? '正解です！表現が少し異なります。' : 'Correct! Slightly different wording.',
+    };
+  }
+
   const similarity = calculateSimilarity(cleanCorrect, cleanUser);
 
-  if (similarity >= 0.9) {
+  if (similarity >= 0.85) {
     return {
       isCorrect: true,
       confidence: 0.9,
       feedback: lang === 'ja' ? 'ほぼ正解です！わずかな表現の違いがあります。' : 'Almost perfect! Minor differences.',
     };
-  } else if (similarity >= 0.8) {
+  } else if (similarity >= 0.7) {
     return {
       isCorrect: true,
       confidence: 0.8,
       feedback: lang === 'ja' ? '正解です！表現が少し異なりますが、意味は合っています。' : 'Correct! Slightly different but same meaning.',
     };
-  } else if (similarity >= 0.7) {
+  } else if (similarity >= 0.55) {
     return {
       isCorrect: true,
       confidence: 0.7,
-      feedback: lang === 'ja' ? '概ね正解です！細かい表現に違いがありますが、意味は正しいです。' : 'Mostly correct! Some differences but right meaning.',
-    };
-  } else if (similarity >= 0.6) {
-    return {
-      isCorrect: false,
-      confidence: 0.6,
-      feedback: lang === 'ja' ? '惜しい！部分的に正しいですが、いくつか違いがあります。' : 'Close! Partially correct but some differences.',
+      feedback: lang === 'ja' ? '概ね正解です！細かい表現に違いがあります。' : 'Mostly correct! Some differences but right meaning.',
     };
   } else if (similarity >= 0.4) {
     return {
       isCorrect: false,
       confidence: 0.4,
-      feedback: lang === 'ja' ? '部分的に正しいですが、かなり違いがあります。' : 'Partially correct but significant differences.',
+      feedback: lang === 'ja' ? '惜しい！部分的に正しいですが、違いがあります。' : 'Close! Partially correct but some differences.',
     };
   } else {
     return {
@@ -337,7 +431,16 @@ export function evaluateTextAnswer(correctAnswer: string, userAnswer: string, la
   const firstLine = correctAnswer.split('\n')[0].trim();
 
   // 「/」で区切られた複数の正解パターンに対応
-  const correctAnswerPatterns = firstLine.split('/').map(s => s.trim());
+  const basePatterns = firstLine.split('/').map(s => s.trim());
+
+  // プレフィックス除去版も候補に追加（重複排除）
+  const correctAnswerPatterns = basePatterns.slice();
+  for (const p of basePatterns) {
+    const stripped = stripOptionPrefix(p);
+    if (stripped && stripped !== p.toLowerCase() && correctAnswerPatterns.indexOf(stripped) === -1) {
+      correctAnswerPatterns.push(stripped);
+    }
+  }
   console.log('[evaluateTextAnswer] Patterns:', correctAnswerPatterns);
 
   let bestResult: EvaluationResult = {

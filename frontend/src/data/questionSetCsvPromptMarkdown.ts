@@ -15,16 +15,6 @@ export const QUESTION_SET_CSV_PROMPT_MARKDOWN = `# 問題集生成用 CSV 指示
 question_text,question_type,option_1,option_2,option_3,option_4,correct_answer,explanation,difficulty,category,subcategory1,subcategory2
 \`\`\`
 
-### 後方互換フォーマット（使わないことを推奨）
-
-ヘッダーに \`option_1\`〜\`option_4\` がなく **\`options\` 列だけ**がある旧形式もサーバは解釈できるが、**新規生成では上記の4列形式を使うこと。**
-
-\`\`\`text
-question_text,question_type,options,correct_answer,explanation,difficulty,category,subcategory1,subcategory2
-\`\`\`
-
-- \`multiple_choice\` のとき: \`options\` に \`"選択肢1,選択肢2,選択肢3,選択肢4"\` のように **1セル**でカンマ区切り（カンマを含む選択肢自体は RFC 4180 に従いフィールド全体をダブルクォートで囲む）
-
 ---
 
 ## 各列の仕様
@@ -45,7 +35,7 @@ question_text,question_type,options,correct_answer,explanation,difficulty,catego
 
 **省略可能。** 省略時のサーバ側の自動判定は次のとおり:
 
-- \`option_1\`〜\`option_4\` のいずれかに値がある（または旧形式で \`options\` が非空）→ \`multiple_choice\`
+- \`option_1\`〜\`option_4\` のいずれかに値がある → \`multiple_choice\`
 - 上記がすべて空で \`correct_answer\` が \`true\` または \`false\`（大文字小文字不問）→ \`true_false\`
 - 上記いずれにも当てはまらない → \`text_input\`
 
@@ -58,7 +48,7 @@ question_text,question_type,options,correct_answer,explanation,difficulty,catego
 
 ### 4. correct_answer
 
-- \`multiple_choice\` → **正解となる選択肢の文字列そのもの**（\`option_*\` のいずれかと完全一致する表記）
+- \`multiple_choice\` → **正解の番号**。 \`option_1\` が正解なら \`1\`、\`option_2\` なら \`2\`、\`option_3\` なら \`3\`、\`option_4\` なら \`4\`
 - \`true_false\` → \`true\` または \`false\`（小文字推奨）
 - \`text_input\` → 正解となる文字列
 
@@ -95,7 +85,7 @@ question_text,question_type,options,correct_answer,explanation,difficulty,catego
 
 \`\`\`csv
 question_text,question_type,option_1,option_2,option_3,option_4,correct_answer,explanation,difficulty,category,subcategory1,subcategory2
-What is 2+2?,multiple_choice,2,3,4,5,4,Basic addition,0.2,math,arithmetic,addition
+What is 2+2?,multiple_choice,2,3,4,5,3,Basic addition,0.2,math,arithmetic,addition
 The sky is blue,true_false,,,,,true,Rayleigh scattering makes the sky often appear blue in clear daylight.,0.1,general,nature,sky
 Capital of France?,text_input,,,,,Paris,Paris is the capital of France.,0.3,geography,europe,capitals
 \`\`\`

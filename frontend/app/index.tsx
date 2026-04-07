@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { platformShadow } from "@/src/styles/platformShadow";
 import {
   View,
@@ -8,6 +9,7 @@ import {
   ActivityIndicator,
   ScrollView,
   useWindowDimensions,
+  TextInput,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "../src/contexts/AuthContext";
@@ -15,6 +17,10 @@ import { useLanguage } from "../src/contexts/LanguageContext";
 import Header from "../src/components/Header";
 import Modal from "../src/components/Modal";
 import { Platform } from "react-native";
+import { submitPublicContact } from "../src/api/contact";
+import { getApiErrorMessage } from "../src/utils/apiError";
+
+const BETA_NOTICE_SEEN_KEY = "@beta_notice_seen";
 
 export default function Home() {
   const { user, isLoading, isAuthenticated, logout } = useAuth();
@@ -25,8 +31,40 @@ export default function Home() {
   const isMediumScreen = width >= 600 && width < 1024;
 
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactMessage, setContactMessage] = useState("");
+  const [contactSubmitting, setContactSubmitting] = useState(false);
+  const [contactError, setContactError] = useState<string | null>(null);
+  const [contactSuccess, setContactSuccess] = useState(false);
   const [showTrialStartWarningModal, setShowTrialStartWarningModal] =
     useState(false);
+  /** ベータ版（システム）の案内。AsyncStorage で初回のみ表示 */
+  const [showBetaNoticeModal, setShowBetaNoticeModal] = useState(false);
+
+  const dismissBetaNotice = useCallback(() => {
+    setShowBetaNoticeModal(false);
+    void AsyncStorage.setItem(BETA_NOTICE_SEEN_KEY, "1");
+  }, []);
+
+  useEffect(() => {
+    if (isLoading || isAuthenticated) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(BETA_NOTICE_SEEN_KEY);
+        if (!cancelled && seen !== "1") {
+          setShowBetaNoticeModal(true);
+        }
+      } catch {
+        if (!cancelled) setShowBetaNoticeModal(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoading, isAuthenticated]);
 
   // Web版の場合、動的にメタタグを設定
   useEffect(() => {
@@ -212,7 +250,10 @@ export default function Home() {
     const headerLoginButton = (
       <TouchableOpacity
         style={styles.headerCornerButton}
-        onPress={() => setShowLoginModal(true)}
+        onPress={() => {
+          dismissBetaNotice();
+          setShowLoginModal(true);
+        }}
         testID="header-btn-login"
       >
         <Text
@@ -361,12 +402,18 @@ export default function Home() {
                   {t("Premium Plan", "プレミアムプラン")}
                 </Text>
                 <Text style={[styles.serviceCardPrice, styles.serviceCardPricePremium]}>
-                  {t("1,800 JPY (tax incl.) / year", "1,800円（税込）/ 年")}
+                  {t("350 JPY / month or 1,800 JPY / year", "月額350円 / 年額1,800円")}
+                </Text>
+                <Text style={styles.serviceCardPriceMeta}>
+                  {t(
+                    "Monthly plan includes 100 credits. Yearly plan includes 0 credits.",
+                    "月額プランは100クレジット付き、年間プランは0クレジット"
+                  )}
                 </Text>
                 <Text style={styles.serviceCardDesc}>
                   {t(
-                    "Cloud sync & backup across devices. Includes 500 JPY account credit for marketplace purchases.",
-                    "クラウド同期・バックアップで複数端末から学習可能。マーケットプレイス用の500円分クレジット付き。"
+                    "Ad-free study with cloud sync and backup across devices.",
+                    "広告なし、クラウド同期・バックアップで複数端末から学習可能。"
                   )}
                 </Text>
               </View>
@@ -403,7 +450,10 @@ export default function Home() {
                   padding: isSmallScreen ? 14 : 16,
                 },
               ]}
-              onPress={() => router.push("/(trial)/trial-question-sets")}
+              onPress={() => {
+                dismissBetaNotice();
+                router.push("/(trial)/trial-question-sets");
+              }}
               testID="btn-trial"
             >
               <Text
@@ -425,7 +475,10 @@ export default function Home() {
                   padding: isSmallScreen ? 14 : 16,
                 },
               ]}
-              onPress={() => setShowTrialStartWarningModal(true)}
+              onPress={() => {
+                dismissBetaNotice();
+                setShowTrialStartWarningModal(true);
+              }}
               testID="btn-register"
             >
               <Text
@@ -448,7 +501,10 @@ export default function Home() {
                   padding: isSmallScreen ? 14 : 16,
                 },
               ]}
-              onPress={() => setShowLoginModal(true)}
+              onPress={() => {
+                dismissBetaNotice();
+                setShowLoginModal(true);
+              }}
               testID="btn-login"
             >
               <Text
@@ -500,6 +556,19 @@ export default function Home() {
                   {t("Privacy Policy", "プライバシーポリシー")}
                 </Text>
               </TouchableOpacity>
+              <Text style={[styles.footerSep, isSmallScreen && { display: "none" }]}>|</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setContactError(null);
+                  setContactSuccess(false);
+                  setShowContactModal(true);
+                }}
+                style={styles.footerLinkTouchable}
+              >
+                <Text style={styles.footerLink}>
+                  {t("Contact / Feedback", "お問い合わせ/フィードバック")}
+                </Text>
+              </TouchableOpacity>
             </View>
             <Text style={styles.footerCopy}>
               {"\u00A9"} {new Date().getFullYear()}{" "}
@@ -507,6 +576,30 @@ export default function Home() {
             </Text>
           </View>
         </ScrollView>
+
+        <Modal
+          visible={showBetaNoticeModal}
+          title={t("Beta version", "ベータ版です")}
+          onClose={dismissBetaNotice}
+        >
+          <View style={styles.modalBody}>
+            <Text style={styles.betaNoticeText}>
+              {t(
+                "This service runs on a beta system. Features, behavior, and design may change without notice.",
+                "本サービスはベータ版のシステムで提供しています。機能・挙動・デザインは予告なく変更される場合があります。"
+              )}
+            </Text>
+            <TouchableOpacity
+              style={styles.modalCancelButton}
+              onPress={dismissBetaNotice}
+              testID="btn-beta-notice-close"
+            >
+              <Text style={styles.modalCancelButtonText}>
+                {t("OK", "OK")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Modal>
 
         <Modal
           visible={showTrialStartWarningModal}
@@ -525,8 +618,8 @@ export default function Home() {
                 </Text>
                 <Text style={styles.infoBoxText}>
                   {t(
-                    "Without signing in, your question sets and progress are stored only on this device. They are not backed up to our servers and cannot be synced to other devices.",
-                    "ログインしない場合、作成した問題集や学習の進捗はこの端末内にだけ保存され、サーバーへバックアップされません。他の端末とは同期されません。"
+                    "Without both sign-in and an active Premium plan, your question sets and progress are stored only on this device. They are not backed up to our servers and cannot be synced to other devices.",
+                    "ログインかつ有料プラン加入がない場合、作成した問題集や学習の進捗はこの端末内にだけ保存され、サーバーへバックアップされません。他の端末とは同期されません。"
                   )}
                 </Text>
               </View>
@@ -576,14 +669,14 @@ export default function Home() {
               <View style={styles.infoBoxContent}>
                 <Text style={[styles.infoBoxTitle, styles.premiumTitle]}>
                   {t(
-                    "To keep data safe: sign in & premium",
-                    "データを守るには：ログインと有料プラン"
+                    "To keep data safe: sign in and Premium plan",
+                    "データを守るには：ログインかつ有料プラン"
                   )}
                 </Text>
                 <Text style={styles.infoBoxText}>
                   {t(
-                    "Signing in lets you use cloud sync and backups on the Premium plan so your work is not tied to one browser tab.",
-                    "ログイン後、有料プランではクラウド同期・バックアップが利用でき、1つのブラウザに縛られず学習を続けられます。"
+                    "With both sign-in and the Premium plan, you can use cloud sync and backups and continue learning without being tied to one browser.\n※Sign-in alone cannot sync or back up to the cloud for questions you created yourself, other than purchase-related data.",
+                    "ログインかつ有料プランではクラウド同期・バックアップが利用でき、1つのブラウザに縛られず学習を続けられます。\n※ログインのみでは購入データ以外のご自身で作成された問題はクラウド同期・バックアップは不可能です"
                   )}
                 </Text>
               </View>
@@ -626,8 +719,8 @@ export default function Home() {
               >
                 <Text style={styles.buttonText}>
                   {t(
-                    "I understand — start (device-only storage)",
-                    "理解したうえで始める"
+                    "I agree — start (device-only storage)",
+                    "同意した上で始める"
                   )}
                 </Text>
               </TouchableOpacity>
@@ -641,6 +734,165 @@ export default function Home() {
                 {t("Close", "閉じる")}
               </Text>
             </TouchableOpacity>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={showContactModal}
+          title={t("Contact / Feedback", "お問い合わせ/フィードバック")}
+          onClose={() => {
+            setShowContactModal(false);
+            setContactError(null);
+            setContactSuccess(false);
+          }}
+        >
+          <View style={styles.modalBody}>
+            {contactSuccess ? (
+              <>
+                <Text style={styles.contactSuccessText}>
+                  {t(
+                    "Your message has been sent. We will get back to you if needed.",
+                    "送信しました。内容を確認し、必要に応じてご返信いたします。"
+                  )}
+                </Text>
+                <TouchableOpacity
+                  style={styles.modalCancelButton}
+                  onPress={() => {
+                    setShowContactModal(false);
+                    setContactSuccess(false);
+                  }}
+                  testID="btn-contact-success-close"
+                >
+                  <Text style={styles.modalCancelButtonText}>
+                    {t("Close", "閉じる")}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.contactHint}>
+                  {t(
+                    "We use your email only to respond to this inquiry.",
+                    "ご入力いただいたメールアドレスは、本お問い合わせへの返信にのみ使用します。"
+                  )}
+                </Text>
+                <Text style={styles.contactFieldLabel}>
+                  {t("Email", "メールアドレス")}
+                  <Text style={styles.contactRequired}> *</Text>
+                </Text>
+                <TextInput
+                  style={styles.contactInput}
+                  value={contactEmail}
+                  onChangeText={setContactEmail}
+                  placeholder={t("you@example.com", "you@example.com")}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!contactSubmitting}
+                />
+                <Text style={styles.contactFieldLabel}>
+                  {t("Name (optional)", "お名前（任意）")}
+                </Text>
+                <TextInput
+                  style={styles.contactInput}
+                  value={contactName}
+                  onChangeText={setContactName}
+                  placeholder={t("Your name", "お名前")}
+                  editable={!contactSubmitting}
+                />
+                <Text style={styles.contactFieldLabel}>
+                  {t("Message", "お問い合わせ内容")}
+                  <Text style={styles.contactRequired}> *</Text>
+                </Text>
+                <TextInput
+                  style={[styles.contactInput, styles.contactInputMultiline]}
+                  value={contactMessage}
+                  onChangeText={setContactMessage}
+                  placeholder={t(
+                    "Please enter at least 10 characters.",
+                    "10文字以上でご入力ください。"
+                  )}
+                  multiline
+                  numberOfLines={6}
+                  textAlignVertical="top"
+                  editable={!contactSubmitting}
+                />
+                {contactError ? (
+                  <Text style={styles.contactErrorText}>{contactError}</Text>
+                ) : null}
+                <TouchableOpacity
+                  style={[
+                    styles.googleSignInButton,
+                    { backgroundColor: "#007AFF", borderColor: "#007AFF" },
+                    contactSubmitting && { opacity: 0.7 },
+                  ]}
+                  disabled={contactSubmitting}
+                  onPress={async () => {
+                    setContactError(null);
+                    const email = contactEmail.trim();
+                    const msg = contactMessage.trim();
+                    if (!email) {
+                      setContactError(
+                        t("Please enter your email.", "メールアドレスを入力してください。")
+                      );
+                      return;
+                    }
+                    if (msg.length < 10) {
+                      setContactError(
+                        t(
+                          "Please enter at least 10 characters.",
+                          "お問い合わせ内容は10文字以上で入力してください。"
+                        )
+                      );
+                      return;
+                    }
+                    setContactSubmitting(true);
+                    try {
+                      await submitPublicContact({
+                        email,
+                        name: contactName.trim() || undefined,
+                        message: msg,
+                      });
+                      setContactSuccess(true);
+                      setContactEmail("");
+                      setContactName("");
+                      setContactMessage("");
+                    } catch (e) {
+                      setContactError(
+                        getApiErrorMessage(
+                          e,
+                          "Could not send your message.",
+                          "送信に失敗しました。"
+                        )
+                      );
+                    } finally {
+                      setContactSubmitting(false);
+                    }
+                  }}
+                  testID="btn-contact-submit"
+                >
+                  {contactSubmitting ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={[styles.googleSignInText, { color: "#fff" }]}>
+                      {t("Send", "送信する")}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.modalCancelButton}
+                  onPress={() => {
+                    setShowContactModal(false);
+                    setContactError(null);
+                  }}
+                  disabled={contactSubmitting}
+                >
+                  <Text style={styles.modalCancelButtonText}>
+                    {t("Cancel", "キャンセル")}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </Modal>
 
@@ -918,6 +1170,12 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     width: "100%",
   },
+  betaNoticeText: {
+    fontSize: 14,
+    color: "#444",
+    lineHeight: 21,
+    marginBottom: 16,
+  },
   infoBox: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -1056,6 +1314,11 @@ const styles = StyleSheet.create({
   serviceCardPricePremium: {
     color: "#B8860B",
   },
+  serviceCardPriceMeta: {
+    fontSize: 12,
+    color: "#7a5c00",
+    marginBottom: 6,
+  },
   serviceCardDesc: {
     fontSize: 13,
     color: "#555",
@@ -1102,5 +1365,50 @@ const styles = StyleSheet.create({
   footerCopy: {
     fontSize: 12,
     color: "#999",
+  },
+  contactHint: {
+    fontSize: 12,
+    color: "#666",
+    lineHeight: 18,
+    marginBottom: 14,
+  },
+  contactFieldLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 6,
+    alignSelf: "stretch",
+  },
+  contactRequired: {
+    color: "#FF3B30",
+  },
+  contactInput: {
+    alignSelf: "stretch",
+    borderWidth: 1,
+    borderColor: "#dadce0",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: "#333",
+    marginBottom: 12,
+    backgroundColor: "#fff",
+  },
+  contactInputMultiline: {
+    minHeight: 120,
+    paddingTop: 10,
+  },
+  contactErrorText: {
+    fontSize: 13,
+    color: "#FF3B30",
+    marginBottom: 10,
+    alignSelf: "stretch",
+  },
+  contactSuccessText: {
+    fontSize: 14,
+    color: "#333",
+    lineHeight: 22,
+    marginBottom: 16,
+    textAlign: "center",
   },
 });

@@ -20,6 +20,7 @@ import {
   localStorageService,
   LocalQuestion,
 } from "../../src/services/localStorageService";
+import { getMultipleChoiceAnswerText } from "../../src/utils/multipleChoice";
 import Header from "../../src/components/Header";
 import Modal from "../../src/components/Modal";
 import { QUESTION_SET_CSV_PROMPT_MARKDOWN } from "../../src/data/questionSetCsvPromptMarkdown";
@@ -29,22 +30,39 @@ import * as FileSystem from "expo-file-system";
 let ImagePicker: typeof import("expo-image-picker") | null = null;
 try { ImagePicker = require("expo-image-picker"); } catch {}
 
-type InputMode = "manual" | "csv" | "image" | "anki";
+type InputMode = "manual" | "csv" | "image" | "anki" | "ai_text";
+
+type ManualQuestionDraft = {
+  question: string;
+  answer: string;
+  explanation?: string;
+  difficulty?: string;
+  category?: string;
+  subcategory1?: string;
+  subcategory2?: string;
+  question_type?: LocalQuestion["question_type"];
+  options?: string[];
+  correctOptionIndex?: number | null;
+};
 
 export default function TrialCreateScreen() {
   const [inputMode, setInputMode] = useState<InputMode>("manual");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [questions, setQuestions] = useState<
-    Array<{
-      question: string;
-      answer: string;
-      difficulty?: string;
-      category?: string;
-      subcategory1?: string;
-      subcategory2?: string;
-    }>
-  >([{ question: "", answer: "", difficulty: "medium", category: "", subcategory1: "", subcategory2: "" }]);
+  const [questions, setQuestions] = useState<ManualQuestionDraft[]>([
+    {
+      question: "",
+      answer: "",
+      explanation: "",
+      difficulty: "medium",
+      category: "",
+      subcategory1: "",
+      subcategory2: "",
+      question_type: "text_input",
+      options: ["", "", "", ""],
+      correctOptionIndex: null,
+    },
+  ]);
   const [csvQuestions, setCsvQuestions] = useState<LocalQuestion[]>([]);
   const [csvFileName, setCsvFileName] = useState("");
   const [csvParseError, setCsvParseError] = useState("");
@@ -63,6 +81,11 @@ export default function TrialCreateScreen() {
   const [ankiParsing, setAnkiParsing] = useState(false);
   const [ankiQuestions, setAnkiQuestions] = useState<LocalQuestion[] | null>(null);
   const [ankiDeckTitle, setAnkiDeckTitle] = useState("");
+
+  // AI text generation state
+  const [aiTextInput, setAiTextInput] = useState("");
+  const [aiTextGenerating, setAiTextGenerating] = useState(false);
+  const [aiTextQuestions, setAiTextQuestions] = useState<LocalQuestion[] | null>(null);
 
   const { t, language } = useLanguage();
   const [contentLanguage, setContentLanguage] = useState<ContentLanguage>(
@@ -86,14 +109,14 @@ export default function TrialCreateScreen() {
       "光の速さは？,text_input,,,,,約30万km/s,真空中の光速は約2.998×10⁸ m/s,0.6,理科,物理,定数",
 
       // ── 四択形式（option_1〜4 を使う）──
-      "What is 8 × 7?,multiple_choice,42,54,56,64,56,8 multiplied by 7 equals 56,0.2,math,arithmetic,multiplication",
-      "8×7の答えは？,multiple_choice,42,54,56,64,56,8かける7は56,0.2,数学,算数,掛け算",
-      "Which planet is closest to the Sun?,multiple_choice,Venus,Earth,Mercury,Mars,Mercury,Mercury is the innermost planet of the Solar System,0.3,science,astronomy,solar-system",
-      "太陽に最も近い惑星は？,multiple_choice,金星,地球,水星,火星,水星,水星は太陽系で最も内側にある惑星,0.3,理科,天文,太陽系",
-      "What does 'CPU' stand for?,multiple_choice,Central Processing Unit,Computer Power Unit,Core Processing Utility,Central Power Unit,Central Processing Unit,CPU is the main processor in a computer,0.3,IT,hardware,basics",
-      "CPUとは何の略？,multiple_choice,中央処理装置,コンピュータ電源装置,コア処理ユーティリティ,中央電力装置,中央処理装置（Central Processing Unit）,コンピュータの主要な演算装置,0.3,IT,ハードウェア,基礎",
-      "Which country invented the telephone?,multiple_choice,France,Germany,United States,United Kingdom,United States,Alexander Graham Bell patented the telephone in the US in 1876,0.5,history,technology,inventions",
-      "電話を発明した国は？,multiple_choice,フランス,ドイツ,アメリカ,イギリス,アメリカ,グラハム・ベルが1876年にアメリカで特許を取得,0.5,歴史,テクノロジー,発明",
+      "What is 8 × 7?,multiple_choice,42,54,56,64,3,8 multiplied by 7 equals 56,0.2,math,arithmetic,multiplication",
+      "8×7の答えは？,multiple_choice,42,54,56,64,3,8かける7は56,0.2,数学,算数,掛け算",
+      "Which planet is closest to the Sun?,multiple_choice,Venus,Earth,Mercury,Mars,3,Mercury is the innermost planet of the Solar System,0.3,science,astronomy,solar-system",
+      "太陽に最も近い惑星は？,multiple_choice,金星,地球,水星,火星,3,水星は太陽系で最も内側にある惑星,0.3,理科,天文,太陽系",
+      "What does 'CPU' stand for?,multiple_choice,Central Processing Unit,Computer Power Unit,Core Processing Utility,Central Power Unit,1,CPU is the main processor in a computer,0.3,IT,hardware,basics",
+      "CPUとは何の略？,multiple_choice,中央処理装置,コンピュータ電源装置,コア処理ユーティリティ,中央電力装置,1,中央処理装置（Central Processing Unit）,コンピュータの主要な演算装置,0.3,IT,ハードウェア,基礎",
+      "Which country invented the telephone?,multiple_choice,France,Germany,United States,United Kingdom,3,Alexander Graham Bell patented the telephone in the US in 1876,0.5,history,technology,inventions",
+      "電話を発明した国は？,multiple_choice,フランス,ドイツ,アメリカ,イギリス,3,グラハム・ベルが1876年にアメリカで特許を取得,0.5,歴史,テクノロジー,発明",
 
       // ── 正誤判定形式（true / false）──
       "The Great Wall of China is visible from space.,true_false,,,,,false,This is a common myth. It is not visible with the naked eye from space.,0.4,general,myths,space",
@@ -176,7 +199,21 @@ export default function TrialCreateScreen() {
   };
 
   const addQuestion = () => {
-    setQuestions([...questions, { question: "", answer: "", difficulty: "medium", category: "", subcategory1: "", subcategory2: "" }]);
+    setQuestions([
+      ...questions,
+      {
+        question: "",
+        answer: "",
+        explanation: "",
+        difficulty: "medium",
+        category: "",
+        subcategory1: "",
+        subcategory2: "",
+        question_type: "text_input",
+        options: ["", "", "", ""],
+        correctOptionIndex: null,
+      },
+    ]);
   };
 
   const removeQuestion = (index: number) => {
@@ -186,11 +223,60 @@ export default function TrialCreateScreen() {
 
   const updateQuestion = (
     index: number,
-    field: "question" | "answer" | "difficulty" | "category" | "subcategory1" | "subcategory2",
+    field:
+      | "question"
+      | "answer"
+      | "explanation"
+      | "difficulty"
+      | "category"
+      | "subcategory1"
+      | "subcategory2",
     value: string
   ) => {
     const newQuestions = [...questions];
     newQuestions[index][field] = value;
+    setQuestions(newQuestions);
+  };
+
+  const updateQuestionType = (
+    index: number,
+    value: LocalQuestion["question_type"]
+  ) => {
+    const newQuestions = [...questions];
+    const prev = newQuestions[index];
+    newQuestions[index] = {
+      ...prev,
+      question_type: value,
+      options:
+        value === "multiple_choice"
+          ? prev.options && prev.options.length > 0
+            ? prev.options
+            : ["", "", "", ""]
+          : undefined,
+      correctOptionIndex: value === "multiple_choice" ? prev.correctOptionIndex ?? null : null,
+      answer:
+        value === "true_false"
+          ? prev.answer === "true" || prev.answer === "false"
+            ? prev.answer
+            : ""
+          : value === "multiple_choice"
+            ? ""
+            : prev.answer,
+    };
+    setQuestions(newQuestions);
+  };
+
+  const updateQuestionOption = (index: number, optionIndex: number, value: string) => {
+    const newQuestions = [...questions];
+    const options = [...(newQuestions[index].options || ["", "", "", ""])];
+    options[optionIndex] = value;
+    newQuestions[index].options = options;
+    setQuestions(newQuestions);
+  };
+
+  const updateQuestionCorrectOption = (index: number, optionIndex: number) => {
+    const newQuestions = [...questions];
+    newQuestions[index].correctOptionIndex = optionIndex;
     setQuestions(newQuestions);
   };
 
@@ -225,6 +311,7 @@ export default function TrialCreateScreen() {
         id: `img_${Date.now()}_${i}`,
         question: q.question_text,
         answer: q.correct_answer,
+        explanation: q.explanation || undefined,
         question_type: (q.question_type as LocalQuestion["question_type"]) || "text_input",
         options: q.options || undefined,
         category: q.category || undefined,
@@ -276,6 +363,35 @@ export default function TrialCreateScreen() {
     } catch {}
   };
 
+  // --- AI text generation handler ---
+  const handleGenerateFromText = async () => {
+    if (aiTextInput.trim().length < 10) {
+      Alert.alert(t("Error", "エラー"), t("Please enter at least 10 characters of text.", "10文字以上のテキストを入力してください。"));
+      return;
+    }
+    setAiTextGenerating(true);
+    setAiTextQuestions(null);
+    try {
+      const res = await aiApi.generateFromText(aiTextInput, undefined, contentLanguage);
+      setAiTextQuestions(res.questions.map((q, i) => ({
+        id: `aitxt_${Date.now()}_${i}`,
+        question: q.question_text,
+        answer: q.correct_answer,
+        explanation: q.explanation || undefined,
+        question_type: (q.question_type as LocalQuestion["question_type"]) || "text_input",
+        options: q.options || undefined,
+        category: q.category || undefined,
+      })));
+    } catch (error: any) {
+      Alert.alert(
+        t("Error", "エラー"),
+        error.response?.data?.detail || t("Failed to generate questions from text.", "テキストからの問題生成に失敗しました。"),
+      );
+    } finally {
+      setAiTextGenerating(false);
+    }
+  };
+
   const handleCreate = async () => {
     setErrorMessage("");
     setSuccessMessage("");
@@ -307,19 +423,52 @@ export default function TrialCreateScreen() {
         return;
       }
       finalQuestions = ankiQuestions;
+    } else if (inputMode === "ai_text") {
+      if (!aiTextQuestions || aiTextQuestions.length === 0) {
+        setErrorMessage(t("Generate questions from text first", "まずテキストから問題を生成してください"));
+        return;
+      }
+      finalQuestions = aiTextQuestions;
     } else {
-      const valid = questions.filter((q) => q.question.trim() && q.answer.trim());
+      const valid = questions.filter((q) => {
+        if (!q.question.trim()) return false;
+        const questionType = q.question_type || "text_input";
+        if (questionType === "multiple_choice") {
+          const options = (q.options || []).map((option) => option.trim()).filter(Boolean);
+          return options.length >= 2 && q.correctOptionIndex !== null && q.correctOptionIndex !== undefined;
+        }
+        if (questionType === "true_false") {
+          return q.answer === "true" || q.answer === "false";
+        }
+        return q.answer.trim().length > 0;
+      });
       if (valid.length === 0) {
         setErrorMessage(t("Please add at least one question", "最低1つの問題を追加してください"));
         return;
       }
-      finalQuestions = valid.map((q, i) => ({
-        id: `q_${Date.now()}_${i}`,
-        question: q.question,
-        answer: q.answer,
-        difficulty: q.difficulty as LocalQuestion["difficulty"],
-        category: q.category,
-      }));
+      finalQuestions = valid.map((q, i) => {
+        const questionType = q.question_type || "text_input";
+        const options = (q.options || []).map((option) => option.trim()).filter(Boolean);
+        const multipleChoiceAnswer =
+          q.correctOptionIndex !== null &&
+          q.correctOptionIndex !== undefined &&
+          options[q.correctOptionIndex]
+            ? options[q.correctOptionIndex]
+            : "";
+
+        return {
+          id: `q_${Date.now()}_${i}`,
+          question: q.question,
+          answer: questionType === "multiple_choice" ? multipleChoiceAnswer : q.answer,
+          explanation: q.explanation?.trim() || undefined,
+          difficulty: q.difficulty as LocalQuestion["difficulty"],
+          category: q.category,
+          subcategory1: q.subcategory1,
+          subcategory2: q.subcategory2,
+          question_type: questionType,
+          options: questionType === "multiple_choice" ? options : undefined,
+        };
+      });
     }
 
     setIsLoading(true);
@@ -403,8 +552,8 @@ export default function TrialCreateScreen() {
                 color: "#007AFF",
                 bg: "#E8F0FE",
                 desc: t(
-                  "In bulk input, write options as A) B) C) ... and end with \"Answer: B\".\n\nExample:\nWhat is the capital of Japan?\nA) Tokyo\nB) Osaka\nC) Kyoto\nD) Nagoya\nAnswer: A",
-                  "一括入力で選択肢を A) B) C) ... で書き、最後に「答え: B」で正解を指定します。\n\n例:\n日本の首都は？\nA) 東京\nB) 大阪\nC) 京都\nD) 名古屋\n答え: A"
+                  "Only on the AI Text tab: paste text and run AI generation to get multiple-choice items (with options). The Manual tab has no option fields; CSV uses option_1–4 columns on the CSV tab instead.",
+                  "多肢選択（選択肢付き）は「AIテキスト」タブでテキストを貼り付けてAI生成するときに利用します。「手動」タブに選択肢用の欄はありません。CSVで多肢にする場合は「CSV」タブの option_1〜4 列のルールになります。"
                 ),
               },
               {
@@ -413,8 +562,8 @@ export default function TrialCreateScreen() {
                 color: "#FF9500",
                 bg: "#FFF3E0",
                 desc: t(
-                  "In bulk input, write a statement and end with \"Answer: true\" or \"Answer: false\".\n\nExample:\nThe Earth revolves around the Sun\nAnswer: true",
-                  "一括入力で命題を書き、「答え: true」または「答え: false」で正解を指定します。\n\n例:\n地球は太陽の周りを回る\n答え: true"
+                  "On the AI Text or Image tab, AI-generated quizzes may include true/false questions. On the Manual tab, enter a statement as the question and \"true\" or \"false\" as the answer if you want TF-style cards.",
+                  "「AIテキスト」または「画像」タブでAIが生成する問題に、正誤形式が含まれることがあります。「手動」タブでは、問題文に命題を書き、答えに true / false と入力する形でも作成できます。"
                 ),
               },
               {
@@ -423,8 +572,8 @@ export default function TrialCreateScreen() {
                 color: "#8E8E93",
                 bg: "#F2F2F7",
                 desc: t(
-                  "Write a question and its answer. You can use \"Answer: ...\" prefix or just two lines (question + answer).\n\nExample:\nWhat is the chemical formula for water?\nAnswer: H2O",
-                  "問題と答えを記述します。「答え: ...」形式か、シンプルに2行（問題＋答え）でもOKです。\n\n例:\n水の化学式は？\n答え: H2O"
+                  "On the Manual tab, type each question and answer. AI Text and Image generation may also include short free-text answer items. For CSV, see the CSV tab format (auto-detection or explicit question_type).",
+                  "「手動」タブでは、問題と答えをそのまま入力します。「AIテキスト」「画像」タブのAI生成でも記述式が含まれることがあります。CSVでの扱いは「CSV」タブのフォーマット（自動判定または question_type 列）を参照してください。"
                 ),
               },
               {
@@ -453,8 +602,8 @@ export default function TrialCreateScreen() {
                 color: "#FF6B35",
                 bg: "#FFF3E0",
                 desc: t(
-                  "When uploading CSV, question_type is auto-detected:\n• Has option_1~option_4 → Multiple Choice\n• Answer is \"true\" or \"false\" → True/False\n• Otherwise → Text Input\n\nYou can also set question_type explicitly in the CSV column.",
-                  "CSVアップロード時、question_typeを自動判定します:\n• option_1〜option_4がある → 多肢選択\n• 答えが「true」または「false」→ 正誤問題\n• それ以外 → 記述式\n\nCSVの列でquestion_typeを明示的に指定することも可能です。"
+                  "Only on the CSV tab: when you upload a CSV file, question_type is auto-detected:\n• Has option_1~option_4 → Multiple Choice\n• Answer is \"true\" or \"false\" → True/False\n• Otherwise → Text Input\n\nYou can also set question_type explicitly in the CSV column.",
+                  "「CSV」タブでCSVファイルをアップロードしたときだけ、question_typeを次のように自動判定します:\n• option_1〜option_4がある → 多肢選択\n• 答えが「true」または「false」→ 正誤問題\n• それ以外 → 記述式\n\n列で question_type を明示指定することも可能です。"
                 ),
               },
             ] as const).map((feature) => (
@@ -546,19 +695,22 @@ export default function TrialCreateScreen() {
         <View style={styles.tabRow}>
           {([
             { key: "manual" as InputMode, label: t("Manual", "手動") },
+            { key: "ai_text" as InputMode, label: t("AI Text", "AIテキスト") },
             { key: "csv" as InputMode, label: "CSV" },
             { key: "image" as InputMode, label: t("Image", "画像") },
             { key: "anki" as InputMode, label: "Anki" },
-          ] as const).map((tab) => (
-            <TouchableOpacity
-              key={tab.key}
-              style={[styles.tab, inputMode === tab.key && styles.tabActive]}
-              onPress={() => setInputMode(tab.key)}
-            >
-              <Text style={[styles.tabText, inputMode === tab.key && styles.tabTextActive]}>
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
+          ] as const).map((tab, index, tabs) => (
+            <React.Fragment key={tab.key}>
+              <TouchableOpacity
+                style={[styles.tab, inputMode === tab.key && styles.tabActive]}
+                onPress={() => setInputMode(tab.key)}
+              >
+                <Text style={[styles.tabText, inputMode === tab.key && styles.tabTextActive]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+              {index < tabs.length - 1 ? <View style={styles.tabDivider} /> : null}
+            </React.Fragment>
           ))}
         </View>
 
@@ -588,8 +740,8 @@ export default function TrialCreateScreen() {
                     style={styles.csvPromptBtn}
                     onPress={() => setShowCsvPromptModal(true)}
                   >
-                    <Text style={styles.csvPromptBtnText}>
-                      {t("AI prompt", "プロンプト")}
+                    <Text style={styles.csvPromptBtnText} numberOfLines={2}>
+                      {t("AI CSV creation prompt", "AI向けCSV作成プロンプト")}
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -618,10 +770,41 @@ export default function TrialCreateScreen() {
               </Text>
 
               <Text style={styles.csvFormatSubtitle}>
+                {t("What each column means", "各列の意味")}
+              </Text>
+              <Text style={styles.csvFormatText}>
+                {t(
+                  "question_text: the question sentence shown to the learner\ncorrect_answer: the answer itself for text_input / true_false, or 1-4 for multiple_choice\nquestion_type: optional; use text_input / multiple_choice / true_false\noption_1-4: choices for multiple_choice only\nexplanation: explanation shown after answering\ndifficulty: number from 0.0 to 1.0; smaller = easier\ncategory: broad group such as math or geography\nsubcategory1: narrower group inside category\nsubcategory2: even more specific tag or subtopic",
+                  "question_text: 学習者に表示される問題文\ncorrect_answer: 記述式・正誤問題では答えそのもの、多肢選択では正しい選択肢番号 1〜4\nquestion_type: 任意列。text_input / multiple_choice / true_false を指定\noption_1〜4: 多肢選択問題の選択肢。記述式・正誤問題では空欄でOK\nexplanation: 解答後に表示する解説\ndifficulty: 0.0〜1.0 の数値。小さいほどやさしい\ncategory: 数学・地理などの大きな分類\nsubcategory1: category の中をもう少し細かく分ける分類\nsubcategory2: さらに細かいタグやテーマ"
+                )}
+              </Text>
+
+              <Text style={styles.csvFormatSubtitle}>
                 {t("Example", "例")}
               </Text>
               <Text style={styles.csvFormatCode}>
-                {"question_text,correct_answer,difficulty,category\nWhat is 2+2?,4,0.1,math\n日本の首都は？,東京,0.3,地理"}
+                {"question_text,correct_answer,difficulty,category\nWhat is 2+2?,4,0.1,math\n日本の首都は？,東京,0.3,地理\nThe chemical symbol for water is?,H2O,0.2,science\n富士山がある都道府県は？,山梨県,0.4,地理"}
+              </Text>
+              <Text style={styles.csvFormatSubtitle}>
+                {t("Multiple choice example", "多肢選択の例")}
+              </Text>
+              <Text style={styles.csvFormatCode}>
+                {"question_text,question_type,option_1,option_2,option_3,option_4,correct_answer\nWhich planet is closest to the Sun?,multiple_choice,Venus,Earth,Mercury,Mars,3\n日本で一番大きい島は？,multiple_choice,北海道,本州,四国,九州,2"}
+              </Text>
+              <Text style={styles.csvFormatSubtitle}>
+                {t("True/false example", "正誤問題の例")}
+              </Text>
+              <Text style={styles.csvFormatCode}>
+                {"question_text,question_type,correct_answer\nThe Earth revolves around the Sun.,true_false,true\nペンギンは哺乳類である。,true_false,false"}
+              </Text>
+              <Text style={styles.csvFormatSubtitle}>
+                {t("Multiple choice note", "多肢選択の注意")}
+              </Text>
+              <Text style={styles.csvFormatText}>
+                {t(
+                  "For multiple-choice questions, put 1, 2, 3, or 4 in correct_answer to indicate which option column is correct.",
+                  "多肢選択問題の correct_answer には、正しい選択肢の番号として 1 / 2 / 3 / 4 を入れてください。"
+                )}
               </Text>
 
               <Text style={styles.csvFormatNote}>
@@ -700,14 +883,142 @@ export default function TrialCreateScreen() {
                   multiline
                 />
 
+                <Text style={styles.manualFieldLabel}>
+                  {t("Question Type", "問題形式")}
+                </Text>
+                <View style={styles.manualChipRow}>
+                  {([
+                    { key: "text_input" as const, label: t("Text Input", "記述式") },
+                    { key: "multiple_choice" as const, label: t("Multiple Choice", "多肢選択") },
+                    { key: "true_false" as const, label: t("True / False", "正誤問題") },
+                  ]).map((typeOption) => (
+                    <TouchableOpacity
+                      key={typeOption.key}
+                      style={[
+                        styles.manualChip,
+                        (q.question_type || "text_input") === typeOption.key &&
+                          styles.manualChipActive,
+                      ]}
+                      onPress={() => updateQuestionType(index, typeOption.key)}
+                    >
+                      <Text
+                        style={[
+                          styles.manualChipText,
+                          (q.question_type || "text_input") === typeOption.key &&
+                            styles.manualChipTextActive,
+                        ]}
+                      >
+                        {typeOption.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {(q.question_type || "text_input") === "multiple_choice" ? (
+                  <View style={styles.manualGroup}>
+                    <Text style={styles.manualFieldLabel}>
+                      {t("Options", "選択肢")}
+                    </Text>
+                    {(q.options || ["", "", "", ""]).map((option, optionIndex) => (
+                      <View key={optionIndex} style={styles.manualOptionRow}>
+                        <TouchableOpacity
+                          style={[
+                            styles.manualAnswerPicker,
+                            q.correctOptionIndex === optionIndex &&
+                              styles.manualAnswerPickerActive,
+                          ]}
+                          onPress={() => updateQuestionCorrectOption(index, optionIndex)}
+                        >
+                          <Text
+                            style={[
+                              styles.manualAnswerPickerText,
+                              q.correctOptionIndex === optionIndex &&
+                                styles.manualAnswerPickerTextActive,
+                            ]}
+                          >
+                            {optionIndex + 1}
+                          </Text>
+                        </TouchableOpacity>
+                        <TextInput
+                          style={[styles.input, styles.manualOptionInput]}
+                          placeholder={t(
+                            `Option ${optionIndex + 1}`,
+                            `選択肢${optionIndex + 1}`
+                          )}
+                          placeholderTextColor="#999"
+                          value={option}
+                          onChangeText={(text) =>
+                            updateQuestionOption(index, optionIndex, text)
+                          }
+                        />
+                      </View>
+                    ))}
+                    <Text style={styles.manualHint}>
+                      {t(
+                        "Tap 1-4 to choose the correct option.",
+                        "1〜4をタップして正解の選択肢を選びます。"
+                      )}
+                    </Text>
+                  </View>
+                ) : (q.question_type || "text_input") === "true_false" ? (
+                  <View style={styles.manualGroup}>
+                    <Text style={styles.manualFieldLabel}>
+                      {t("Correct Answer", "正解")}
+                    </Text>
+                    <View style={styles.manualChipRow}>
+                      {([
+                        { key: "true", label: "True" },
+                        { key: "false", label: "False" },
+                      ] as const).map((answerOption) => (
+                        <TouchableOpacity
+                          key={answerOption.key}
+                          style={[
+                            styles.manualChip,
+                            q.answer === answerOption.key && styles.manualChipActive,
+                          ]}
+                          onPress={() => updateQuestion(index, "answer", answerOption.key)}
+                        >
+                          <Text
+                            style={[
+                              styles.manualChipText,
+                              q.answer === answerOption.key &&
+                                styles.manualChipTextActive,
+                            ]}
+                          >
+                            {answerOption.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                ) : (
+                  <TextInput
+                    style={styles.input}
+                    placeholder={t("Answer", "答え")}
+                    placeholderTextColor="#999"
+                    value={q.answer}
+                    onChangeText={(text) => updateQuestion(index, "answer", text)}
+                    multiline
+                  />
+                )}
+
                 <TextInput
-                  style={styles.input}
-                  placeholder={t("Answer", "答え")}
+                  style={[styles.input, styles.textArea]}
+                  placeholder={t("Explanation (optional)", "解説 (任意)")}
                   placeholderTextColor="#999"
-                  value={q.answer}
-                  onChangeText={(text) => updateQuestion(index, "answer", text)}
+                  value={q.explanation || ""}
+                  onChangeText={(text) => updateQuestion(index, "explanation", text)}
                   multiline
                 />
+
+                <View style={styles.categoryHelpBox}>
+                  <Text style={styles.categoryHelpText}>
+                    {t(
+                      "Category = broad subject. Subcategory 1 = chapter or unit. Subcategory 2 = narrower topic, pattern, or viewpoint.",
+                      "カテゴリ = 大きな分野。サブカテゴリ1 = 単元や章。サブカテゴリ2 = さらに細かい論点・出題パターン・観点です。"
+                    )}
+                  </Text>
+                </View>
 
                 <TextInput
                   style={styles.input}
@@ -785,7 +1096,9 @@ export default function TrialCreateScreen() {
                     </Text>
                     <View style={{ flex: 1 }}>
                       <Text numberOfLines={2} style={styles.previewQ}>{q.question}</Text>
-                      <Text style={styles.previewA}>{t("Answer", "答え")}: {q.answer}</Text>
+                      <Text style={styles.previewA}>
+                        {t("Answer", "答え")}: {getMultipleChoiceAnswerText(q.answer, q.options)}
+                      </Text>
                     </View>
                   </View>
                 ))}
@@ -832,7 +1145,9 @@ export default function TrialCreateScreen() {
                     </Text>
                     <View style={{ flex: 1 }}>
                       <Text numberOfLines={1} style={styles.previewQ}>{q.question}</Text>
-                      <Text numberOfLines={1} style={styles.previewA}>{q.answer}</Text>
+                      <Text numberOfLines={1} style={styles.previewA}>
+                        {getMultipleChoiceAnswerText(q.answer, q.options)}
+                      </Text>
                     </View>
                   </View>
                 ))}
@@ -843,6 +1158,84 @@ export default function TrialCreateScreen() {
                 )}
                 <TouchableOpacity style={styles.addButton} onPress={() => { setAnkiQuestions(null); setAnkiDeckTitle(""); }}>
                   <Text style={styles.addButtonText}>{t("Select Different File", "別のファイルを選択")}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ----- AI Text Generation ----- */}
+        {inputMode === "ai_text" && (
+          <View>
+            <Text style={styles.sectionDesc}>
+              {t(
+                "Paste text from a textbook, notes, or article. AI will automatically generate quiz questions including multiple-choice.",
+                "教科書・ノート・記事などのテキストを貼り付けてください。AIが多肢選択を含む問題を一括自動生成します。"
+              )}
+            </Text>
+
+            <TextInput
+              style={[styles.input, { height: 200, textAlignVertical: "top" }]}
+              placeholder={t(
+                "Paste your text here...",
+                "テキストをここに貼り付け..."
+              )}
+              placeholderTextColor="#999"
+              value={aiTextInput}
+              onChangeText={setAiTextInput}
+              multiline
+            />
+
+            {!aiTextQuestions && !aiTextGenerating && (
+              <TouchableOpacity
+                style={[styles.createButton, { backgroundColor: "#5856D6" }]}
+                onPress={handleGenerateFromText}
+                disabled={aiTextInput.trim().length < 10}
+              >
+                <Text style={styles.createButtonText}>
+                  {t("Generate Questions with AI", "AIで問題を生成")}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {aiTextGenerating && (
+              <View style={styles.progressBox}>
+                <ActivityIndicator color="#5856D6" size="large" />
+                <Text style={styles.progressText}>
+                  {t("Analyzing text and generating questions...", "テキストを分析して問題を生成中...")}
+                </Text>
+              </View>
+            )}
+
+            {aiTextQuestions && (
+              <View>
+                <Text style={styles.previewTitle}>
+                  {t(`${aiTextQuestions.length} question(s) generated`, `${aiTextQuestions.length}問が生成されました`)}
+                </Text>
+                {aiTextQuestions.map((q, i) => (
+                  <View key={i} style={styles.previewItem}>
+                    <Text style={styles.previewBadge}>
+                      {q.question_type === "multiple_choice"
+                        ? t("MC", "選択")
+                        : q.question_type === "true_false"
+                        ? t("TF", "正誤")
+                        : t("Text", "記述")}
+                    </Text>
+                    <View style={{ flex: 1 }}>
+                      <Text numberOfLines={2} style={styles.previewQ}>{q.question}</Text>
+                      <Text style={styles.previewA}>
+                        {t("Answer", "答え")}: {getMultipleChoiceAnswerText(q.answer, q.options)}
+                      </Text>
+                      {q.options && q.options.length > 0 && (
+                        <Text style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
+                          {q.options.join(" / ")}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                ))}
+                <TouchableOpacity style={styles.addButton} onPress={() => setAiTextQuestions(null)}>
+                  <Text style={styles.addButtonText}>{t("Try Again", "やり直す")}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -1053,6 +1446,92 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
+  manualFieldLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+  },
+  manualChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+  manualChip: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#D6DDE6",
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  manualChipActive: {
+    backgroundColor: "#007AFF",
+    borderColor: "#007AFF",
+  },
+  manualChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#333",
+  },
+  manualChipTextActive: {
+    color: "#fff",
+  },
+  manualGroup: {
+    marginBottom: 12,
+  },
+  manualOptionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  manualAnswerPicker: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#D6DDE6",
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  manualAnswerPickerActive: {
+    backgroundColor: "#34C759",
+    borderColor: "#34C759",
+  },
+  manualAnswerPickerText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#333",
+  },
+  manualAnswerPickerTextActive: {
+    color: "#fff",
+  },
+  manualOptionInput: {
+    flex: 1,
+    marginBottom: 8,
+  },
+  manualHint: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#666",
+    marginTop: -2,
+  },
+  categoryHelpBox: {
+    backgroundColor: "#F4F7FB",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E0E6ED",
+    padding: 10,
+    marginBottom: 12,
+  },
+  categoryHelpText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#5A6472",
+  },
   addButton: {
     backgroundColor: "#fff",
     borderRadius: 8,
@@ -1111,6 +1590,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "transparent",
   },
+  tabDivider: {
+    width: 1,
+    backgroundColor: "#007AFF",
+  },
   tabActive: {
     backgroundColor: "#007AFF",
   },
@@ -1154,12 +1637,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#5856D6",
     borderRadius: 6,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
+    maxWidth: 200,
   },
   csvPromptBtnText: {
     color: "#fff",
     fontSize: 12,
     fontWeight: "600",
+    textAlign: "center",
   },
   csvDownloadBtn: {
     backgroundColor: "#007AFF",
@@ -1189,6 +1674,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     borderWidth: 1,
     borderColor: "#ddd",
+  },
+  csvFormatText: {
+    fontSize: 12,
+    color: "#555",
+    lineHeight: 18,
+    marginBottom: 4,
   },
   csvFormatNote: {
     fontSize: 11,

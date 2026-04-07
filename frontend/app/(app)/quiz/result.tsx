@@ -6,18 +6,23 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useLanguage } from '../../../src/contexts/LanguageContext';
 import AdBanner from '../../../src/components/AdBanner';
 import { studyRecordService } from '../../../src/services/studyRecordService';
 import { srsService } from '../../../src/services/srsService';
+import { getMultipleChoiceAnswerText } from '../../../src/utils/multipleChoice';
 
 interface AnswerResult {
   question_id: string;
   question_text: string;
   user_answer: string;
   correct_answer: string;
+  question_type?: string;
+  options?: string[];
+  explanation?: string;
   is_correct: boolean;
   answer_time_sec: number;
   category?: string;
@@ -93,6 +98,13 @@ export default function QuizResultScreen() {
     return mins > 0 ? `${mins}${t('m', '分')} ${secs}${t('s', '秒')}` : `${secs}${t('s', '秒')}`;
   };
 
+  const formatAnswerForDisplay = (answer: AnswerResult, value: string) => {
+    if (answer.question_type === 'multiple_choice') {
+      return getMultipleChoiceAnswerText(value, answer.options);
+    }
+    return value;
+  };
+
   return (
     <ScrollView style={styles.container}>
       <AdBanner />
@@ -135,6 +147,11 @@ export default function QuizResultScreen() {
           <View style={styles.nextReviewBox}>
             <Text style={styles.nextReviewLabel}>{t('Next Review', '次回復習')}</Text>
             <Text style={styles.nextReviewValue}>{nextReviewLabel}</Text>
+          </View>
+        ) : questionSetId ? (
+          <View style={styles.nextReviewBox}>
+            <Text style={styles.nextReviewLabel}>{t('Next Review', '次回復習')}</Text>
+            <ActivityIndicator size="small" color="#007AFF" style={{ marginTop: 4 }} />
           </View>
         ) : null}
       </View>
@@ -185,13 +202,19 @@ export default function QuizResultScreen() {
               <View style={styles.answerComparison}>
                 <View style={styles.answerBlock}>
                   <Text style={styles.answerLabel}>{t('Your Answer', 'あなたの回答')}:</Text>
-                  <Text style={styles.wrongAnswer}>{answer.user_answer}</Text>
+                  <Text style={styles.wrongAnswer}>{formatAnswerForDisplay(answer, answer.user_answer)}</Text>
                 </View>
                 <View style={styles.answerBlock}>
                   <Text style={styles.answerLabel}>{t('Correct Answer', '正解')}:</Text>
-                  <Text style={styles.correctAnswerText}>{answer.correct_answer}</Text>
+                  <Text style={styles.correctAnswerText}>{formatAnswerForDisplay(answer, answer.correct_answer)}</Text>
                 </View>
               </View>
+              {!!answer.explanation && (
+                <View style={styles.explanationBlock}>
+                  <Text style={styles.answerLabel}>{t('Explanation', '解説')}:</Text>
+                  <Text style={styles.explanationText}>{answer.explanation}</Text>
+                </View>
+              )}
               {answer.category && (
                 <View style={styles.reviewCategoryBadge}>
                   <Text style={styles.reviewCategoryText}>{answer.category}</Text>
@@ -444,6 +467,10 @@ const styles = StyleSheet.create({
   answerBlock: {
     marginBottom: 8,
   },
+  explanationBlock: {
+    marginTop: 4,
+    marginBottom: 8,
+  },
   answerLabel: {
     fontSize: 12,
     color: '#666',
@@ -459,6 +486,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#4CAF50',
     fontWeight: '600',
+  },
+  explanationText: {
+    fontSize: 14,
+    color: '#555',
+    lineHeight: 21,
   },
   reviewCategoryBadge: {
     backgroundColor: '#FF9800',

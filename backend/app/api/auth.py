@@ -3,7 +3,7 @@
 """
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from pydantic import BaseModel
 from datetime import timedelta, datetime
 from typing import Optional
@@ -151,13 +151,23 @@ async def google_login(request: Request, body: GoogleAuthRequest, db: Session = 
         )
 
 
+_GOOGLE_HTTP_TIMEOUT = httpx.Timeout(15.0)
+
+
 async def _google_login_impl(body: GoogleAuthRequest, db: Session):
     # Google tokeninfo で aud（クライアントID）を検証してなりすましを防止
-    async with httpx.AsyncClient() as client:
-        tokeninfo_response = await client.get(
-            "https://www.googleapis.com/oauth2/v3/tokeninfo",
-            params={"access_token": body.access_token}
-        )
+    try:
+        async with httpx.AsyncClient(timeout=_GOOGLE_HTTP_TIMEOUT) as client:
+            tokeninfo_response = await client.get(
+                "https://www.googleapis.com/oauth2/v3/tokeninfo",
+                params={"access_token": body.access_token}
+            )
+    except httpx.RequestError as exc:
+        logger.exception("Google tokeninfo request failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="認証サービス（Google）との通信に失敗しました。ネットワークを確認するか、しばらくしてから再試行してください。",
+        ) from exc
 
     if tokeninfo_response.status_code != 200:
         raise HTTPException(
@@ -165,7 +175,18 @@ async def _google_login_impl(body: GoogleAuthRequest, db: Session):
             detail="無効なGoogleトークンです"
         )
 
-    tokeninfo = tokeninfo_response.json()
+    try:
+        tokeninfo = tokeninfo_response.json()
+    except ValueError:
+        logger.error(
+            "Google tokeninfo returned non-JSON (status=%s body_prefix=%r)",
+            tokeninfo_response.status_code,
+            (tokeninfo_response.text or "")[:200],
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="無効なGoogleトークンです",
+        )
 
     # 設定済みの Google Client ID いずれかと aud が一致するか照合
     allowed_client_ids = {
@@ -186,11 +207,18 @@ async def _google_login_impl(body: GoogleAuthRequest, db: Session):
             )
 
     # Google userinfo APIでユーザー情報を取得
-    async with httpx.AsyncClient() as client:
-        google_response = await client.get(
-            "https://www.googleapis.com/oauth2/v3/userinfo",
-            headers={"Authorization": f"Bearer {body.access_token}"}
-        )
+    try:
+        async with httpx.AsyncClient(timeout=_GOOGLE_HTTP_TIMEOUT) as client:
+            google_response = await client.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {body.access_token}"}
+            )
+    except httpx.RequestError as exc:
+        logger.exception("Google userinfo request failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="認証サービス（Google）との通信に失敗しました。ネットワークを確認するか、しばらくしてから再試行してください。",
+        ) from exc
 
     if google_response.status_code != 200:
         raise HTTPException(
@@ -198,7 +226,18 @@ async def _google_login_impl(body: GoogleAuthRequest, db: Session):
             detail="無効なGoogleトークンです"
         )
 
-    google_data = google_response.json()
+    try:
+        google_data = google_response.json()
+    except ValueError:
+        logger.error(
+            "Google userinfo returned non-JSON (status=%s body_prefix=%r)",
+            google_response.status_code,
+            (google_response.text or "")[:200],
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="無効なGoogleトークンです",
+        )
     email = google_data.get("email")
     google_id = google_data.get("sub")
     name_base = _username_base_from_google(
@@ -258,6 +297,13 @@ async def _google_login_impl(body: GoogleAuthRequest, db: Session):
         user.refresh_token = hash_refresh_token(refresh_token)
         db.commit()
         db.refresh(user)
+    except OperationalError as exc:
+        db.rollback()
+        logger.exception("Google login DB operational error email=%s", email)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="データベースに接続できませんでした。しばらくしてから再試行してください。",
+        ) from exc
     except IntegrityError:
         db.rollback()
         logger.exception("Google login DB integrity error email=%s google_id=%s", email, google_id)

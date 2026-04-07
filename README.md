@@ -14,9 +14,9 @@
 
 ### 1.5. プレミアムプラン
 
-- 年額 1,800 円（税込）のワンタイム決済（365 日有効）
+- 月額 350 円（税込、30 日有効）で 100 クレジット付与
+- 年額 1,800 円（税込、365 日有効）で 0 クレジット
 - 広告非表示 + クラウド同期（複数端末対応）
-- 500 円分のマーケットプレイスクレジット付与
 
 ### 2. AI 適応型学習
 
@@ -87,48 +87,50 @@
 
 ### デプロイ
 
-- **Backend**: **Render**（Free tier）— API は Render でホスティング
-- **Frontend（Web）**: Cloudflare Pages（[デプロイ](#デプロイ) 節）
+- **Backend**: **Google Cloud Run**（リージョン `asia-northeast1`）— FastAPI を Docker イメージでデプロイ。CI は GitHub Actions（`.github/workflows/deploy.yml`）
+- **Frontend（Web）**: Cloudflare Pages（[デプロイ](#デプロイ) 節）。CI は `.github/workflows/deploy-frontend.yml`
+- **コンテナレジストリ**: Artifact Registry（`asia-northeast1-docker.pkg.dev/.../quiz-marketplace/api`）
 - **モバイル**: Expo（OTA 更新無料）
 
 ## コスト構成
 
-主要クラウド・SaaSの目安（無料枠想定・決済手数料は別）。詳細は各サービスの料金ページを参照。
+主要クラウド・SaaSの目安（無料枠・低トラフィック想定。決済手数料は別）。Cloud Run の無料枠・従量は [docs/GCP_CLOUDRUN_SETUP.md](docs/GCP_CLOUDRUN_SETUP.md) の「費用の目安」を参照。
 
-| サービス          | プラン     | 月額（目安） |
-| ----------------- | ---------- | ------------ |
-| Supabase          | Free       | $0           |
-| Render（API）     | Free       | $0           |
-| Cloudflare Pages  | Free       | $0           |
-| Stripe            | 手数料のみ | 取引の 3.6%  |
-| **固定費の合計**  |            | **$0/月**    |
+| サービス            | プラン     | 月額（目安） |
+| ------------------- | ---------- | ------------ |
+| Supabase            | Free       | $0           |
+| Google Cloud Run 等 | 無料枠内   | $0 前後      |
+| Cloudflare Pages    | Free       | $0           |
+| Stripe              | 手数料のみ | 取引の 3.6%  |
+| **固定費の合計**    |            | **概ね $0**  |
 
 ## プロジェクト構造
 
 ```
 practice_app/
-├── backend/           # FastAPI バックエンド
+├── backend/              # FastAPI バックエンド（Cloud Run 用 Dockerfile あり）
 │   ├── app/
-│   │   ├── api/      # APIエンドポイント
-│   │   ├── models/   # データベースモデル
-│   │   ├── schemas/  # Pydanticスキーマ
-│   │   ├── services/ # ビジネスロジック
-│   │   │   └── ai_evaluator.py  # 記述式問題の意味評価
-│   │   ├── ai/       # AI/ML ロジック
-│   │   └── core/     # 設定・認証
+│   │   ├── api/          # API エンドポイント
+│   │   ├── models/       # データベースモデル
+│   │   ├── schemas/      # Pydantic スキーマ
+│   │   ├── services/     # ビジネスロジック（ai_evaluator 等）
+│   │   ├── ai/           # AI/ML ロジック
+│   │   └── core/         # 設定・認証
 │   ├── tests/
+│   ├── Dockerfile
 │   └── requirements.txt
-├── frontend/          # React Native アプリ
+├── frontend/             # React Native（Expo Router）
+│   ├── app/              # 画面ルート（ファイルベースルーティング）
 │   ├── src/
-│   │   ├── screens/  # 画面コンポーネント
 │   │   ├── components/
-│   │   ├── navigation/
-│   │   ├── services/ # API連携
-│   │   ├── i18n/     # 多言語対応
-│   │   └── types/
+│   │   ├── api/          # API クライアント
+│   │   ├── services/     # ローカルストレージ等
+│   │   ├── utils/        # aiEvaluator 等
+│   │   └── data/         # 静的問題集 CSV 等
 │   ├── app.json
 │   └── package.json
-└── docs/             # ドキュメント
+├── docs/                 # ドキュメント（GCP_CLOUDRUN_SETUP.md 等）
+└── .github/workflows/    # deploy.yml（Cloud Run）, deploy-frontend.yml（Pages）
 ```
 
 ## セットアップ手順
@@ -172,56 +174,55 @@ OLLAMA_TRANSLATION_MODEL=llama3.2:1b
 cd frontend
 npm install --legacy-peer-deps
 #cp .env.example .env
-# .env を編集WしてAPI URLを設定
+# .env を編集して API URL 等を設定
 npx expo start
 ```
 
 ## デプロイ
 
-### Cloudflare Pages（フロントエンド）- GitHub Actions 自動デプロイ
+### Google Cloud Run（バックエンド）
 
-`main` / `master` ブランチへの push または手動実行（`workflow_dispatch`）をトリガーに、GitHub Actions が自動でビルド＆デプロイします。ワークフローファイル: `.github/workflows/deploy.yml`
+本番の FastAPI は **Google Cloud Run**（`asia-northeast1`、サービス名 `quiz-marketplace-api`）で動作します。
 
-#### 必要な GitHub シークレット / 変数
+- **CI**: `main` / `master` への push、または手動（`workflow_dispatch`）で `.github/workflows/deploy.yml` が Docker ビルド → Artifact Registry へ push → Cloud Run にデプロイします。
+- **初回セットアップ・手動デプロイ・費用の目安**: [docs/GCP_CLOUDRUN_SETUP.md](docs/GCP_CLOUDRUN_SETUP.md)
+- **環境変数・GitHub Secrets の一覧**: 上記ドキュメントの「5. GitHub Secrets の登録」および `backend/.env.example`（Cloud Run / Actions 用のメモ付き）
+
+デプロイ後に表示される URL（例: `https://quiz-marketplace-api-xxxxx.asia-northeast1.run.app`）にパス `/api/v1` を付けたものを、フロントの `EXPO_PUBLIC_API_URL` に設定します。
+
+### Cloudflare Pages（フロントエンド Web）— GitHub Actions
+
+`frontend/**` の変更を `main` / `master` に pushすると、または手動実行で、`.github/workflows/deploy-frontend.yml` がビルド＆デプロイします（`cloudflare/wrangler-action`）。
+
+#### 主な GitHub Secrets（フロント）
 
 | 種別 | キー名 | 説明 |
 | ---- | ------ | ---- |
-| Secret または Variable | `EXPO_PUBLIC_API_URL` | Expo Web ビルド時に JS へ埋め込まれる公開 API URL |
+| Secret | `EXPO_PUBLIC_API_URL` | Web ビルド時に埋め込む API ベース URL（例: `https://....run.app/api/v1`） |
+| Secret | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google ログイン用（未設定だと本番で OAuth が失敗） |
 | Secret | `CF_API_TOKEN` | Cloudflare API トークン |
 | Secret | `CF_ACCOUNT_ID` | Cloudflare アカウント ID |
 
-> GitHub の **Settings → Secrets and variables → Actions** で設定してください。  
-> `EXPO_PUBLIC_API_URL` は Variables（公開）でも Secrets（非公開）でも構いません。
+特商法・広告用の `EXPO_PUBLIC_TOKUSHO_*` や AdMob 関連など、ワークフローで参照しているシークレットは `.github/workflows/deploy-frontend.yml` を参照してください。
+
+> GitHub の **Settings → Secrets and variables → Actions** で設定してください。
 
 #### デプロイ先
 
 | 項目 | 値 |
 | ---- | -- |
 | Cloudflare Pages プロジェクト名 | `aipracticebook` |
-| デプロイディレクトリ | `frontend/dist` |
-| Production ブランチ | `main` / `master`（push した branch 名を自動適用） |
+| デプロイディレクトリ | `frontend/dist`（`npm run build:web` の出力） |
+| トリガー | `main` / `master` への `frontend/**` の push、または `workflow_dispatch` |
 
-#### ビルドの流れ
+#### ビルドの流れ（フロント）
 
 ```
-1. actions/checkout@v3          — リポジトリをチェックアウト
-2. actions/setup-node@v3 (v20)  — Node.js 20 をセットアップ
-3. npm install --legacy-peer-deps  — 依存関係インストール（frontend/）
-4. npx expo export --platform web  — Expo Web ビルド → frontend/dist/
-5. cloudflare/pages-action@v1   — Cloudflare Pages へデプロイ
+1. actions/checkout@v4
+2. actions/setup-node@v4（Node.js 20、npm ci）
+3. npm run build:web（frontend/）— expo export + スクリプト
+4. cloudflare/wrangler-action — pages deploy dist
 ```
-
-### Render（バックエンド）
-
-本プロジェクトの FastAPI は **Render** で動かす想定です。
-
-1. [Render](https://render.com/) にログインし、GitHub リポジトリと連携
-2. **Web Service** を新規作成し、ルートディレクトリを `backend` に設定（リポジトリ構成に合わせて調整）
-3. ビルド／スタートコマンドを設定（例: `pip install -r requirements.txt` → `uvicorn app.main:app --host 0.0.0.0 --port $PORT`）
-4. 環境変数を設定（`backend/.env.example` 参照。`SUPABASE_*`・`STRIPE_*` など）
-5. デプロイ後、表示される URL をフロントの API ベース URL に設定
-
-Railway 向けの手順・環境変数メモは `docs/RAILWAY_DEPLOYMENT_GUIDE.md` などに残していますが、**本番 API のホスティングは Render を前提**としています。
 
 ## 開発フェーズ
 

@@ -62,9 +62,12 @@ export interface QuestionGroup {
 }
 
 export const questionsApi = {
-  getAll: async (params?: { question_set_id?: string; category?: string; subcategory1?: string; subcategory2?: string; skip?: number; limit?: number }): Promise<Question[]> => {
+  getAll: async (
+    params?: { question_set_id?: string; category?: string; subcategory1?: string; subcategory2?: string; skip?: number; limit?: number },
+    extra?: { skipGlobalErrorModal?: boolean }
+  ): Promise<Question[]> => {
     console.log('[questionsApi.getAll] Request params:', params);
-    const response = await apiClient.get('/questions/', { params });
+    const response = await apiClient.get('/questions/', { params, ...extra });
     console.log('[questionsApi.getAll] Response:', response.data?.length || 0, 'questions');
     return response.data;
   },
@@ -127,9 +130,14 @@ export const questionsApi = {
     return response.data;
   },
 
-  getGroups: async (questionSetId: string, groupBy?: 'category' | 'subcategory1' | 'subcategory2'): Promise<QuestionGroup[]> => {
+  getGroups: async (
+    questionSetId: string,
+    groupBy?: "category" | "subcategory1" | "subcategory2",
+    extra?: { skipGlobalErrorModal?: boolean }
+  ): Promise<QuestionGroup[]> => {
     const response = await apiClient.get(`/questions/groups/${questionSetId}`, {
-      params: { group_by: groupBy || 'subcategory1' },
+      params: { group_by: groupBy || "subcategory1" },
+      ...extra,
     });
     return response.data;
   },
