@@ -14,7 +14,7 @@ import { useRouter } from "expo-router";
 import {
   questionSetsApi,
   QuestionSet,
-  contentLanguageDisplayLabel,
+  contentLanguagesDisplayLabel,
 } from "../../src/api/questionSets";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useLanguage } from "../../src/contexts/LanguageContext";
@@ -198,7 +198,11 @@ export default function StoreScreen() {
               <View style={styles.cardFooter}>
                 <Text style={styles.cardCategory}>{item.category}</Text>
                 <Text style={styles.cardLang}>
-                  {contentLanguageDisplayLabel(item.content_language, t)}
+                  {contentLanguagesDisplayLabel(
+                    item.content_languages,
+                    item.content_language,
+                    t
+                  )}
                 </Text>
                 <Text style={styles.cardQuestions}>
                   {t(

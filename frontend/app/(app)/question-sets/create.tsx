@@ -8,7 +8,12 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { questionSetsApi, ContentLanguage } from "../../../src/api/questionSets";
+import {
+  questionSetsApi,
+  ContentLanguageMask,
+  languagesFromMask,
+  toggleMaskLang,
+} from "../../../src/api/questionSets";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
 import Header from "../../../src/components/Header";
@@ -19,9 +24,10 @@ export default function CreateQuestionSetScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { t, language } = useLanguage();
-  const [contentLanguage, setContentLanguage] = useState<ContentLanguage>(
-    () => (language === "ja" ? "ja" : "en")
+  const [contentLangMask, setContentLangMask] = useState<ContentLanguageMask>(() =>
+    language === "ja" ? { ja: true, en: false } : { ja: false, en: true }
   );
+  const langsForApi = languagesFromMask(contentLangMask);
 
   const handleCreate = async () => {
     console.log("handleCreate called");
@@ -63,7 +69,8 @@ export default function CreateQuestionSetScreen() {
         tags: undefined,
         price: 0,
         is_published: false,
-        content_language: contentLanguage,
+        content_languages: langsForApi,
+        content_language: langsForApi[0],
       };
 
       const result = await questionSetsApi.create(questionSetData);
@@ -109,21 +116,21 @@ export default function CreateQuestionSetScreen() {
         </View>
 
         <Text style={styles.langLabel}>
-          {t("Content language", "問題の言語")}
+          {t("Content language (select one or both)", "問題の言語（複数選択可）")}
         </Text>
         <View style={styles.langRow}>
           <TouchableOpacity
             style={[
               styles.langChip,
-              contentLanguage === "ja" && styles.langChipActive,
+              contentLangMask.ja && styles.langChipActive,
             ]}
-            onPress={() => setContentLanguage("ja")}
+            onPress={() => setContentLangMask((m) => toggleMaskLang(m, "ja"))}
             accessibilityRole="button"
           >
             <Text
               style={[
                 styles.langChipText,
-                contentLanguage === "ja" && styles.langChipTextActive,
+                contentLangMask.ja && styles.langChipTextActive,
               ]}
             >
               {t("Japanese", "日本語")}
@@ -132,15 +139,15 @@ export default function CreateQuestionSetScreen() {
           <TouchableOpacity
             style={[
               styles.langChip,
-              contentLanguage === "en" && styles.langChipActive,
+              contentLangMask.en && styles.langChipActive,
             ]}
-            onPress={() => setContentLanguage("en")}
+            onPress={() => setContentLangMask((m) => toggleMaskLang(m, "en"))}
             accessibilityRole="button"
           >
             <Text
               style={[
                 styles.langChipText,
-                contentLanguage === "en" && styles.langChipTextActive,
+                contentLangMask.en && styles.langChipTextActive,
               ]}
             >
               English

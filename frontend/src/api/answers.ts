@@ -59,6 +59,7 @@ export interface LocalQuestionSetData {
   is_published: boolean;
   questions: LocalQuestionData[];
   content_language?: "ja" | "en";
+  content_languages?: ("ja" | "en")[];
 }
 
 export interface MigrateLocalDataRequest {

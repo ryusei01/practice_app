@@ -21,7 +21,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   questionSetsApi,
   QuestionSet,
-  contentLanguageDisplayLabel,
+  contentLanguagesDisplayLabel,
 } from "../../../src/api/questionSets";
 import {
   questionsApi,
@@ -1048,7 +1048,11 @@ What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter i
         <View style={styles.metadata}>
           <Text style={styles.category}>{questionSet.category}</Text>
           <Text style={styles.langMeta}>
-            {contentLanguageDisplayLabel(questionSet.content_language, t)}
+            {contentLanguagesDisplayLabel(
+              questionSet.content_languages,
+              questionSet.content_language,
+              t
+            )}
           </Text>
           {questionSet.is_published && (
             <View style={styles.badge}>

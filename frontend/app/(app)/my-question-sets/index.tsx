@@ -23,7 +23,8 @@ import {
   QuestionSet,
   QuestionSetWithQuestions,
   LanguageFilter,
-  resolvedContentLanguage,
+  contentLanguagesDisplayLabel,
+  questionSetMatchesLanguageFilter,
   contentLanguageDisplayLabel,
 } from "../../../src/api/questionSets";
 import { questionsApi } from "../../../src/api/questions";
@@ -394,20 +395,24 @@ export default function MyQuestionSetsScreen() {
 
   const filteredMyQuestionSets = useMemo(
     () =>
-      myQuestionSets.filter(
-        (q) =>
-          languageFilter === "all" ||
-          resolvedContentLanguage(q.content_language) === languageFilter
+      myQuestionSets.filter((q) =>
+        questionSetMatchesLanguageFilter(
+          q.content_languages,
+          q.content_language ?? null,
+          languageFilter
+        )
       ),
     [myQuestionSets, languageFilter]
   );
 
   const filteredPurchasedQuestionSets = useMemo(
     () =>
-      purchasedQuestionSets.filter(
-        (q) =>
-          languageFilter === "all" ||
-          resolvedContentLanguage(q.content_language) === languageFilter
+      purchasedQuestionSets.filter((q) =>
+        questionSetMatchesLanguageFilter(
+          q.content_languages,
+          q.content_language ?? null,
+          languageFilter
+        )
       ),
     [purchasedQuestionSets, languageFilter]
   );
@@ -418,10 +423,12 @@ export default function MyQuestionSetsScreen() {
         .filter((item) =>
           showDefaultSets ? true : !item.id.startsWith("default_")
         )
-        .filter(
-          (item) =>
-            languageFilter === "all" ||
-            resolvedContentLanguage(item.content_language) === languageFilter
+        .filter((item) =>
+          questionSetMatchesLanguageFilter(
+            item.content_languages,
+            item.content_language ?? null,
+            languageFilter
+          )
         ),
     [trialQuestionSets, showDefaultSets, languageFilter]
   );
@@ -498,7 +505,11 @@ export default function MyQuestionSetsScreen() {
         <View style={styles.cardFooter}>
           <Text style={styles.cardCategory}>{item.category}</Text>
           <Text style={styles.cardLang}>
-            {contentLanguageDisplayLabel(item.content_language, t)}
+            {contentLanguagesDisplayLabel(
+              item.content_languages,
+              item.content_language,
+              t
+            )}
           </Text>
           <Text style={styles.cardQuestions}>
             {t(`${item.total_questions} questions`, `${item.total_questions} 問`)}
@@ -547,7 +558,11 @@ export default function MyQuestionSetsScreen() {
         <View style={styles.cardFooter}>
           <Text style={styles.cardCategory}>{item.category}</Text>
           <Text style={styles.cardLang}>
-            {contentLanguageDisplayLabel(item.content_language, t)}
+            {contentLanguagesDisplayLabel(
+              item.content_languages,
+              item.content_language,
+              t
+            )}
           </Text>
           <Text style={styles.cardQuestions}>
             {t(`${item.total_questions} questions`, `${item.total_questions} 問`)}
@@ -604,7 +619,11 @@ export default function MyQuestionSetsScreen() {
         ) : null}
         <View style={styles.cardFooter}>
           <Text style={styles.cardCategory}>
-            {contentLanguageDisplayLabel(item.content_language, t)}
+            {contentLanguagesDisplayLabel(
+              item.content_languages,
+              item.content_language,
+              t
+            )}
           </Text>
           <Text style={styles.cardQuestions}>
             {t(`${item.questions.length} questions`, `${item.questions.length} 問`)}

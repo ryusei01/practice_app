@@ -2,6 +2,8 @@ import warnings
 # limitsパッケージのpkg_resources非推奨警告を抑制
 warnings.filterwarnings("ignore", message="pkg_resources is deprecated", category=UserWarning)
 
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -9,12 +11,34 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from contextlib import asynccontextmanager
 from .core.config import settings
+from .core.database import engine
 from .core.limiter import limiter
+from .core.startup_migrations import run_startup_migrations
+
+_logger = logging.getLogger(__name__)
+# uvicorn のコンソールは third-party の INFO を落としがちなので、起動時の本人確認はこちらへ出す
+_uvicorn_log = logging.getLogger("uvicorn.error")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """アプリケーションのライフサイクル管理"""
+    run_startup_migrations(engine)
+    try:
+        import app.api.ai as _ai_api
+        _paths = app.openapi().get("paths") or {}
+        _gen_ok = "/api/v1/ai/generate-from-text" in _paths
+        _uvicorn_log.info(
+            "AI: app.api.ai=%s | OpenAPI POST /api/v1/ai/generate-from-text=%s",
+            getattr(_ai_api, "__file__", "?"),
+            _gen_ok,
+        )
+        if not _gen_ok:
+            _uvicorn_log.warning(
+                "LLM の /generate-from-text が未登録です。別フォルダの backend を起動していないか確認してください。"
+            )
+    except Exception:
+        _logger.exception("Failed to verify AI / LLM routes in OpenAPI")
     yield
 
 
@@ -110,13 +134,11 @@ async def health():
 # APIルーターを追加
 from .api.contact import router as contact_router
 from .api import ai_router, answers_router, auth_router, feedback_router, question_sets_router, questions_router, payments_router, admin_router, two_factor_router, translate_router, textbooks_router, reports_router, subscriptions_router
-from .api.ai_llm import router as ai_llm_router
 
 app.include_router(auth_router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 app.include_router(question_sets_router, prefix=f"{settings.API_V1_STR}/question-sets", tags=["question-sets"])
 app.include_router(questions_router, prefix=f"{settings.API_V1_STR}/questions", tags=["questions"])
 app.include_router(ai_router, prefix=f"{settings.API_V1_STR}/ai", tags=["ai"])
-app.include_router(ai_llm_router, prefix=f"{settings.API_V1_STR}/ai", tags=["ai"])
 app.include_router(answers_router, prefix=f"{settings.API_V1_STR}/answers", tags=["answers"])
 app.include_router(payments_router, prefix=f"{settings.API_V1_STR}/payments", tags=["payments"])
 app.include_router(admin_router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])

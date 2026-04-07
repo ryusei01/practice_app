@@ -21,7 +21,7 @@ import { answersApi, UserStats } from "../../src/api/answers";
 import {
   questionSetsApi,
   QuestionSet,
-  contentLanguageDisplayLabel,
+  contentLanguagesDisplayLabel,
 } from "../../src/api/questionSets";
 import { paymentsApi, Purchase } from "../../src/api/payments";
 import apiClient from "../../src/api/client";
@@ -636,7 +636,12 @@ export default function MyPageScreen() {
               >
                 <Text style={styles.questionSetTitle}>{qs.title}</Text>
                 <Text style={styles.questionSetMeta}>
-                  {contentLanguageDisplayLabel(qs.content_language, t)} •{" "}
+                  {contentLanguagesDisplayLabel(
+                    qs.content_languages,
+                    qs.content_language,
+                    t
+                  )}{" "}
+                  •{" "}
                   {qs.total_questions || 0} {t("questions", "問")} • ¥
                   {qs.price || 0} • {qs.total_purchases || 0}{" "}
                   {t("sales", "販売")}
@@ -675,7 +680,12 @@ export default function MyPageScreen() {
               >
                 <Text style={styles.questionSetTitle}>{qs.title}</Text>
                 <Text style={styles.questionSetMeta}>
-                  {contentLanguageDisplayLabel(qs.content_language, t)} •{" "}
+                  {contentLanguagesDisplayLabel(
+                    qs.content_languages,
+                    qs.content_language,
+                    t
+                  )}{" "}
+                  •{" "}
                   {qs.total_questions || 0} {t("questions", "問")}
                 </Text>
               </TouchableOpacity>

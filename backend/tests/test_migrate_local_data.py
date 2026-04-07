@@ -55,6 +55,7 @@ def memory_client():
                 title="Seed Set",
                 category="cat",
                 creator_id=uid,
+                content_languages=["ja"],
                 content_language="ja",
             )
         )

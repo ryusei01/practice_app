@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { platformShadow } from "@/src/styles/platformShadow";
 import {
   View,
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useLanguage } from "../contexts/LanguageContext";
+import { questionSetsApi, ContentLanguage, normalizeContentLanguages } from "../api/questionSets";
 import { questionsApi, MediaItem } from "../api/questions";
 import { getTextbookApiOrigin } from "../services/textbookService";
 import { aiApi } from "../api/ai";
@@ -95,7 +96,10 @@ function parseBulkText(text: string): ParsedQuestion[] {
 
 export default function AddQuestionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { t } = useLanguage();
+  const { t, language: appLanguage } = useLanguage();
+
+  const defaultLangsForAi = (): ContentLanguage[] =>
+    appLanguage === "en" ? ["en"] : ["ja"];
   const router = useRouter();
 
   const [activeTab, setActiveTab] = useState<TabMode>("single");
@@ -126,6 +130,29 @@ export default function AddQuestionScreen() {
   const [imageQuestions, setImageQuestions] = useState<ParsedQuestion[] | null>(null);
   const [imageSaving, setImageSaving] = useState(false);
   const [imageProgress, setImageProgress] = useState(0);
+  const [questionSetLangsForAi, setQuestionSetLangsForAi] = useState<ContentLanguage[]>(
+    defaultLangsForAi
+  );
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const qs = await questionSetsApi.getById(id, { skipGlobalErrorModal: true });
+        if (!cancelled && qs) {
+          setQuestionSetLangsForAi(
+            normalizeContentLanguages(qs.content_languages, qs.content_language ?? null)
+          );
+        }
+      } catch {
+        /* keep default */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   // ----- 1問ずつモード: ハンドラ -----
 
@@ -313,7 +340,8 @@ export default function AddQuestionScreen() {
     try {
       const res = await aiApi.generateFromImage(
         { uri: asset.uri, name: `photo.${ext}`, type: `image/${ext}` },
-        5
+        5,
+        questionSetLangsForAi,
       );
       const parsed: ParsedQuestion[] = res.questions.map(q => ({
         question_text: q.question_text,
@@ -346,7 +374,8 @@ export default function AddQuestionScreen() {
     try {
       const res = await aiApi.generateFromImage(
         { uri: asset.uri, name: `camera.${ext}`, type: `image/${ext}` },
-        5
+        5,
+        questionSetLangsForAi,
       );
       const parsed: ParsedQuestion[] = res.questions.map(q => ({
         question_text: q.question_text,

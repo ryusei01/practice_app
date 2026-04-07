@@ -14,7 +14,12 @@ import {
 import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
 import { useLanguage } from "../../src/contexts/LanguageContext";
-import { ContentLanguage, questionSetsApi } from "../../src/api/questionSets";
+import {
+  ContentLanguageMask,
+  languagesFromMask,
+  toggleMaskLang,
+  questionSetsApi,
+} from "../../src/api/questionSets";
 import { aiApi } from "../../src/api/ai";
 import {
   localStorageService,
@@ -90,9 +95,10 @@ export default function TrialCreateScreen() {
   const [aiTextPreviewModalVisible, setAiTextPreviewModalVisible] = useState(false);
 
   const { t, language } = useLanguage();
-  const [contentLanguage, setContentLanguage] = useState<ContentLanguage>(
-    () => (language === "ja" ? "ja" : "en")
+  const [contentLangMask, setContentLangMask] = useState<ContentLanguageMask>(() =>
+    language === "ja" ? { ja: true, en: false } : { ja: false, en: true }
   );
+  const contentLanguagesForAi = languagesFromMask(contentLangMask);
   const router = useRouter();
 
   const downloadCSVSample = async () => {
@@ -307,7 +313,9 @@ export default function TrialCreateScreen() {
     setImageQuestions(null);
     try {
       const res = await aiApi.generateFromImage(
-        { uri, name: `photo.${ext}`, type: `image/${ext}` }, 5
+        { uri, name: `photo.${ext}`, type: `image/${ext}` },
+        5,
+        contentLanguagesForAi,
       );
       setImageQuestions(res.questions.map((q, i) => ({
         id: `img_${Date.now()}_${i}`,
@@ -374,7 +382,7 @@ export default function TrialCreateScreen() {
     setAiTextGenerating(true);
     setAiTextQuestions(null);
     try {
-      const res = await aiApi.generateFromText(aiTextInput, undefined, contentLanguage);
+      const res = await aiApi.generateFromText(aiTextInput, undefined, contentLanguagesForAi);
       const mapped = res.questions.map((q, i) => ({
         id: `aitxt_${Date.now()}_${i}`,
         question: q.question_text,
@@ -488,7 +496,8 @@ export default function TrialCreateScreen() {
         title,
         description,
         questions: finalQuestions,
-        content_language: contentLanguage,
+        content_languages: contentLanguagesForAi,
+        content_language: contentLanguagesForAi[0],
       });
 
       setSuccessMessage(
@@ -745,20 +754,28 @@ export default function TrialCreateScreen() {
         />
 
         <Text style={styles.langLabel}>
-          {t("Content language", "問題の言語")}
+          {t("Content language (select one or both)", "問題の言語（複数選択可）")}
+        </Text>
+        <Text style={styles.langHint}>
+          {t(
+            "Applies to this entire question set (all input methods below).",
+            "以下すべての作り方で、この問題セット全体に適用されます。",
+          )}
         </Text>
         <View style={styles.langRow}>
           <TouchableOpacity
             style={[
               styles.langChip,
-              contentLanguage === "ja" && styles.langChipActive,
+              contentLangMask.ja && styles.langChipActive,
             ]}
-            onPress={() => setContentLanguage("ja")}
+            onPress={() =>
+              setContentLangMask((m) => toggleMaskLang(m, "ja"))
+            }
           >
             <Text
               style={[
                 styles.langChipText,
-                contentLanguage === "ja" && styles.langChipTextActive,
+                contentLangMask.ja && styles.langChipTextActive,
               ]}
             >
               {t("Japanese", "日本語")}
@@ -767,17 +784,19 @@ export default function TrialCreateScreen() {
           <TouchableOpacity
             style={[
               styles.langChip,
-              contentLanguage === "en" && styles.langChipActive,
+              contentLangMask.en && styles.langChipActive,
             ]}
-            onPress={() => setContentLanguage("en")}
+            onPress={() =>
+              setContentLangMask((m) => toggleMaskLang(m, "en"))
+            }
           >
             <Text
               style={[
                 styles.langChipText,
-                contentLanguage === "en" && styles.langChipTextActive,
+                contentLangMask.en && styles.langChipTextActive,
               ]}
             >
-              {t("English", "英語")}
+              English
             </Text>
           </TouchableOpacity>
         </View>
@@ -1512,7 +1531,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     color: "#333",
+    marginBottom: 4,
+  },
+  langHint: {
+    fontSize: 12,
+    color: "#666",
     marginBottom: 8,
+    lineHeight: 18,
   },
   langRow: {
     flexDirection: "row",

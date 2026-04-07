@@ -168,7 +168,12 @@ function SellerApplicationsTab() {
                       <View key={qs.id} style={s.infoBoxItem}>
                         <Text style={s.infoBoxItemTitle}>{qs.title}</Text>
                         <Text style={s.infoBoxItemMeta}>
-                          {qs.category} · {qs.total_questions}問 · {qs.content_language === 'en' ? 'English' : '日本語'}
+                          {qs.category} · {qs.total_questions}問 ·{" "}
+                          {(qs.content_languages?.length ?? 0) >= 2
+                            ? "日本語・英語"
+                            : qs.content_language === "en"
+                              ? "English"
+                              : "日本語"}
                         </Text>
                       </View>
                     ))}

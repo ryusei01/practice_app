@@ -24,7 +24,8 @@ import {
 } from "../../src/services/localStorageService";
 import {
   ContentLanguage,
-  resolvedContentLanguage,
+  normalizeContentLanguages,
+  contentLanguagesDisplayLabel,
   contentLanguageDisplayLabel,
 } from "../../src/api/questionSets";
 import {
@@ -484,7 +485,11 @@ export default function TrialQuestionSetsScreen() {
                 style={styles.langBadgeText}
                 nativeID={`trial-lang-text-${item.id}`}
               >
-                {contentLanguageDisplayLabel(item.content_language, t)}
+                {contentLanguagesDisplayLabel(
+                  item.content_languages,
+                  item.content_language,
+                  t
+                )}
               </Text>
             </View>
             <View style={styles.trialBadge} nativeID={`trial-badge-${item.id}`}>
@@ -543,9 +548,16 @@ export default function TrialQuestionSetsScreen() {
       .filter((item) =>
         showDefaultSets ? true : !item.id.startsWith("default_")
       )
-      .filter((item) =>
-        contentMatchesLanguageMask(resolvedContentLanguage(item.content_language))
-      );
+      .filter((item) => {
+        const langs = normalizeContentLanguages(
+          item.content_languages,
+          item.content_language ?? null
+        );
+        return (
+          (languageMask.ja && langs.includes("ja")) ||
+          (languageMask.en && langs.includes("en"))
+        );
+      });
   }, [questionSets, showDefaultSets, languageMask.ja, languageMask.en]);
 
   const visibleTextbooks = useMemo(

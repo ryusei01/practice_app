@@ -72,9 +72,35 @@ ALTER TABLE question_sets ADD COLUMN IF NOT EXISTS approval_status VARCHAR DEFAU
 ALTER TABLE question_sets ADD COLUMN IF NOT EXISTS textbook_content TEXT;
 
 -- -------------------------------------------------------------
--- question_sets テーブル: コンテンツ言語（ja / en）
+-- question_sets: コンテンツ言語 content_language（代表） / content_languages（JSON 配列）
+-- content_language のみ DROP 済みの DB でもエラーにしない（片方から相互に埋める）
 -- -------------------------------------------------------------
-ALTER TABLE question_sets ADD COLUMN IF NOT EXISTS content_language VARCHAR DEFAULT 'ja' NOT NULL;
+ALTER TABLE question_sets ADD COLUMN IF NOT EXISTS content_languages JSONB;
+ALTER TABLE question_sets ADD COLUMN IF NOT EXISTS content_language VARCHAR;
+
+DO $qs_lang$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'question_sets' AND column_name = 'content_language'
+  ) THEN
+    UPDATE question_sets
+    SET content_languages = jsonb_build_array(content_language)
+    WHERE content_language IS NOT NULL
+      AND (content_languages IS NULL OR content_languages = 'null'::jsonb);
+  END IF;
+END $qs_lang$;
+
+UPDATE question_sets SET content_languages = COALESCE(content_languages, '["ja"]'::jsonb) WHERE content_languages IS NULL;
+
+UPDATE question_sets
+SET content_language = COALESCE(NULLIF(trim(content_language), ''), content_languages->>0, 'ja')
+WHERE content_language IS NULL OR trim(content_language) = '';
+
+ALTER TABLE question_sets ALTER COLUMN content_language SET DEFAULT 'ja';
+ALTER TABLE question_sets ALTER COLUMN content_language SET NOT NULL;
+ALTER TABLE question_sets ALTER COLUMN content_languages SET DEFAULT '["ja"]'::jsonb;
+ALTER TABLE question_sets ALTER COLUMN content_languages SET NOT NULL;
 
 -- -------------------------------------------------------------
 -- processed_checkout_sessions テーブル（冪等処理用）

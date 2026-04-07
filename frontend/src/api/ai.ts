@@ -52,6 +52,18 @@ export interface GeneratedQuestionsResponse {
   total: number;
 }
 
+export type AiContentLanguage = 'ja' | 'en';
+
+function appendImageLangParams(
+  params: URLSearchParams,
+  langs?: AiContentLanguage[]
+) {
+  const n = (langs ?? []).filter((x): x is AiContentLanguage => x === 'ja' || x === 'en');
+  for (const x of n) {
+    params.append('content_languages', x);
+  }
+}
+
 export const aiApi = {
   recommendQuestions: async (data: RecommendationRequest): Promise<RecommendationResponse> => {
     const response = await apiClient.post('/ai/recommend', data);
@@ -80,7 +92,11 @@ export const aiApi = {
     return response.data;
   },
 
-  generateFromImage: async (file: { uri: string; name: string; type: string }, count: number = 5): Promise<GeneratedQuestionsResponse> => {
+  generateFromImage: async (
+    file: { uri: string; name: string; type: string },
+    count: number = 5,
+    contentLanguages?: AiContentLanguage[],
+  ): Promise<GeneratedQuestionsResponse> => {
     const formData = new FormData();
     if (file.uri.startsWith('blob:')) {
       const response = await fetch(file.uri);
@@ -89,7 +105,9 @@ export const aiApi = {
     } else {
       formData.append('file', { uri: file.uri, name: file.name, type: file.type } as any);
     }
-    const response = await apiClient.post(`/ai/generate-from-image?count=${count}`, formData, {
+    const params = new URLSearchParams({ count: String(count) });
+    appendImageLangParams(params, contentLanguages);
+    const response = await apiClient.post(`/ai/generate-from-image?${params}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 120000,
     });
@@ -99,11 +117,16 @@ export const aiApi = {
   generateFromText: async (
     text: string,
     count?: number,
-    contentLanguage?: string,
+    contentLanguages?: AiContentLanguage[],
   ): Promise<GeneratedQuestionsResponse> => {
     const body: Record<string, unknown> = { text };
     if (count != null) body.count = count;
-    if (contentLanguage) body.content_language = contentLanguage;
+    const n = (contentLanguages ?? []).filter((x): x is AiContentLanguage => x === 'ja' || x === 'en');
+    if (n.length === 1) {
+      body.content_language = n[0];
+    } else if (n.length >= 2) {
+      body.content_languages = n;
+    }
     const response = await apiClient.post('/ai/generate-from-text', body, { timeout: 120000 });
     return response.data;
   },

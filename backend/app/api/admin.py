@@ -10,6 +10,7 @@ from datetime import datetime
 from ..core.database import get_db
 from ..core.auth import get_current_admin_user, get_current_super_admin_user, get_password_hash
 from ..models import User, QuestionSet
+from ..utils.content_languages import serialize_from_question_set_row
 from ..models.user import UserRole, SellerApplicationStatus
 from ..models.question import QuestionSetApprovalStatus
 
@@ -278,17 +279,20 @@ def _build_application_response(user: User, db: Session) -> SellerApplicationRes
         )
         .all()
     )
-    pending_list = [
-        {
-            "id": qs.id,
-            "title": qs.title,
-            "category": qs.category,
-            "total_questions": qs.total_questions or 0,
-            "content_language": getattr(qs, "content_language", None) or "ja",
-            "created_at": qs.created_at.isoformat() if qs.created_at else None,
-        }
-        for qs in pending_qs
-    ]
+    pending_list = []
+    for qs in pending_qs:
+        langs, primary = serialize_from_question_set_row(qs)
+        pending_list.append(
+            {
+                "id": qs.id,
+                "title": qs.title,
+                "category": qs.category,
+                "total_questions": qs.total_questions or 0,
+                "content_languages": langs,
+                "content_language": primary,
+                "created_at": qs.created_at.isoformat() if qs.created_at else None,
+            }
+        )
     return SellerApplicationResponse(
         id=user.id,
         email=user.email,

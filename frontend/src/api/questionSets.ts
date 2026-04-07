@@ -5,20 +5,90 @@ export type ContentLanguage = 'ja' | 'en';
 /** 一覧の言語絞り込み（すべて / 日本語 / 英語） */
 export type LanguageFilter = 'all' | ContentLanguage;
 
+export type ContentLanguageMask = { ja: boolean; en: boolean };
+
+export function normalizeContentLanguages(
+  languages: ContentLanguage[] | undefined | null,
+  legacy?: ContentLanguage | null
+): ContentLanguage[] {
+  const out: ContentLanguage[] = [];
+  if (languages && languages.length) {
+    for (const x of languages) {
+      if ((x === 'ja' || x === 'en') && !out.includes(x)) {
+        out.push(x);
+      }
+    }
+  }
+  if (out.length === 0 && legacy && (legacy === 'ja' || legacy === 'en')) {
+    return [legacy];
+  }
+  if (out.length === 0) {
+    return ['ja'];
+  }
+  return out;
+}
+
+export function languagesFromMask(mask: ContentLanguageMask): ContentLanguage[] {
+  const out: ContentLanguage[] = [];
+  if (mask.ja) out.push('ja');
+  if (mask.en) out.push('en');
+  return out.length ? out : ['ja'];
+}
+
+export function maskFromLanguages(
+  langs: ContentLanguage[] | undefined | null,
+  legacy?: ContentLanguage | null
+): ContentLanguageMask {
+  const n = normalizeContentLanguages(langs, legacy ?? null);
+  return { ja: n.includes('ja'), en: n.includes('en') };
+}
+
+export function toggleMaskLang(
+  mask: ContentLanguageMask,
+  lang: ContentLanguage
+): ContentLanguageMask {
+  const key = lang === 'en' ? 'en' : 'ja';
+  const next = { ...mask, [key]: !mask[key] };
+  if (!next.ja && !next.en) {
+    return mask;
+  }
+  return next;
+}
+
+/** @deprecated 単一言語前提。複数対応は normalizeContentLanguages を使う */
 export function resolvedContentLanguage(
   v: ContentLanguage | undefined | null
 ): ContentLanguage {
   return v === 'en' ? 'en' : 'ja';
 }
 
-/** 一覧・詳細での表示用（英語コンテンツは常に "English"） */
+export function contentLanguagesDisplayLabel(
+  languages: ContentLanguage[] | undefined | null,
+  legacy: ContentLanguage | undefined | null,
+  t: (en: string, ja: string) => string
+): string {
+  const n = normalizeContentLanguages(languages, legacy ?? null);
+  if (n.length === 2) {
+    return t('Japanese & English', '日本語・英語');
+  }
+  return n[0] === 'en' ? 'English' : t('Japanese', '日本語');
+}
+
+/** 単一フィールドしかない箇所向け */
 export function contentLanguageDisplayLabel(
   lang: ContentLanguage | undefined | null,
   t: (en: string, ja: string) => string
 ): string {
-  return resolvedContentLanguage(lang) === 'en'
-    ? 'English'
-    : t('Japanese', '日本語');
+  return contentLanguagesDisplayLabel(undefined, lang, t);
+}
+
+export function questionSetMatchesLanguageFilter(
+  languages: ContentLanguage[] | undefined | null,
+  legacy: ContentLanguage | undefined | null,
+  filter: LanguageFilter
+): boolean {
+  if (filter === 'all') return true;
+  return normalizeContentLanguages(languages, legacy ?? null).includes(filter);
 }
 
 export interface QuestionSet {
@@ -37,7 +107,7 @@ export interface QuestionSet {
   textbook_path: string | null;
   textbook_type: string | null;
   textbook_content: string | null;
-  /** API 未更新時は未設定扱い（フィルタでは ja とみなす） */
+  content_languages?: ContentLanguage[];
   content_language?: ContentLanguage;
 }
 
@@ -52,6 +122,7 @@ export interface QuestionSetCreate {
   textbook_type?: string;
   textbook_content?: string;
   content_language?: ContentLanguage;
+  content_languages?: ContentLanguage[];
 }
 
 export interface QuestionSetUpdate {
@@ -65,6 +136,7 @@ export interface QuestionSetUpdate {
   textbook_type?: string;
   textbook_content?: string;
   content_language?: ContentLanguage;
+  content_languages?: ContentLanguage[];
 }
 
 export interface Question {
@@ -90,6 +162,7 @@ export interface QuestionSetWithQuestions {
   price: number;
   is_published: boolean;
   creator_id: string;
+  content_languages?: ContentLanguage[];
   content_language?: ContentLanguage;
   questions: Question[];
 }

@@ -37,7 +37,9 @@ class QuestionSet(Base):
     textbook_type = Column(String, nullable=True)
     textbook_content = Column(Text, nullable=True)
 
-    # 問題文・解説などの主言語（ja / en）
+    # 問題文・解説などの言語（ja / en を複数可）。JSON 配列 e.g. ["ja"], ["en"], ["ja","en"]
+    content_languages = Column(JSON, nullable=True)
+    # 後方互換・一覧フィルタ用の代表値（content_languages の先頭と同期）
     content_language = Column(String, nullable=False, default="ja", server_default="ja")
 
     # 管理者審査ステータス

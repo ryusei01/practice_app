@@ -16,6 +16,11 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from ..core.config import settings
+from ..utils.content_languages import (
+    ai_language_hint,
+    normalize_content_language_list,
+    parse_query_content_languages,
+)
 from ..services.learning_plan_generator import get_learning_plan_generator
 
 router = APIRouter()
@@ -186,13 +191,44 @@ extract the content and generate quiz questions in CSV format.
 async def generate_from_image(
     file: UploadFile = File(...),
     count: int = Query(5, ge=1, le=20),
+    content_language: Optional[str] = Query(
+        None,
+        description="Output language (legacy single). Ignored if content_languages is set.",
+    ),
+    content_languages: Optional[List[str]] = Query(
+        None,
+        description="Output languages: repeat param, e.g. content_languages=ja&content_languages=en",
+    ),
 ):
     """Generate quiz questions from an image using a vision LLM."""
+    parsed = parse_query_content_languages(content_languages, content_language)
+    if content_languages:
+        for x in content_languages:
+            if x not in ("ja", "en"):
+                raise HTTPException(
+                    status_code=422,
+                    detail="content_languages values must be ja or en",
+                )
+    if content_language is not None and content_language not in ("ja", "en"):
+        raise HTTPException(
+            status_code=422,
+            detail="content_language must be ja or en",
+        )
+
     contents = await file.read()
     if len(contents) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Image too large (max 10 MB)")
 
     b64_image = base64.b64encode(contents).decode("utf-8")
+
+    lang_hint = ""
+    if parsed:
+        lang_hint = ai_language_hint(normalize_content_language_list(parsed, None))
+
+    vision_prompt = (
+        f"{_VISION_SYSTEM_PROMPT}{lang_hint}\n\n"
+        f"Generate approximately {count} questions from this image."
+    )
 
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
@@ -200,7 +236,7 @@ async def generate_from_image(
                 f"{settings.OLLAMA_BASE_URL}/api/generate",
                 json={
                     "model": settings.OLLAMA_VISION_MODEL,
-                    "prompt": f"{_VISION_SYSTEM_PROMPT}\n\nGenerate approximately {count} questions from this image.",
+                    "prompt": vision_prompt,
                     "images": [b64_image],
                     "stream": False,
                     "options": {"temperature": 0.3},
@@ -242,14 +278,24 @@ class GenerateFromTextRequest(BaseModel):
     text: str = Field(..., min_length=10, max_length=50000)
     count: Optional[int] = Field(None, ge=1, le=30)
     content_language: Optional[str] = Field(None, pattern=r"^(ja|en)$")
+    content_languages: Optional[List[str]] = None
 
 
 @router.post("/generate-from-text")
 async def generate_from_text(request: GenerateFromTextRequest):
     """Generate quiz questions from user-provided text using a local LLM."""
     lang_hint = ""
-    if request.content_language:
-        lang_hint = f"\nIMPORTANT: Generate all questions and answers in {'Japanese' if request.content_language == 'ja' else 'English'}."
+    if request.content_languages:
+        for x in request.content_languages:
+            if x not in ("ja", "en"):
+                raise HTTPException(status_code=422, detail="content_languages must be ja and/or en")
+        lang_hint = ai_language_hint(
+            normalize_content_language_list(request.content_languages, None)
+        )
+    elif request.content_language:
+        lang_hint = ai_language_hint(
+            normalize_content_language_list([request.content_language], None)
+        )
 
     if request.count:
         count_instruction = f"Generate approximately {request.count} questions from the following text:"

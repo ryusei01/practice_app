@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { ContentLanguage } from "../api/questionSets";
+import { normalizeContentLanguages } from "../api/questionSets";
 import { normalizeMultipleChoiceAnswer } from "../utils/multipleChoice";
 
 export interface LocalQuestionSet {
@@ -14,6 +15,8 @@ export interface LocalQuestionSet {
   textbook_type?: string; // "markdown" または "pdf"
   /** 未設定はフィルタ時に ja とみなす */
   content_language?: ContentLanguage;
+  /** 複数言語（未設定時は content_language から補完） */
+  content_languages?: ContentLanguage[];
 }
 
 export interface LocalMediaItem {
@@ -78,11 +81,17 @@ export const localStorageService = {
   ): Promise<LocalQuestionSet> {
     try {
       const sets = await this.getTrialQuestionSets();
+      const langs = normalizeContentLanguages(
+        questionSet.content_languages,
+        questionSet.content_language ?? null
+      );
       const newSet: LocalQuestionSet = {
         ...questionSet,
         id: `trial_${Date.now()}`,
         createdAt: new Date().toISOString(),
         isTrial: true,
+        content_languages: langs,
+        content_language: langs[0],
         // 教科書は自動割り当てしない（明示的に設定されていない場合は未設定）
         textbook_path: questionSet.textbook_path,
         textbook_type: questionSet.textbook_type,
@@ -223,10 +232,16 @@ export const localStorageService = {
           existingSet.description = defaultSet.description;
           existingSet.questions = defaultSet.questions;
           existingSet.isTrial = true;
-          existingSet.content_language =
-            defaultSet.content_language ??
-            existingSet.content_language ??
-            "ja";
+          {
+            const langs = normalizeContentLanguages(
+              defaultSet.content_languages,
+              (defaultSet.content_language ??
+                existingSet.content_language ??
+                "ja") as ContentLanguage
+            );
+            existingSet.content_languages = langs;
+            existingSet.content_language = langs[0];
+          }
           // 教科書は自動割り当てしない - 既存の教科書情報は保持するが、新規作成時は設定しない
           // 誤って設定された英語名のパスを削除
           if (existingSet.textbook_path === "Decision Trees and Random Forests Textbook.md" || 
@@ -238,6 +253,10 @@ export const localStorageService = {
         } else {
           // 新しいセットを追加（教科書は自動割り当てしない）
           console.log('[LocalStorage] Adding new default set:', defaultSet.title);
+          const defLangs = normalizeContentLanguages(
+            defaultSet.content_languages,
+            defaultSet.content_language ?? "ja"
+          );
           const newSet: LocalQuestionSet = {
             ...defaultSet,
             id: `default_${Date.now()}_${Math.random()
@@ -248,7 +267,8 @@ export const localStorageService = {
             // 教科書は自動割り当てしない（明示的に設定されていない場合は未設定）
             textbook_path: undefined,
             textbook_type: undefined,
-            content_language: defaultSet.content_language ?? "ja",
+            content_languages: defLangs,
+            content_language: defLangs[0],
           };
           existingSets.push(newSet);
         }

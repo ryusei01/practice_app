@@ -39,7 +39,7 @@ import {
 import Header from "../../../src/components/Header";
 import Modal from "../../../src/components/Modal";
 import { commonStyles } from "../../../src/styles/questionSetDetailStyles";
-import { contentLanguageDisplayLabel } from "../../../src/api/questionSets";
+import { contentLanguagesDisplayLabel } from "../../../src/api/questionSets";
 import aiService from "../../../src/services/aiService";
 import { srsService, SRSMap } from "../../../src/services/srsService";
 
@@ -862,7 +862,11 @@ export default function TrialSetDetailScreen() {
           <View style={styles.titleBadges} nativeID="trial-title-badges">
             <View style={styles.langBadge} nativeID="trial-lang-badge">
               <Text style={styles.langBadgeText} nativeID="trial-lang-badge-text">
-                {contentLanguageDisplayLabel(questionSet.content_language, t)}
+                {contentLanguagesDisplayLabel(
+                  questionSet.content_languages,
+                  questionSet.content_language,
+                  t
+                )}
               </Text>
             </View>
             <View style={styles.trialBadge} nativeID="trial-badge">

@@ -11,7 +11,13 @@ import {
   Switch,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { questionSetsApi, ContentLanguage } from "../../../src/api/questionSets";
+import {
+  questionSetsApi,
+  ContentLanguageMask,
+  languagesFromMask,
+  maskFromLanguages,
+  toggleMaskLang,
+} from "../../../src/api/questionSets";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
 import Header from "../../../src/components/Header";
@@ -31,7 +37,10 @@ export default function EditQuestionSetScreen() {
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [latestCopyright, setLatestCopyright] =
     useState<CopyrightCheckResult | null>(null);
-  const [contentLanguage, setContentLanguage] = useState<ContentLanguage>("ja");
+  const [contentLangMask, setContentLangMask] = useState<ContentLanguageMask>({
+    ja: true,
+    en: false,
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const router = useRouter();
@@ -52,8 +61,8 @@ export default function EditQuestionSetScreen() {
       setPrice(questionSet.price.toString());
       setIsPublished(questionSet.is_published);
       setCreatorId(questionSet.creator_id);
-      setContentLanguage(
-        questionSet.content_language === "en" ? "en" : "ja"
+      setContentLangMask(
+        maskFromLanguages(questionSet.content_languages, questionSet.content_language)
       );
 
       if (user?.id === questionSet.creator_id) {
@@ -119,6 +128,7 @@ export default function EditQuestionSetScreen() {
         .map((tag) => tag.trim())
         .filter((tag) => tag.length > 0);
 
+      const langs = languagesFromMask(contentLangMask);
       const questionSetData = {
         title,
         description: description || undefined,
@@ -126,7 +136,8 @@ export default function EditQuestionSetScreen() {
         tags: tagsArray.length > 0 ? tagsArray : undefined,
         price: isPublished ? parseInt(price) || 0 : 0,
         is_published: isPublished,
-        content_language: contentLanguage,
+        content_languages: langs,
+        content_language: langs[0],
       };
 
       console.log("Updating question set data:", questionSetData);
@@ -215,21 +226,21 @@ export default function EditQuestionSetScreen() {
         />
 
         <Text style={styles.label}>
-          {t("Content language", "問題の言語")}
+          {t("Content language (select one or both)", "問題の言語（複数選択可）")}
         </Text>
         <View style={styles.langRow}>
           <TouchableOpacity
             style={[
               styles.langChip,
-              contentLanguage === "ja" && styles.langChipActive,
+              contentLangMask.ja && styles.langChipActive,
             ]}
-            onPress={() => setContentLanguage("ja")}
+            onPress={() => setContentLangMask((m) => toggleMaskLang(m, "ja"))}
             disabled={isSaving}
           >
             <Text
               style={[
                 styles.langChipText,
-                contentLanguage === "ja" && styles.langChipTextActive,
+                contentLangMask.ja && styles.langChipTextActive,
               ]}
             >
               {t("Japanese", "日本語")}
@@ -238,15 +249,15 @@ export default function EditQuestionSetScreen() {
           <TouchableOpacity
             style={[
               styles.langChip,
-              contentLanguage === "en" && styles.langChipActive,
+              contentLangMask.en && styles.langChipActive,
             ]}
-            onPress={() => setContentLanguage("en")}
+            onPress={() => setContentLangMask((m) => toggleMaskLang(m, "en"))}
             disabled={isSaving}
           >
             <Text
               style={[
                 styles.langChipText,
-                contentLanguage === "en" && styles.langChipTextActive,
+                contentLangMask.en && styles.langChipTextActive,
               ]}
             >
               English

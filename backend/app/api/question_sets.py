@@ -14,11 +14,16 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, model_validator, field_validator
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db
 from ..core.auth import get_current_active_user
 from ..models import User, QuestionSet, Purchase, Question
+from ..utils.content_languages import (
+    normalize_content_language_list,
+    serialize_from_question_set_row,
+)
 from ..models.copyright_check import CopyrightCheckRecord, RiskLevel
 from ..models.question import QuestionSetApprovalStatus
 from ..models.user import SellerApplicationStatus
@@ -27,6 +32,30 @@ from ..services.copyright_checker import get_copyright_checker
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _question_set_row_to_api_dict(qs: QuestionSet) -> dict:
+    langs, primary = serialize_from_question_set_row(qs)
+    return {
+        "id": qs.id,
+        "title": qs.title,
+        "description": qs.description,
+        "category": qs.category,
+        "tags": qs.tags,
+        "price": qs.price,
+        "is_published": qs.is_published,
+        "creator_id": qs.creator_id,
+        "total_questions": qs.total_questions if qs.total_questions is not None else 0,
+        "average_difficulty": qs.average_difficulty if qs.average_difficulty is not None else 0.5,
+        "total_purchases": qs.total_purchases if qs.total_purchases is not None else 0,
+        "average_rating": qs.average_rating if qs.average_rating is not None else 0.0,
+        "textbook_path": qs.textbook_path,
+        "textbook_type": qs.textbook_type,
+        "textbook_content": qs.textbook_content,
+        "content_languages": langs,
+        "content_language": primary,
+        "approval_status": getattr(qs, "approval_status", None) or "not_required",
+    }
 
 
 class QuestionSetCreate(BaseModel):
@@ -39,11 +68,16 @@ class QuestionSetCreate(BaseModel):
     textbook_path: Optional[str] = None
     textbook_type: Optional[str] = None
     textbook_content: Optional[str] = None
-    content_language: str = "ja"
+    # 後方互換: content_languages 未指定時の単一言語
+    content_language: Optional[str] = None
+    # 問題の言語（ja / en を複数可）。指定時はこちらが優先。
+    content_languages: Optional[List[str]] = None
 
     @field_validator("content_language")
     @classmethod
-    def validate_content_language_create(cls, v: str) -> str:
+    def validate_content_language_create(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
         if v not in ("ja", "en"):
             raise ValueError("content_language must be ja or en")
         return v
@@ -60,6 +94,7 @@ class QuestionSetUpdate(BaseModel):
     textbook_type: Optional[str] = None
     textbook_content: Optional[str] = None
     content_language: Optional[str] = None
+    content_languages: Optional[List[str]] = None
 
     @field_validator("content_language")
     @classmethod
@@ -87,6 +122,7 @@ class QuestionSetResponse(BaseModel):
     textbook_path: Optional[str] = None
     textbook_type: Optional[str] = None
     textbook_content: Optional[str] = None
+    content_languages: List[str] = ["ja"]
     content_language: str = "ja"
     approval_status: str = "not_required"
 
@@ -94,15 +130,23 @@ class QuestionSetResponse(BaseModel):
     @classmethod
     def convert_nulls(cls, data):
         if isinstance(data, dict):
-            if data.get("content_language") is None:
-                data = {**data, "content_language": "ja"}
+            langs = data.get("content_languages")
+            cl = data.get("content_language")
+            if langs is None:
+                langs = normalize_content_language_list(None, cl or "ja")
+                data = {**data, "content_languages": langs}
+            else:
+                data = {**data, "content_languages": normalize_content_language_list(langs, None)}
+            if not data.get("content_language"):
+                data = {**data, "content_language": data["content_languages"][0]}
             return data
         # ORM object
         if hasattr(data, '__dict__'):
+            langs, primary = serialize_from_question_set_row(data)
             result = {}
             for key in ['id', 'title', 'description', 'category', 'tags', 'price', 'is_published', 'creator_id',
                        'total_questions', 'average_difficulty', 'total_purchases', 'average_rating',
-                       'textbook_path', 'textbook_type', 'textbook_content', 'content_language', 'approval_status']:
+                       'textbook_path', 'textbook_type', 'textbook_content', 'approval_status']:
                 val = getattr(data, key, None)
                 if key in ['total_questions', 'total_purchases'] and val is None:
                     result[key] = 0
@@ -112,10 +156,10 @@ class QuestionSetResponse(BaseModel):
                     result[key] = 0.0
                 elif key == 'approval_status' and val is None:
                     result[key] = 'not_required'
-                elif key == 'content_language' and (val is None or val == ''):
-                    result[key] = 'ja'
                 else:
                     result[key] = val
+            result["content_languages"] = langs
+            result["content_language"] = primary
             return result
         return data
 
@@ -140,6 +184,14 @@ async def create_question_set(
     Returns:
         作成された問題集
     """
+    if request.content_languages is not None:
+        normalized = normalize_content_language_list(request.content_languages, None)
+    else:
+        normalized = normalize_content_language_list(
+            None,
+            request.content_language or "ja",
+        )
+
     new_question_set = QuestionSet(
         id=str(uuid.uuid4()),
         title=request.title,
@@ -152,7 +204,8 @@ async def create_question_set(
         textbook_path=request.textbook_path,
         textbook_type=request.textbook_type,
         textbook_content=request.textbook_content,
-        content_language=request.content_language,
+        content_languages=normalized,
+        content_language=normalized[0],
     )
 
     db.add(new_question_set)
@@ -193,34 +246,16 @@ async def list_question_sets(
     if is_published is not None:
         query = query.filter(QuestionSet.is_published == is_published)
     if content_language in ("ja", "en"):
-        query = query.filter(QuestionSet.content_language == content_language)
+        query = query.filter(
+            or_(
+                QuestionSet.content_language == content_language,
+                QuestionSet.content_languages.contains([content_language]),
+            )
+        )
 
     question_sets = query.offset(skip).limit(limit).all()
 
-    # NULL値を安全に処理
-    result = []
-    for qs in question_sets:
-        result.append({
-            "id": qs.id,
-            "title": qs.title,
-            "description": qs.description,
-            "category": qs.category,
-            "tags": qs.tags,
-            "price": qs.price,
-            "is_published": qs.is_published,
-            "creator_id": qs.creator_id,
-            "total_questions": qs.total_questions if qs.total_questions is not None else 0,
-            "average_difficulty": qs.average_difficulty if qs.average_difficulty is not None else 0.5,
-            "total_purchases": qs.total_purchases if qs.total_purchases is not None else 0,
-            "average_rating": qs.average_rating if qs.average_rating is not None else 0.0,
-            "textbook_path": qs.textbook_path,
-            "textbook_type": qs.textbook_type,
-            "textbook_content": qs.textbook_content,
-            "content_language": getattr(qs, "content_language", None) or "ja",
-            "approval_status": getattr(qs, "approval_status", None) or "not_required",
-        })
-
-    return result
+    return [_question_set_row_to_api_dict(qs) for qs in question_sets]
 
 
 @router.get("/my/question-sets", response_model=List[QuestionSetResponse])
@@ -248,30 +283,7 @@ async def get_my_question_sets(
         print(f"[QuestionSets] Database query failed: {e}")
         raise
 
-    # NULL値を安全に処理
-    result = []
-    for qs in question_sets:
-        result.append({
-            "id": qs.id,
-            "title": qs.title,
-            "description": qs.description,
-            "category": qs.category,
-            "tags": qs.tags,
-            "price": qs.price,
-            "is_published": qs.is_published,
-            "creator_id": qs.creator_id,
-            "total_questions": qs.total_questions if qs.total_questions is not None else 0,
-            "average_difficulty": qs.average_difficulty if qs.average_difficulty is not None else 0.5,
-            "total_purchases": qs.total_purchases if qs.total_purchases is not None else 0,
-            "average_rating": qs.average_rating if qs.average_rating is not None else 0.0,
-            "textbook_path": qs.textbook_path,
-            "textbook_type": qs.textbook_type,
-            "textbook_content": qs.textbook_content,
-            "content_language": getattr(qs, "content_language", None) or "ja",
-            "approval_status": getattr(qs, "approval_status", None) or "not_required",
-        })
-
-    return result
+    return [_question_set_row_to_api_dict(qs) for qs in question_sets]
 
 
 @router.get("/purchased", response_model=List[QuestionSetResponse])
@@ -307,29 +319,7 @@ async def get_purchased_question_sets(
         print(f"[QuestionSets] Database query failed: {e}")
         raise
 
-    result = []
-    for qs in question_sets:
-        result.append({
-            "id": qs.id,
-            "title": qs.title,
-            "description": qs.description,
-            "category": qs.category,
-            "tags": qs.tags,
-            "price": qs.price,
-            "is_published": qs.is_published,
-            "creator_id": qs.creator_id,
-            "total_questions": qs.total_questions if qs.total_questions is not None else 0,
-            "average_difficulty": qs.average_difficulty if qs.average_difficulty is not None else 0.5,
-            "total_purchases": qs.total_purchases if qs.total_purchases is not None else 0,
-            "average_rating": qs.average_rating if qs.average_rating is not None else 0.0,
-            "textbook_path": qs.textbook_path,
-            "textbook_type": qs.textbook_type,
-            "textbook_content": qs.textbook_content,
-            "content_language": getattr(qs, "content_language", None) or "ja",
-            "approval_status": getattr(qs, "approval_status", None) or "not_required",
-        })
-
-    return result
+    return [_question_set_row_to_api_dict(qs) for qs in question_sets]
 
 
 @router.get("/{question_set_id}", response_model=QuestionSetResponse)
@@ -468,8 +458,14 @@ async def update_question_set(
         question_set.textbook_type = request.textbook_type
     if request.textbook_content is not None:
         question_set.textbook_content = request.textbook_content
-    if request.content_language is not None:
-        question_set.content_language = request.content_language
+    if request.content_languages is not None:
+        normalized = normalize_content_language_list(request.content_languages, None)
+        question_set.content_languages = normalized
+        question_set.content_language = normalized[0]
+    elif request.content_language is not None:
+        normalized = normalize_content_language_list([request.content_language], None)
+        question_set.content_languages = normalized
+        question_set.content_language = normalized[0]
 
     db.commit()
     db.refresh(question_set)
@@ -538,6 +534,7 @@ class QuestionSetWithQuestionsResponse(BaseModel):
     price: int
     is_published: bool
     creator_id: str
+    content_languages: List[str] = ["ja"]
     content_language: str = "ja"
     questions: List[QuestionResponse]
 
@@ -589,6 +586,7 @@ async def download_question_set(
         Question.question_set_id == question_set_id
     ).all()
 
+    langs, primary = serialize_from_question_set_row(question_set)
     return QuestionSetWithQuestionsResponse(
         id=question_set.id,
         title=question_set.title,
@@ -598,7 +596,8 @@ async def download_question_set(
         price=question_set.price,
         is_published=question_set.is_published,
         creator_id=question_set.creator_id,
-        content_language=getattr(question_set, "content_language", None) or "ja",
+        content_languages=langs,
+        content_language=primary,
         questions=[QuestionResponse.model_validate(q) for q in questions]
     )
 
@@ -884,6 +883,8 @@ async def import_anki(
             category="Anki Import",
             creator_id=current_user.id,
             tags=list(all_tags) if all_tags else None,
+            content_languages=["ja"],
+            content_language="ja",
         )
         db.add(new_set)
 

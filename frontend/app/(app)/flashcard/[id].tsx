@@ -19,7 +19,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   questionSetsApi,
   QuestionSet,
-  contentLanguageDisplayLabel,
+  contentLanguagesDisplayLabel,
 } from "../../../src/api/questionSets";
 import { questionsApi, Question } from "../../../src/api/questions";
 import { answersApi } from "../../../src/api/answers";
@@ -519,7 +519,11 @@ export default function FlashcardScreen() {
             {questionSet.title}
           </Text>
           <Text style={styles.headerLang}>
-            {contentLanguageDisplayLabel(questionSet.content_language, t)}
+            {contentLanguagesDisplayLabel(
+              questionSet.content_languages,
+              questionSet.content_language,
+              t
+            )}
           </Text>
         </View>
         <View style={styles.headerActions}>

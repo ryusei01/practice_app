@@ -11,6 +11,7 @@ import uuid
 from ..core.database import get_db
 from ..core.auth import get_current_active_user
 from ..models import Answer, User, QuestionSet, Question
+from ..utils.content_languages import normalize_content_language_list
 from ..ai import StatsUpdater
 from ..services.ai_evaluator import evaluate_text_answer
 from ..services.embedding_grading import (
@@ -338,6 +339,7 @@ class LocalQuestionSetData(BaseModel):
     is_published: bool = False
     questions: List[LocalQuestionData] = []
     content_language: str = "ja"
+    content_languages: Optional[List[str]] = None
 
 
 class MigrateLocalDataRequest(BaseModel):
@@ -403,9 +405,10 @@ async def migrate_local_data(
             ).first()
 
             if not existing_qs:
-                lang = qs_data.content_language
-                if lang not in ("ja", "en"):
-                    lang = "ja"
+                langs = normalize_content_language_list(
+                    qs_data.content_languages,
+                    qs_data.content_language,
+                )
                 new_qs = QuestionSet(
                     id=str(uuid.uuid4()),
                     title=qs_data.title,
@@ -415,7 +418,8 @@ async def migrate_local_data(
                     price=qs_data.price,
                     is_published=qs_data.is_published,
                     creator_id=current_user.id,
-                    content_language=lang,
+                    content_languages=langs,
+                    content_language=langs[0],
                 )
                 db.add(new_qs)
                 db.flush()  # IDを取得するため

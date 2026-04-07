@@ -15,6 +15,7 @@ export interface SellerApplication {
     category: string;
     total_questions: number;
     content_language?: string;
+    content_languages?: string[];
     created_at: string | null;
   }[];
 }
