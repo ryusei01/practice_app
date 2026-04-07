@@ -19,6 +19,7 @@ import Modal from "../src/components/Modal";
 import { Platform } from "react-native";
 import { submitPublicContact } from "../src/api/contact";
 import { getApiErrorMessage } from "../src/utils/apiError";
+import { APP_TITLE, APP_TAGLINE } from "../src/constants/branding";
 
 const BETA_NOTICE_SEEN_KEY = "@beta_notice_seen";
 
@@ -116,8 +117,8 @@ export default function Home() {
         // タイトル設定（言語に応じて）
         const pageTitle =
           currentLang === "ja"
-            ? "AI Practice Book - AIと一緒に間違えた問題を忘却曲線に沿って出題するAI単語帳・問題集学習プラットフォーム"
-            : "AI Practice Book - AI-Powered Flashcard & Quiz App with Spaced Repetition";
+            ? `${APP_TITLE}（${APP_TAGLINE}）- AIと一緒に間違えた問題を忘却曲線に沿って出題するAI単語帳・問題集学習プラットフォーム`
+            : `${APP_TITLE} - ${APP_TAGLINE} | AI-Powered Flashcard & Quiz App with Spaced Repetition`;
         document.title = pageTitle;
 
         // Description（160文字以内、言語に応じて）
@@ -136,8 +137,8 @@ export default function Home() {
         // Open Graph
         const ogTitle =
           currentLang === "ja"
-            ? "AI Practice Book - 忘却曲線と誤り集計で苦手を克服するAI単語帳・問題集"
-            : "AI Practice Book - Master Your Weak Spots with Spaced Repetition";
+            ? `${APP_TITLE}（${APP_TAGLINE}）- 忘却曲線と誤り集計で苦手を克服するAI単語帳・問題集`
+            : `${APP_TITLE} - ${APP_TAGLINE} | Master Your Weak Spots with Spaced Repetition`;
         const ogDescription =
           currentLang === "ja"
             ? "間違えた問題を分析・記録し、忘却曲線に沿った最適なタイミングで復習を提案。苦手克服に特化した次世代の単語帳・問題集アプリ。"
@@ -147,7 +148,7 @@ export default function Home() {
         setMetaTag("og:description", ogDescription, true);
         setMetaTag("og:type", "website", true);
         setMetaTag("og:url", baseUrl, true);
-        setMetaTag("og:site_name", "AI Practice Book", true);
+        setMetaTag("og:site_name", APP_TITLE, true);
         setMetaTag("og:locale", currentLang === "ja" ? "ja_JP" : "en_US", true);
         if (currentLang === "ja") {
           setMetaTag("og:locale:alternate", "en_US", true);
@@ -163,7 +164,7 @@ export default function Home() {
         // その他のSEOタグ
         setMetaTag("robots", "index, follow");
         setMetaTag("language", currentLang === "ja" ? "Japanese" : "English");
-        setMetaTag("author", "AI Practice Book");
+        setMetaTag("author", APP_TITLE);
 
         // Canonical URL
         setLinkTag("canonical", baseUrl);
@@ -180,7 +181,7 @@ export default function Home() {
         );
       } else {
         // ログイン時: プライバシー保護
-        document.title = "AI Practice Book Ver.β";
+        document.title = `${APP_TITLE} Ver.β`;
         setMetaTag(
           "description",
           "Manage your question sets, view AI analytics, and track your learning progress. | 問題集を管理し、AI分析を表示し、学習の進捗を追跡します。"
@@ -289,7 +290,19 @@ export default function Home() {
               ]}
               nativeID="home-title"
             >
-              {t("AI Practice Book", "AI Practice Book")}
+              {t(APP_TITLE, APP_TITLE)}
+            </Text>
+            <Text
+              style={[
+                styles.brandTagline,
+                {
+                  fontSize: isSmallScreen ? 14 : 16,
+                  marginBottom: isSmallScreen ? 8 : 10,
+                },
+              ]}
+              nativeID="home-brand-tagline"
+            >
+              {t(APP_TAGLINE, APP_TAGLINE)}
             </Text>
             <Text
               style={[
@@ -402,13 +415,30 @@ export default function Home() {
                   {t("Premium Plan", "プレミアムプラン")}
                 </Text>
                 <Text style={[styles.serviceCardPrice, styles.serviceCardPricePremium]}>
-                  {t("350 JPY / month or 1,800 JPY / year", "月額350円 / 年額1,800円")}
+                  <Text style={styles.serviceCardPriceStruck}>
+                    {t("350 JPY / month (list)", "月額350円")}
+                  </Text>
+                  <Text>{t(" ", " ")}</Text>
+                  <Text style={styles.serviceCardPriceEmphasis}>
+                    {t("200 JPY / month", "月額200円")}
+                  </Text>
+                  <Text>
+                    {t(" or 1,800 JPY / year", " / 年額1,800円")}
+                  </Text>
                 </Text>
                 <Text style={styles.serviceCardPriceMeta}>
-                  {t(
-                    "Monthly plan includes 100 credits. Yearly plan includes 0 credits.",
-                    "月額プランは100クレジット付き、年間プランは0クレジット"
-                  )}
+                  <Text style={styles.serviceCardPriceStruck}>
+                    {t(
+                      "Monthly: 350 yen & 100 credits (usual)",
+                      "月額：350円・100クレジット"
+                    )}
+                  </Text>
+                  <Text>
+                    {t(
+                      " → Monthly: ¥200 & 0 credits until marketplace matures. Yearly: 0 credits.",
+                      " → 月額200円・0クレジット（マーケットプレイス充実まで）。年間プランは0クレジット。"
+                    )}
+                  </Text>
                 </Text>
                 <Text style={styles.serviceCardDesc}>
                   {t(
@@ -572,7 +602,7 @@ export default function Home() {
             </View>
             <Text style={styles.footerCopy}>
               {"\u00A9"} {new Date().getFullYear()}{" "}
-              {t("Ryusei Ishida", "石田 琉聖")} — AI Practice Book
+              {t("Ryusei Ishida", "石田 琉聖")} — {APP_TITLE}
             </Text>
           </View>
         </ScrollView>
@@ -1042,6 +1072,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     textAlign: "center",
   },
+  brandTagline: {
+    color: "#555",
+    textAlign: "center",
+    fontWeight: "600",
+  },
   subtitle: {
     fontSize: 18,
     color: "#666",
@@ -1313,6 +1348,13 @@ const styles = StyleSheet.create({
   },
   serviceCardPricePremium: {
     color: "#B8860B",
+  },
+  serviceCardPriceStruck: {
+    textDecorationLine: "line-through",
+    opacity: 0.75,
+  },
+  serviceCardPriceEmphasis: {
+    fontWeight: "800",
   },
   serviceCardPriceMeta: {
     fontSize: 12,

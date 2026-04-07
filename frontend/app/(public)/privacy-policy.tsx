@@ -41,8 +41,8 @@ export default function PrivacyPolicyScreen() {
         <Section title={t("1. Introduction", "1. はじめに")}>
           <Text style={styles.body}>
             {t(
-              "AI Practice Book (hereinafter \"the Service\") is operated by its developer (hereinafter \"we\" or \"us\"). We respect your privacy and are committed to protecting your personal information in accordance with Japan's Act on the Protection of Personal Information (個人情報保護法).",
-              "AI Practice Book（以下「本サービス」）は、開発者（以下「当社」）が運営しています。当社は、個人情報保護法に基づき、お客様の個人情報を適切に取り扱うことをお約束します。"
+              "AI Tangocho (hereinafter \"the Service\") is operated by its developer (hereinafter \"we\" or \"us\"). We respect your privacy and are committed to protecting your personal information in accordance with Japan's Act on the Protection of Personal Information (個人情報保護法).",
+              "AI Tangocho（以下「本サービス」）は、開発者（以下「当社」）が運営しています。当社は、個人情報保護法に基づき、お客様の個人情報を適切に取り扱うことをお約束します。"
             )}
           </Text>
         </Section>
@@ -181,7 +181,7 @@ export default function PrivacyPolicyScreen() {
             )}
           </Text>
           <Text style={[styles.body, styles.contactInfo]}>
-            {t("Service Name: AI Practice Book", "サービス名：AI Practice Book")}
+            {t("Service Name: AI Tangocho", "サービス名：AI Tangocho")}
             {"\n"}
             {t("Email: support@ai-practice-book.com", "メール：support@ai-practice-book.com")}
           </Text>

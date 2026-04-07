@@ -56,7 +56,7 @@ jobs:
             --set-env-vars "\
               ENABLE_ML=false,\
               DEBUG=false,\
-              APP_NAME=QuizMarketplace,\
+              APP_NAME='AI Tangocho',\
               SUPABASE_URL=${{ secrets.SUPABASE_URL }},\
               SUPABASE_KEY=${{ secrets.SUPABASE_KEY }},\
               SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }},\

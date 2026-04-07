@@ -43,6 +43,8 @@ class PlanOptionResponse(BaseModel):
     credit_jpy: int
     validity_days: int
     is_available: bool
+    strikethrough_price_jpy: Optional[int] = None
+    strikethrough_credit_jpy: Optional[int] = None
 
 
 class PlanDisplayResponse(BaseModel):
@@ -66,6 +68,8 @@ def _build_plan_option(
     credit_jpy: int,
     validity_days: int,
     stripe_price_id: str,
+    strikethrough_price_jpy: Optional[int] = None,
+    strikethrough_credit_jpy: Optional[int] = None,
 ) -> PlanOptionResponse:
     return PlanOptionResponse(
         price_jpy=price_jpy,
@@ -74,6 +78,8 @@ def _build_plan_option(
         is_available=bool(
             stripe_price_id and stripe_price_id != "price_placeholder"
         ),
+        strikethrough_price_jpy=strikethrough_price_jpy,
+        strikethrough_credit_jpy=strikethrough_credit_jpy,
     )
 
 
@@ -103,6 +109,8 @@ async def get_plan_display():
             credit_jpy=settings.PREMIUM_MONTHLY_CREDIT_JPY,
             validity_days=settings.PREMIUM_MONTHLY_VALIDITY_DAYS,
             stripe_price_id=settings.STRIPE_PREMIUM_MONTHLY_PRICE_ID,
+            strikethrough_price_jpy=settings.PREMIUM_MONTHLY_STRIKETHROUGH_PRICE_JPY,
+            strikethrough_credit_jpy=settings.PREMIUM_MONTHLY_STRIKETHROUGH_CREDIT_JPY,
         ),
         yearly=_build_plan_option(
             price_jpy=settings.PREMIUM_YEARLY_PRICE_JPY,

@@ -72,6 +72,7 @@ export default function TrialCreateScreen() {
   const [showCsvPromptModal, setShowCsvPromptModal] = useState(false);
 
   const [expandedFeature, setExpandedFeature] = useState<string | null>(null);
+  const [showCreationHints, setShowCreationHints] = useState(false);
 
   // Image OCR state
   const [imageGenerating, setImageGenerating] = useState(false);
@@ -528,9 +529,31 @@ export default function TrialCreateScreen() {
         </View>
       </Modal>
       <ScrollView style={styles.content}>
-        <Text style={styles.title}>
-          {t("Create Question Set", "問題セットを作成")}
-        </Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>
+            {t("Create Question Set", "問題セットを作成")}
+          </Text>
+          <TouchableOpacity
+            style={[
+              styles.createHintsBtn,
+              showCreationHints && styles.createHintsBtnActive,
+            ]}
+            onPress={() => setShowCreationHints((v) => !v)}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.createHintsBtnText,
+                showCreationHints && styles.createHintsBtnTextActive,
+              ]}
+              numberOfLines={2}
+            >
+              {showCreationHints
+                ? t("Hide tips", "ヒントを閉じる")
+                : t("Creation tips", "作り方のヒント")}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.trialNotice}>
           <Text style={styles.trialNoticeText}>
@@ -541,99 +564,109 @@ export default function TrialCreateScreen() {
           </Text>
         </View>
 
-        <View style={styles.featureBanner}>
-          <Text style={styles.featureBannerTitle}>{t("What you can do", "できること")}</Text>
-          <Text style={styles.featureBannerSub}>{t("Tap any item to see how to use it", "タップすると使い方を表示")}</Text>
-          <View style={styles.featureChips}>
-            {([
-              {
-                id: "mc",
-                label: t("Multiple Choice", "多肢選択"),
-                color: "#007AFF",
-                bg: "#E8F0FE",
-                desc: t(
-                  "Only on the AI Text tab: paste text and run AI generation to get multiple-choice items (with options). The Manual tab has no option fields; CSV uses option_1–4 columns on the CSV tab instead.",
-                  "多肢選択（選択肢付き）は「AIテキスト」タブでテキストを貼り付けてAI生成するときに利用します。「手動」タブに選択肢用の欄はありません。CSVで多肢にする場合は「CSV」タブの option_1〜4 列のルールになります。"
-                ),
-              },
-              {
-                id: "tf",
-                label: t("True / False", "正誤問題"),
-                color: "#FF9500",
-                bg: "#FFF3E0",
-                desc: t(
-                  "On the AI Text or Image tab, AI-generated quizzes may include true/false questions. On the Manual tab, enter a statement as the question and \"true\" or \"false\" as the answer if you want TF-style cards.",
-                  "「AIテキスト」または「画像」タブでAIが生成する問題に、正誤形式が含まれることがあります。「手動」タブでは、問題文に命題を書き、答えに true / false と入力する形でも作成できます。"
-                ),
-              },
-              {
-                id: "text",
-                label: t("Text Input", "記述式"),
-                color: "#8E8E93",
-                bg: "#F2F2F7",
-                desc: t(
-                  "On the Manual tab, type each question and answer. AI Text and Image generation may also include short free-text answer items. For CSV, see the CSV tab format (auto-detection or explicit question_type).",
-                  "「手動」タブでは、問題と答えをそのまま入力します。「AIテキスト」「画像」タブのAI生成でも記述式が含まれることがあります。CSVでの扱いは「CSV」タブのフォーマット（自動判定または question_type 列）を参照してください。"
-                ),
-              },
-              {
-                id: "media",
-                label: t("Images & Audio", "画像・音声"),
-                color: "#34C759",
-                bg: "#E8F5E9",
-                desc: t(
-                  "After saving a question (in Server mode), you can attach images and audio to both the question and answer sides. Supports camera capture, photo library, audio recording, and file upload.",
-                  "問題を保存後（サーバーモード）、問題側・解答側の両方に画像や音声を添付できます。カメラ撮影、写真ライブラリ、録音、ファイルアップロードに対応しています。"
-                ),
-              },
-              {
-                id: "latex",
-                label: t("Math ($LaTeX$)", "数式 ($LaTeX$)"),
-                color: "#5856D6",
-                bg: "#EDE7F6",
-                desc: t(
-                  "Use $...$ for inline math and $$...$$ for block math in any question or answer text.\n\nExamples:\n• Inline: The area is $\\pi r^2$\n• Block: $$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$",
-                  "問題文や解答に $...$ でインライン数式、$$...$$ でブロック数式を記述できます。\n\n例:\n• インライン: 面積は $\\pi r^2$\n• ブロック: $$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$"
-                ),
-              },
-              {
-                id: "csv",
-                label: t("CSV auto-detect", "CSV自動判定"),
-                color: "#FF6B35",
-                bg: "#FFF3E0",
-                desc: t(
-                  "Only on the CSV tab: when you upload a CSV file, question_type is auto-detected:\n• Has option_1~option_4 → Multiple Choice\n• Answer is \"true\" or \"false\" → True/False\n• Otherwise → Text Input\n\nYou can also set question_type explicitly in the CSV column.",
-                  "「CSV」タブでCSVファイルをアップロードしたときだけ、question_typeを次のように自動判定します:\n• option_1〜option_4がある → 多肢選択\n• 答えが「true」または「false」→ 正誤問題\n• それ以外 → 記述式\n\n列で question_type を明示指定することも可能です。"
-                ),
-              },
-            ] as const).map((feature) => (
-              <View key={feature.id} style={{ width: "100%" }}>
-                <TouchableOpacity
-                  style={[
-                    styles.featureChipBtn,
-                    { backgroundColor: feature.bg, borderColor: feature.color },
-                    expandedFeature === feature.id && { borderWidth: 1.5 },
-                  ]}
-                  onPress={() => setExpandedFeature(expandedFeature === feature.id ? null : feature.id)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.featureChipDot, { backgroundColor: feature.color }]} />
-                  <Text style={[styles.featureChipLabel, { color: feature.color }]}>{feature.label}</Text>
-                  {feature.desc ? (
-                    <View style={[styles.featureHelpBadge, { backgroundColor: feature.color }]}>
-                      <Text style={styles.featureHelpBadgeText}>?</Text>
+        {showCreationHints ? (
+          <View style={styles.featureBanner}>
+            <Text style={styles.featureBannerTitle}>
+              {t("What you can do", "できること")}
+            </Text>
+            <Text style={styles.featureBannerSub}>
+              {t("Tap any item to see how to use it", "タップすると使い方を表示")}
+            </Text>
+            <View style={styles.featureChips}>
+              {([
+                {
+                  id: "mc",
+                  label: t("Multiple Choice", "多肢選択"),
+                  color: "#007AFF",
+                  bg: "#E8F0FE",
+                  desc: t(
+                    "Only on the AI Text tab: paste text and run AI generation to get multiple-choice items (with options). The Manual tab has no option fields; CSV uses option_1–4 columns on the CSV tab instead.",
+                    "多肢選択（選択肢付き）は「AIテキスト」タブでテキストを貼り付けてAI生成するときに利用します。「手動」タブに選択肢用の欄はありません。CSVで多肢にする場合は「CSV」タブの option_1〜4 列のルールになります。"
+                  ),
+                },
+                {
+                  id: "tf",
+                  label: t("True / False", "正誤問題"),
+                  color: "#FF9500",
+                  bg: "#FFF3E0",
+                  desc: t(
+                    "On the AI Text or Image tab, AI-generated quizzes may include true/false questions. On the Manual tab, enter a statement as the question and \"true\" or \"false\" as the answer if you want TF-style cards.",
+                    "「AIテキスト」または「画像」タブでAIが生成する問題に、正誤形式が含まれることがあります。「手動」タブでは、問題文に命題を書き、答えに true / false と入力する形でも作成できます。"
+                  ),
+                },
+                {
+                  id: "text",
+                  label: t("Text Input", "記述式"),
+                  color: "#8E8E93",
+                  bg: "#F2F2F7",
+                  desc: t(
+                    "On the Manual tab, type each question and answer. AI Text and Image generation may also include short free-text answer items. For CSV, see the CSV tab format (auto-detection or explicit question_type).",
+                    "「手動」タブでは、問題と答えをそのまま入力します。「AIテキスト」「画像」タブのAI生成でも記述式が含まれることがあります。CSVでの扱いは「CSV」タブのフォーマット（自動判定または question_type 列）を参照してください。"
+                  ),
+                },
+                {
+                  id: "media",
+                  label: t("Images & Audio", "画像・音声"),
+                  color: "#34C759",
+                  bg: "#E8F5E9",
+                  desc: t(
+                    "After saving a question (in Server mode), you can attach images and audio to both the question and answer sides. Supports camera capture, photo library, audio recording, and file upload.",
+                    "問題を保存後（サーバーモード）、問題側・解答側の両方に画像や音声を添付できます。カメラ撮影、写真ライブラリ、録音、ファイルアップロードに対応しています。"
+                  ),
+                },
+                {
+                  id: "latex",
+                  label: t("Math ($LaTeX$)", "数式 ($LaTeX$)"),
+                  color: "#5856D6",
+                  bg: "#EDE7F6",
+                  desc: t(
+                    "Use $...$ for inline math and $$...$$ for block math in any question or answer text.\n\nExamples:\n• Inline: The area is $\\pi r^2$\n• Block: $$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$",
+                    "問題文や解答に $...$ でインライン数式、$$...$$ でブロック数式を記述できます。\n\n例:\n• インライン: 面積は $\\pi r^2$\n• ブロック: $$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$"
+                  ),
+                },
+                {
+                  id: "csv",
+                  label: t("CSV auto-detect", "CSV自動判定"),
+                  color: "#FF6B35",
+                  bg: "#FFF3E0",
+                  desc: t(
+                    "Only on the CSV tab: when you upload a CSV file, question_type is auto-detected:\n• Has option_1~option_4 → Multiple Choice\n• Answer is \"true\" or \"false\" → True/False\n• Otherwise → Text Input\n\nYou can also set question_type explicitly in the CSV column.",
+                    "「CSV」タブでCSVファイルをアップロードしたときだけ、question_typeを次のように自動判定します:\n• option_1〜option_4がある → 多肢選択\n• 答えが「true」または「false」→ 正誤問題\n• それ以外 → 記述式\n\n列で question_type を明示指定することも可能です。"
+                  ),
+                },
+              ] as const).map((feature) => (
+                <View key={feature.id} style={{ width: "100%" }}>
+                  <TouchableOpacity
+                    style={[
+                      styles.featureChipBtn,
+                      { backgroundColor: feature.bg, borderColor: feature.color },
+                      expandedFeature === feature.id && { borderWidth: 1.5 },
+                    ]}
+                    onPress={() =>
+                      setExpandedFeature(expandedFeature === feature.id ? null : feature.id)
+                    }
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.featureChipDot, { backgroundColor: feature.color }]} />
+                    <Text style={[styles.featureChipLabel, { color: feature.color }]}>
+                      {feature.label}
+                    </Text>
+                    {feature.desc ? (
+                      <View style={[styles.featureHelpBadge, { backgroundColor: feature.color }]}>
+                        <Text style={styles.featureHelpBadgeText}>?</Text>
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+                  {expandedFeature === feature.id && (
+                    <View style={[styles.featureDetail, { borderLeftColor: feature.color }]}>
+                      <Text style={styles.featureDetailText}>{feature.desc}</Text>
                     </View>
-                  ) : null}
-                </TouchableOpacity>
-                {expandedFeature === feature.id && (
-                  <View style={[styles.featureDetail, { borderLeftColor: feature.color }]}>
-                    <Text style={styles.featureDetailText}>{feature.desc}</Text>
-                  </View>
-                )}
-              </View>
-            ))}
+                  )}
+                </View>
+              ))}
+            </View>
           </View>
-        </View>
+        ) : null}
 
         <TextInput
           style={styles.input}
@@ -774,8 +807,8 @@ export default function TrialCreateScreen() {
               </Text>
               <Text style={styles.csvFormatText}>
                 {t(
-                  "question_text: the question sentence shown to the learner\ncorrect_answer: the answer itself for text_input / true_false, or 1-4 for multiple_choice\nquestion_type: optional; use text_input / multiple_choice / true_false\noption_1-4: choices for multiple_choice only\nexplanation: explanation shown after answering\ndifficulty: number from 0.0 to 1.0; smaller = easier\ncategory: broad group such as math or geography\nsubcategory1: narrower group inside category\nsubcategory2: even more specific tag or subtopic",
-                  "question_text: 学習者に表示される問題文\ncorrect_answer: 記述式・正誤問題では答えそのもの、多肢選択では正しい選択肢番号 1〜4\nquestion_type: 任意列。text_input / multiple_choice / true_false を指定\noption_1〜4: 多肢選択問題の選択肢。記述式・正誤問題では空欄でOK\nexplanation: 解答後に表示する解説\ndifficulty: 0.0〜1.0 の数値。小さいほどやさしい\ncategory: 数学・地理などの大きな分類\nsubcategory1: category の中をもう少し細かく分ける分類\nsubcategory2: さらに細かいタグやテーマ"
+                  "question_text: the question sentence shown to the learner\ncorrect_answer: the answer itself for text_input / true_false, or 1-4 for multiple_choice\nquestion_type: optional. One of:\n  text_input — short free-text answer (learner types the answer)\n  multiple_choice — four options in option_1–4; correct_answer is 1–4\n  true_false — statement is true or false; correct_answer is true or false\noption_1-4: choices for multiple_choice only\nexplanation: explanation shown after answering\ndifficulty: number from 0.0 to 1.0; smaller = easier\ncategory: broad group such as math or geography\nsubcategory1: narrower group inside category\nsubcategory2: even more specific tag or subtopic",
+                  "question_text: 学習者に表示される問題文\ncorrect_answer: 記述式・正誤問題では答えそのもの、多肢選択では正しい選択肢番号 1〜4\nquestion_type: 任意列。次のいずれかを指定\n  text_input — 記述式。学習者が文字で解答する形式\n  multiple_choice — 多肢選択。option_1〜4 に選択肢を並べ、正解は番号 1〜4（correct_answer）\n  true_false — 正誤問題。正解は true または false（correct_answer）\noption_1〜4: 多肢選択問題の選択肢。記述式・正誤問題では空欄でOK\nexplanation: 解答後に表示する解説\ndifficulty: 0.0〜1.0 の数値。小さいほどやさしい\ncategory: 数学・地理などの大きな分類\nsubcategory1: category の中をもう少し細かく分ける分類\nsubcategory2: さらに細かいタグやテーマ"
                 )}
               </Text>
 
@@ -1273,11 +1306,42 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 16,
+  },
   title: {
+    flex: 1,
     fontSize: 24,
     fontWeight: "bold",
     color: "#333",
-    marginBottom: 16,
+    minWidth: 0,
+  },
+  createHintsBtn: {
+    flexShrink: 0,
+    maxWidth: "42%",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: "#E8F0FE",
+    borderWidth: 1.5,
+    borderColor: "#007AFF",
+  },
+  createHintsBtnActive: {
+    backgroundColor: "#007AFF",
+    borderColor: "#007AFF",
+  },
+  createHintsBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#007AFF",
+    textAlign: "center",
+  },
+  createHintsBtnTextActive: {
+    color: "#fff",
   },
   featureBanner: {
     backgroundColor: "#fff",
@@ -1622,7 +1686,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   csvFormatTitle: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: "700",
     color: "#333",
     flexShrink: 1,
@@ -1642,7 +1706,7 @@ const styles = StyleSheet.create({
   },
   csvPromptBtnText: {
     color: "#fff",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
     textAlign: "center",
   },
@@ -1654,11 +1718,11 @@ const styles = StyleSheet.create({
   },
   csvDownloadBtnText: {
     color: "#fff",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
   },
   csvFormatSubtitle: {
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: "700",
     color: "#555",
     marginTop: 6,
@@ -1666,25 +1730,25 @@ const styles = StyleSheet.create({
   },
   csvFormatCode: {
     fontFamily: "monospace",
-    fontSize: 11,
+    fontSize: 13,
     color: "#555",
     backgroundColor: "#fff",
     borderRadius: 4,
-    padding: 8,
+    padding: 10,
     marginBottom: 4,
     borderWidth: 1,
     borderColor: "#ddd",
   },
   csvFormatText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#555",
-    lineHeight: 18,
+    lineHeight: 21,
     marginBottom: 4,
   },
   csvFormatNote: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#888",
-    lineHeight: 16,
+    lineHeight: 19,
     marginTop: 6,
   },
   csvPickButton: {

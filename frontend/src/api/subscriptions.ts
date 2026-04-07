@@ -18,6 +18,10 @@ export interface PlanOptionDisplay {
   credit_jpy: number;
   validity_days: number;
   is_available: boolean;
+  /** 取り消し線で表示する旧価格（円）。未設定時は省略 */
+  strikethrough_price_jpy?: number | null;
+  /** 取り消し線で表示する旧クレジット（円）。未設定時は省略 */
+  strikethrough_credit_jpy?: number | null;
 }
 
 /** GET /subscriptions/plan-display（バックエンド settings 由来の表示用） */

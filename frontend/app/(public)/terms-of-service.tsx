@@ -41,8 +41,8 @@ export default function TermsOfServiceScreen() {
         <Section title={t("1. Introduction", "第1条（目的・適用）")}>
           <Text style={styles.body}>
             {t(
-              "These Terms of Service (\"Terms\") govern your use of AI Practice Book (\"the Service\") operated by its developer (\"we\" or \"us\"). By accessing or using the Service, you agree to be bound by these Terms. If you do not agree to these Terms, please do not use the Service.",
-              "本利用規約（以下「本規約」）は、開発者（以下「当社」）が提供するAI Practice Book（以下「本サービス」）の利用条件を定めるものです。本サービスをご利用になる場合は、本規約に同意していただく必要があります。"
+              "These Terms of Service (\"Terms\") govern your use of AI Tangocho (\"the Service\") operated by its developer (\"we\" or \"us\"). By accessing or using the Service, you agree to be bound by these Terms. If you do not agree to these Terms, please do not use the Service.",
+              "本利用規約（以下「本規約」）は、開発者（以下「当社」）が提供するAI Tangocho（以下「本サービス」）の利用条件を定めるものです。本サービスをご利用になる場合は、本規約に同意していただく必要があります。"
             )}
           </Text>
         </Section>
@@ -242,6 +242,12 @@ export default function TermsOfServiceScreen() {
           />
           <Text style={[styles.body, { marginTop: 8 }]}>
             {t(
+              "Data stored only on your device (for example, quiz progress or settings in local storage) is not backed up by us unless you use features that sync to our servers. It may be lost due to uninstallation, device replacement, OS updates, device failure, or other causes. We do not warrant preservation or recovery of such data and disclaim all liability for any loss or corruption of locally stored data.",
+              "本サービスが端末内（ローカル）にのみ保存するデータ（例：学習進捗や設定等）は、当社のサーバーへ同期する機能を利用しない限り、当社によるバックアップの対象外です。アプリの削除、機種変更、OSの更新、端末の故障その他の事由により当該データが失われたり破損したりすることがあります。当社は当該データの保存・復旧を保証せず、ローカル保存データの消失・損失・破損について一切の責任を負いません。"
+            )}
+          </Text>
+          <Text style={[styles.body, { marginTop: 8 }]}>
+            {t(
               "We shall not be liable for any indirect, incidental, or consequential damages arising from your use of the Service.",
               "当社は、本サービスの利用に起因する間接的・付随的・結果的損害について責任を負いません。"
             )}
@@ -283,7 +289,7 @@ export default function TermsOfServiceScreen() {
             )}
           </Text>
           <Text style={[styles.body, styles.contactInfo]}>
-            {t("Service Name: AI Practice Book", "サービス名：AI Practice Book")}
+            {t("Service Name: AI Tangocho", "サービス名：AI Tangocho")}
             {"\n"}
             {t("Email: support@ai-practice-book.com", "メール：support@ai-practice-book.com")}
           </Text>

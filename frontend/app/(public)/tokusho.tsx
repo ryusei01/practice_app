@@ -43,7 +43,7 @@ function buildTokushoItems(): SectionItem[] {
     { label: "所在地", value: address },
     { label: "電話番号", value: phone },
     { label: "メールアドレス", value: email },
-    { label: "サービス名", value: "AI Practice Book" },
+    { label: "サービス名", value: "AI Tangocho" },
     {
       label: "商品の販売価格",
       value:

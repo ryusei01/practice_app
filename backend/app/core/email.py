@@ -453,12 +453,12 @@ async def send_otp_email(to_email: str, otp_code: str, user_name: str) -> bool:
     Returns:
         送信成功の場合True
     """
-    subject = "AI Practice Book - 認証コード"
+    subject = f"{settings.APP_NAME} - 認証コード"
 
     body = f"""
 こんにちは {user_name} 様
 
-AI Practice Book へのご登録ありがとうございます。
+{settings.APP_NAME} へのご登録ありがとうございます。
 
 以下の認証コードを入力して、アカウント登録を完了してください。
 
@@ -469,7 +469,7 @@ AI Practice Book へのご登録ありがとうございます。
 ※このメールに心当たりがない場合は、このメールを無視してください。
 
 --
-AI Practice Book
+{settings.APP_NAME}
     """.strip()
 
     html_body = f"""
@@ -520,12 +520,12 @@ AI Practice Book
 </head>
 <body>
     <div class="header">
-        <h1>AI Practice Book</h1>
+        <h1>{settings.APP_NAME}</h1>
     </div>
     <div class="content">
         <p>こんにちは {user_name} 様</p>
 
-        <p>AI Practice Book へのご登録ありがとうございます。</p>
+        <p>{settings.APP_NAME} へのご登録ありがとうございます。</p>
 
         <p>以下の認証コードを入力して、アカウント登録を完了してください。</p>
 
@@ -538,7 +538,7 @@ AI Practice Book
         </p>
     </div>
     <div class="footer">
-        <p>AI Practice Book</p>
+        <p>{settings.APP_NAME}</p>
     </div>
 </body>
 </html>

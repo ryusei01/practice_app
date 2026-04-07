@@ -10,7 +10,9 @@ import {
 } from "react-native";
 import { platformShadow } from "@/src/styles/platformShadow";
 import { useLanguage } from "../contexts/LanguageContext";
-import { questionsApi } from "../api/questions";
+import { questionsApi, type MediaItem } from "../api/questions";
+import { getTextbookApiOrigin } from "../services/textbookService";
+import MediaAttachment from "./MediaAttachment";
 
 type QuestionType = "multiple_choice" | "true_false" | "text_input";
 
@@ -85,6 +87,9 @@ export default function AddQuestionInline({ questionSetId, onQuestionAdded }: Ad
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(0);
 
+  const [lastSavedQuestionId, setLastSavedQuestionId] = useState<string | null>(null);
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+
   const resetSingle = useCallback(() => {
     setQuestionText("");
     setOptions(["", ""]);
@@ -110,11 +115,34 @@ export default function AddQuestionInline({ questionSetId, onQuestionAdded }: Ad
     }
     setSaving(true);
     try {
-      await questionsApi.create(payload);
+      const created = await questionsApi.create(payload);
+      setLastSavedQuestionId(created.id);
+      setMediaItems(created.media_urls || []);
       resetSingle();
       onQuestionAdded?.();
     } catch { /* */ }
     finally { setSaving(false); }
+  };
+
+  const handleMediaUpload = async (
+    file: { uri: string; name: string; type: string },
+    position: "question" | "answer"
+  ) => {
+    if (!lastSavedQuestionId) {
+      Alert.alert(
+        t("Info", "情報"),
+        t("Save the question first, then attach media.", "先に問題を保存してからメディアを添付してください。")
+      );
+      return;
+    }
+    const result = await questionsApi.uploadMedia(lastSavedQuestionId, file, position);
+    setMediaItems(result.media_urls);
+  };
+
+  const handleMediaDelete = async (index: number) => {
+    if (!lastSavedQuestionId) return;
+    const result = await questionsApi.deleteMedia(lastSavedQuestionId, index);
+    setMediaItems(result.media_urls || []);
   };
 
   const handleBulkPreview = () => {
@@ -155,7 +183,14 @@ export default function AddQuestionInline({ questionSetId, onQuestionAdded }: Ad
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <Text style={styles.headerTitle}>{t("Add Question", "問題を追加")}</Text>
-        <TouchableOpacity onPress={() => { setExpanded(false); setParsed(null); }}>
+        <TouchableOpacity
+          onPress={() => {
+            setExpanded(false);
+            setParsed(null);
+            setLastSavedQuestionId(null);
+            setMediaItems([]);
+          }}
+        >
           <Text style={styles.closeText}>✕</Text>
         </TouchableOpacity>
       </View>
@@ -212,6 +247,36 @@ export default function AddQuestionInline({ questionSetId, onQuestionAdded }: Ad
           {qType === "text_input" && (
             <TextInput style={styles.input} value={correctAnswerText} onChangeText={setCorrectAnswerText} placeholder={t("Correct answer", "正解")} editable={!saving} />
           )}
+          <Text style={styles.mediaLabel}>{t("Images & Audio (optional)", "画像・音声（任意）")}</Text>
+          <Text style={styles.mediaHint}>
+            {lastSavedQuestionId
+              ? t(
+                  "Attach images or audio to the question you just saved. You can add more questions below after attaching.",
+                  "直前に保存した問題に画像・音声を添付できます。添付後、下のフォームから次の問題を追加できます。"
+                )
+              : t(
+                  "Save a question first, then attach images, recordings, or audio files here.",
+                  "まず「保存して次へ」で問題を保存すると、ここで画像・録音・音声を添付できます。"
+                )}
+          </Text>
+          <Text style={styles.mediaSideLabel}>{t("Question side", "問題側")}</Text>
+          <MediaAttachment
+            position="question"
+            existingMedia={mediaItems}
+            onUpload={handleMediaUpload}
+            onDelete={handleMediaDelete}
+            apiBaseUrl={getTextbookApiOrigin()}
+            disabled={!lastSavedQuestionId || saving}
+          />
+          <Text style={styles.mediaSideLabel}>{t("Answer side", "解答側")}</Text>
+          <MediaAttachment
+            position="answer"
+            existingMedia={mediaItems}
+            onUpload={handleMediaUpload}
+            onDelete={handleMediaDelete}
+            apiBaseUrl={getTextbookApiOrigin()}
+            disabled={!lastSavedQuestionId || saving}
+          />
           <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.5 }]} onPress={handleSaveSingle} disabled={saving}>
             {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveBtnText}>{t("Save & Add Next", "保存して次へ")}</Text>}
           </TouchableOpacity>
@@ -321,4 +386,7 @@ const styles = StyleSheet.create({
   backBtnText: { fontSize: 14, color: "#888" },
   bulkFormatHint: { backgroundColor: "#F0F5FF", borderRadius: 8, padding: 10, marginBottom: 8 },
   bulkFormatHintText: { fontSize: 12, color: "#555", lineHeight: 18 },
+  mediaLabel: { fontSize: 14, fontWeight: "700", color: "#333", marginTop: 10, marginBottom: 4 },
+  mediaHint: { fontSize: 12, color: "#666", lineHeight: 17, marginBottom: 6 },
+  mediaSideLabel: { fontSize: 12, fontWeight: "600", color: "#555", marginTop: 4, marginBottom: 2 },
 });

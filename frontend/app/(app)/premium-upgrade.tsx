@@ -28,10 +28,12 @@ const BASE_WEB_URL = process.env.EXPO_PUBLIC_WEB_URL || 'https://ai-practice-boo
 
 const FALLBACK_PLAN_DISPLAY: PlanDisplay = {
   monthly: {
-    price_jpy: 350,
-    credit_jpy: 100,
+    price_jpy: 200,
+    credit_jpy: 0,
     validity_days: 30,
     is_available: true,
+    strikethrough_price_jpy: 350,
+    strikethrough_credit_jpy: 100,
   },
   yearly: {
     price_jpy: 1800,
@@ -130,7 +132,14 @@ export default function PremiumUpgradeScreen() {
 
   const getPlanSummary = (planType: PremiumPlanType, plan: PlanOptionDisplay) => {
     if (planType === 'monthly') {
-      return `${plan.validity_days}日ごと・${plan.credit_jpy.toLocaleString()}クレジット付き`;
+      const base = `${plan.validity_days}日ごと`;
+      if (plan.strikethrough_credit_jpy != null && plan.strikethrough_credit_jpy > 0) {
+        return `${base}・（通常）${plan.strikethrough_credit_jpy.toLocaleString()}クレジット → 現在${plan.credit_jpy.toLocaleString()}クレジット（マーケットプレイス充実まで）`;
+      }
+      if (plan.credit_jpy > 0) {
+        return `${base}・${plan.credit_jpy.toLocaleString()}クレジット付き`;
+      }
+      return `${base}・クレジット付与なし`;
     }
     return `${plan.validity_days}日間有効・クレジット付与なし`;
   };
@@ -234,9 +243,18 @@ export default function PremiumUpgradeScreen() {
                   disabled={isCheckingOut || planLoading}
                 >
                   <Text style={styles.priceLabel}>{getPlanLabel(planType)}</Text>
-                  <Text style={styles.priceValue}>
-                    ¥{plan.price_jpy.toLocaleString()} {getPlanPriceSuffix(planType)}
-                  </Text>
+                  <View style={styles.priceRow}>
+                    {plan.strikethrough_price_jpy != null &&
+                      plan.strikethrough_price_jpy !== plan.price_jpy && (
+                        <Text style={styles.priceValueStruck}>
+                          ¥{plan.strikethrough_price_jpy.toLocaleString()}
+                          {getPlanPriceSuffix(planType)}{' '}
+                        </Text>
+                      )}
+                    <Text style={styles.priceValue}>
+                      ¥{plan.price_jpy.toLocaleString()} {getPlanPriceSuffix(planType)}
+                    </Text>
+                  </View>
                   <Text style={styles.priceNote}>税込</Text>
                   <Text style={styles.validityNote}>
                     {getPlanSummary(planType, plan)}
@@ -248,9 +266,25 @@ export default function PremiumUpgradeScreen() {
                     ]}
                   >
                     <Text style={styles.creditBadgeText}>
-                      {plan.credit_jpy > 0
-                        ? `${plan.credit_jpy.toLocaleString()}クレジット付与`
-                        : 'クレジット付与なし'}
+                      {plan.strikethrough_credit_jpy != null &&
+                      plan.strikethrough_credit_jpy > 0 &&
+                      plan.strikethrough_credit_jpy !== plan.credit_jpy ? (
+                        <Text>
+                          <Text style={styles.creditBadgeStruck}>
+                            {plan.strikethrough_credit_jpy.toLocaleString()}クレジット付与
+                          </Text>
+                          <Text>{' → '}</Text>
+                          <Text>
+                            {plan.credit_jpy > 0
+                              ? `${plan.credit_jpy.toLocaleString()}クレジット付与`
+                              : '0クレジット（マーケットプレイス充実まで）'}
+                          </Text>
+                        </Text>
+                      ) : plan.credit_jpy > 0 ? (
+                        `${plan.credit_jpy.toLocaleString()}クレジット付与`
+                      ) : (
+                        'クレジット付与なし'
+                      )}
                     </Text>
                   </View>
                   {!plan.is_available && (
@@ -273,7 +307,9 @@ export default function PremiumUpgradeScreen() {
         <View style={styles.featureCard}>
           <Text style={styles.featureTitle}>プラン別クレジット</Text>
           <Text style={styles.featureDescription}>
-            月額プランは100クレジット付き、年間プランは0クレジットです。
+            月額は現時点では0クレジットです（マーケットプレイス充実まで）。将来は
+            <Text style={styles.featureDescriptionStruck}>100クレジット</Text>
+            付与を予定しています。年間プランは0クレジットです。
             クレジットは問題集マーケットプレイスの購入に使えます。
           </Text>
         </View>
@@ -391,6 +427,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 4,
   },
+  priceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+  },
+  priceValueStruck: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 22,
+    fontWeight: '700',
+    textDecorationLine: 'line-through',
+    marginRight: 8,
+  },
   priceValue: {
     color: '#fff',
     fontSize: 48,
@@ -423,6 +472,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  creditBadgeStruck: {
+    textDecorationLine: 'line-through',
+    color: 'rgba(255,255,255,0.75)',
+  },
   planUnavailableText: {
     color: '#fff',
     fontSize: 12,
@@ -452,6 +505,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     lineHeight: 20,
+  },
+  featureDescriptionStruck: {
+    textDecorationLine: 'line-through',
+    color: '#888',
   },
   upgradeButton: {
     backgroundColor: '#007AFF',

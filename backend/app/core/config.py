@@ -4,7 +4,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # App
-    APP_NAME: str = "QuizMarketplace"
+    APP_NAME: str = "AI Tangocho"
     DEBUG: bool = True
     API_V1_STR: str = "/api/v1"
 
@@ -32,14 +32,17 @@ class Settings(BaseSettings):
     STRIPE_PREMIUM_MONTHLY_PRICE_ID: str = "price_placeholder"
     STRIPE_PREMIUM_YEARLY_PRICE_ID: str = "price_placeholder"
     # UI 表示用の税込価格（円）
-    PREMIUM_MONTHLY_PRICE_JPY: int = 350
+    PREMIUM_MONTHLY_PRICE_JPY: int = 200
     PREMIUM_YEARLY_PRICE_JPY: int = 1800
     # プランの有効日数
     PREMIUM_MONTHLY_VALIDITY_DAYS: int = 30
     PREMIUM_YEARLY_VALIDITY_DAYS: int = 365
     # 購入時に付与するクレジット（円）
-    PREMIUM_MONTHLY_CREDIT_JPY: int = 100
+    PREMIUM_MONTHLY_CREDIT_JPY: int = 0
     PREMIUM_YEARLY_CREDIT_JPY: int = 0
+    # マーケットプレイス充実までのキャンペーン表示用（取り消し線）。None で非表示
+    PREMIUM_MONTHLY_STRIKETHROUGH_PRICE_JPY: Optional[int] = 350
+    PREMIUM_MONTHLY_STRIKETHROUGH_CREDIT_JPY: Optional[int] = 100
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""

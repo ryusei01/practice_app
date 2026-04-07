@@ -13,6 +13,7 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useLanguage } from "../contexts/LanguageContext";
 import { questionsApi, MediaItem } from "../api/questions";
+import { getTextbookApiOrigin } from "../services/textbookService";
 import { aiApi } from "../api/ai";
 import MediaAttachment from "./MediaAttachment";
 
@@ -151,7 +152,7 @@ export default function AddQuestionScreen() {
     setOptions(next);
   };
 
-  const resetSingleForm = useCallback(() => {
+  const resetQuestionFieldsOnly = useCallback(() => {
     setQuestionText("");
     setOptions(["", ""]);
     setCorrectIndex(null);
@@ -159,8 +160,6 @@ export default function AddQuestionScreen() {
     setExplanation("");
     setDifficulty("medium");
     setCategory("");
-    setLastSavedQuestionId(null);
-    setMediaItems([]);
   }, []);
 
   const buildSinglePayload = () => {
@@ -261,7 +260,8 @@ export default function AddQuestionScreen() {
     try {
       const created = await questionsApi.create(payload as any);
       setLastSavedQuestionId(created.id);
-      resetSingleForm();
+      setMediaItems(created.media_urls || []);
+      resetQuestionFieldsOnly();
       Alert.alert(t("Success", "成功"), t("Saved! Enter the next question.", "保存しました。次の問題を入力してください。"));
     } catch (error: any) {
       Alert.alert(
@@ -642,6 +642,7 @@ export default function AddQuestionScreen() {
         existingMedia={mediaItems}
         onUpload={handleMediaUpload}
         onDelete={handleMediaDelete}
+        apiBaseUrl={getTextbookApiOrigin()}
         disabled={!lastSavedQuestionId}
       />
       <Text style={[styles.hint, { fontWeight: "600", marginTop: 4 }]}>{t("Answer side", "解答側")}</Text>
@@ -650,6 +651,7 @@ export default function AddQuestionScreen() {
         existingMedia={mediaItems}
         onUpload={handleMediaUpload}
         onDelete={handleMediaDelete}
+        apiBaseUrl={getTextbookApiOrigin()}
         disabled={!lastSavedQuestionId}
       />
 

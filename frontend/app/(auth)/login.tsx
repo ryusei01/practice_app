@@ -183,7 +183,7 @@ export default function LoginScreen() {
         ]}
       >
         <Text style={[styles.title, { fontSize: isSmallScreen ? 24 : 28 }]}>
-          {t("Welcome to AI Practice Book", "AI Practice Bookへようこそ")}
+          {t("Welcome to AI Tangocho", "AI Tangochoへようこそ")}
         </Text>
         <Text style={[styles.subtitle, { fontSize: isSmallScreen ? 14 : 15 }]}>
           {t(

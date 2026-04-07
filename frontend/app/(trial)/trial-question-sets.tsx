@@ -35,6 +35,7 @@ import { useAuth } from "../../src/contexts/AuthContext";
 import Header from "../../src/components/Header";
 import Modal from "../../src/components/Modal";
 import { srsService } from "../../src/services/srsService";
+import { APP_TITLE } from "../../src/constants/branding";
 
 export default function TrialQuestionSetsScreen() {
   const [questionSets, setQuestionSets] = useState<LocalQuestionSet[]>([]);
@@ -172,8 +173,8 @@ export default function TrialQuestionSetsScreen() {
       const isJa = language === "ja";
 
       document.title = isJa
-        ? "AI Practice Book - 無料お試し | 登録不要で問題セットを練習"
-        : "AI Practice Book - Free Trial | Practice Question Sets Without Sign Up";
+        ? `${APP_TITLE} - 無料お試し | 登録不要で問題セットを練習`
+        : `${APP_TITLE} - Free Trial | Practice Question Sets Without Sign Up`;
 
       setMetaTag(
         "description",
@@ -190,8 +191,8 @@ export default function TrialQuestionSetsScreen() {
       setMetaTag(
         "og:title",
         isJa
-          ? "AI Practice Book 無料お試し - 登録不要で体験"
-          : "Try AI Practice Book Free - No Sign Up Required",
+          ? `${APP_TITLE} 無料お試し - 登録不要で体験`
+          : `Try ${APP_TITLE} Free - No Sign Up Required`,
         "property"
       );
       setMetaTag(

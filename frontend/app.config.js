@@ -1,6 +1,6 @@
 export default {
   expo: {
-    name: "QuizMarketplace",
+    name: "AI Tangocho",
     slug: "quiz-marketplace",
     version: "1.0.0",
     orientation: "portrait",

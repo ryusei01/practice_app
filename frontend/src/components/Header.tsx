@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, usePathname } from "expo-router";
 import { useAuth } from "../contexts/AuthContext";
 import { useLanguage } from "../contexts/LanguageContext";
+import { APP_TITLE, APP_TAGLINE } from "../constants/branding";
 
 interface HeaderProps {
   title?: string;
@@ -78,11 +79,16 @@ export default function Header({
           style={styles.titleContainer}
         >
           <Text style={[styles.appName, compact && styles.appNameCompact]} nativeID="app-name">
-            AI Practice Book{" "}
+            {APP_TITLE}{" "}
             <Text style={[styles.beta, compact && styles.betaCompact]} nativeID="app-version">
               Ver.β
             </Text>
           </Text>
+          {!compact && (
+            <Text style={styles.appTagline} nativeID="app-tagline">
+              {APP_TAGLINE}
+            </Text>
+          )}
           {title && (
             <Text style={[styles.pageTitle, compact && styles.pageTitleCompact]} nativeID="page-title">
               {title}
@@ -194,6 +200,13 @@ const styles = StyleSheet.create({
   },
   appNameCompact: {
     fontSize: 17,
+  },
+  appTagline: {
+    fontSize: 11,
+    color: "#E8EEF8",
+    marginTop: 2,
+    textAlign: "center",
+    fontWeight: "500",
   },
   beta: {
     fontSize: 14,
