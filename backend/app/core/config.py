@@ -3,8 +3,10 @@ from typing import Optional
 
 
 class Settings(BaseSettings):
-    # App
-    APP_NAME: str = "AI Tangocho"
+    # App（OpenAPI の title・ヘルスチェック等。フロントの商品名と分離）
+    APP_NAME: str = "QuizMarketplace"
+    # ユーザー向けメール・問い合わせ件名など（画面の APP_TITLE と揃える）
+    APP_DISPLAY_NAME: str = "AI Tangocho"
     DEBUG: bool = True
     API_V1_STR: str = "/api/v1"
 

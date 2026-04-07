@@ -68,7 +68,7 @@ def send_otp_email(to_email: str, otp_code: str, username: str) -> bool:
     Returns:
         送信成功時True、失敗時False
     """
-    subject = f"{settings.APP_NAME} - 2段階認証コード"
+    subject = f"{settings.APP_DISPLAY_NAME} - 2段階認証コード"
 
     text_body = f"""
 こんにちは {username} さん、
@@ -80,7 +80,7 @@ def send_otp_email(to_email: str, otp_code: str, username: str) -> bool:
 このコードは10分間有効です。
 このメールに心当たりがない場合は、無視してください。
 
-{settings.APP_NAME}
+{settings.APP_DISPLAY_NAME}
 """
 
     html_body = f"""
@@ -99,7 +99,7 @@ def send_otp_email(to_email: str, otp_code: str, username: str) -> bool:
       <p style="color: #666; font-size: 14px;">このメールに心当たりがない場合は、無視してください。</p>
 
       <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-      <p style="color: #999; font-size: 12px;">{settings.APP_NAME}</p>
+      <p style="color: #999; font-size: 12px;">{settings.APP_DISPLAY_NAME}</p>
     </div>
   </body>
 </html>
@@ -120,7 +120,7 @@ def send_backup_codes_email(to_email: str, backup_codes: List[str], username: st
     Returns:
         送信成功時True、失敗時False
     """
-    subject = f"{settings.APP_NAME} - バックアップコード"
+    subject = f"{settings.APP_DISPLAY_NAME} - バックアップコード"
 
     codes_text = "\n".join([f"  - {code}" for code in backup_codes])
     codes_html = "".join([f"<li style='margin: 5px 0;'>{code}</li>" for code in backup_codes])
@@ -137,7 +137,7 @@ def send_backup_codes_email(to_email: str, backup_codes: List[str], username: st
 これらのコードは安全な場所に保管してください。
 各コードは1回のみ使用できます。
 
-{settings.APP_NAME}
+{settings.APP_DISPLAY_NAME}
 """
 
     html_body = f"""
@@ -161,7 +161,7 @@ def send_backup_codes_email(to_email: str, backup_codes: List[str], username: st
       <p style="color: #666; font-size: 14px;">各コードは<strong>1回のみ</strong>使用できます。</p>
 
       <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-      <p style="color: #999; font-size: 12px;">{settings.APP_NAME}</p>
+      <p style="color: #999; font-size: 12px;">{settings.APP_DISPLAY_NAME}</p>
     </div>
   </body>
 </html>

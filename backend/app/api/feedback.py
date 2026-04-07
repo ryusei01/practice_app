@@ -69,7 +69,7 @@ async def submit_feedback(
     username = getattr(current_user, "username", "") or ""
     user_email = getattr(current_user, "email", "") or ""
 
-    subject = f"[{settings.APP_NAME}] フィードバック: {category_label}"
+    subject = f"[{settings.APP_DISPLAY_NAME}] フィードバック: {category_label}"
 
     qs_line = ""
     if body.question_set_title:
@@ -91,7 +91,7 @@ async def submit_feedback(
 <html>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
   <div style="background-color: #007AFF; color: white; padding: 16px 20px; border-radius: 8px 8px 0 0;">
-    <h2 style="margin: 0;">{settings.APP_NAME} - フィードバック</h2>
+    <h2 style="margin: 0;">{settings.APP_DISPLAY_NAME} - フィードバック</h2>
   </div>
   <div style="background-color: #f8f8f8; padding: 20px; border-radius: 0 0 8px 8px;">
     <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
