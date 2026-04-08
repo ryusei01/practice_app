@@ -152,8 +152,5 @@ async def get_adaptive_difficulty(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# LLM 連携（テキスト・画像からの問題生成・学習プラン等）は ai_llm に実装。
-# main で二重 include し忘れると 404 になるため、同一 /ai ルーターに取り込む。
-from .ai_llm import router as _ai_llm_router  # noqa: E402
-
-router.include_router(_ai_llm_router)
+# LLM 連携（テキスト・画像からの問題生成・学習プラン等）は `main.py` 側で
+# `ai_llm_router` を同じ prefix に include する（OpenAPI の重複を防ぐ）。

@@ -12,7 +12,7 @@ import {
   Alert,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useLanguage } from "../../src/contexts/LanguageContext";
 import {
   ContentLanguageMask,
@@ -24,6 +24,7 @@ import { aiApi } from "../../src/api/ai";
 import {
   localStorageService,
   LocalQuestion,
+  LocalMediaItem,
 } from "../../src/services/localStorageService";
 import { getMultipleChoiceAnswerText } from "../../src/utils/multipleChoice";
 import Header from "../../src/components/Header";
@@ -48,10 +49,20 @@ type ManualQuestionDraft = {
   question_type?: LocalQuestion["question_type"];
   options?: string[];
   correctOptionIndex?: number | null;
+  media_urls?: LocalMediaItem[];
 };
 
 export default function TrialCreateScreen() {
-  const [inputMode, setInputMode] = useState<InputMode>("manual");
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const initialMode: InputMode =
+    mode === "manual" ||
+    mode === "csv" ||
+    mode === "image" ||
+    mode === "anki" ||
+    mode === "ai_text"
+      ? mode
+      : "manual";
+  const [inputMode, setInputMode] = useState<InputMode>(initialMode);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [questions, setQuestions] = useState<ManualQuestionDraft[]>([
@@ -75,6 +86,7 @@ export default function TrialCreateScreen() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [showCsvPromptModal, setShowCsvPromptModal] = useState(false);
+  const [showCsvBeginnerModal, setShowCsvBeginnerModal] = useState(false);
 
   const [expandedFeature, setExpandedFeature] = useState<string | null>(null);
   const [showCreationHints, setShowCreationHints] = useState(false);
@@ -83,7 +95,7 @@ export default function TrialCreateScreen() {
   const [imageGenerating, setImageGenerating] = useState(false);
   const [imageQuestions, setImageQuestions] = useState<LocalQuestion[] | null>(null);
 
-  // Anki import state
+  // .apkg import state
   const [ankiParsing, setAnkiParsing] = useState(false);
   const [ankiQuestions, setAnkiQuestions] = useState<LocalQuestion[] | null>(null);
   const [ankiDeckTitle, setAnkiDeckTitle] = useState("");
@@ -288,6 +300,96 @@ export default function TrialCreateScreen() {
     setQuestions(newQuestions);
   };
 
+  const isSafeLocalUri = (uri: string) => {
+    const u = (uri || "").trim().toLowerCase();
+    // allow only local-ish URIs (avoid remote fetch / tracking / SSRF)
+    return (
+      u.startsWith("file:") ||
+      u.startsWith("content:") ||
+      u.startsWith("blob:") ||
+      u.startsWith("data:")
+    );
+  };
+
+  const MAX_AUDIO_BYTES = 15 * 1024 * 1024; // 15MB
+
+  const attachAudioToDraft = async (index: number, position: "question" | "answer") => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["audio/*"],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      const uri = asset.uri;
+      if (!isSafeLocalUri(uri)) {
+        Alert.alert(
+          t("Unsupported file", "未対応のファイル"),
+          t(
+            "Only local audio files can be attached.",
+            "ローカルの音声ファイルのみ添付できます。"
+          )
+        );
+        return;
+      }
+      const mime = asset.mimeType || "";
+      if (mime && !mime.toLowerCase().startsWith("audio/")) {
+        Alert.alert(
+          t("Unsupported file", "未対応のファイル"),
+          t("Please choose an audio file.", "音声ファイルを選択してください。")
+        );
+        return;
+      }
+
+      // Size check (best-effort; some platforms may not provide size)
+      try {
+        const info = await FileSystem.getInfoAsync(uri, { size: true });
+        if (typeof info.size === "number" && info.size > MAX_AUDIO_BYTES) {
+          Alert.alert(
+            t("File too large", "ファイルが大きすぎます"),
+            t(
+              "Please choose an audio file under 15MB.",
+              "15MB以下の音声ファイルを選択してください。"
+            )
+          );
+          return;
+        }
+      } catch {
+        // ignore size check failures
+      }
+
+      const caption =
+        (asset.name || "").trim() ||
+        t("Audio", "音声");
+      const media: LocalMediaItem = {
+        type: "audio",
+        url: uri,
+        position,
+        caption,
+      };
+
+      const newQuestions = [...questions];
+      const prev = newQuestions[index];
+      const nextMedia = prev.media_urls ? [...prev.media_urls, media] : [media];
+      newQuestions[index] = { ...prev, media_urls: nextMedia };
+      setQuestions(newQuestions);
+    } catch {
+      Alert.alert(
+        t("Failed", "失敗"),
+        t("Failed to attach audio file.", "音声ファイルの添付に失敗しました。")
+      );
+    }
+  };
+
+  const removeDraftMedia = (index: number, mediaIndex: number) => {
+    const newQuestions = [...questions];
+    const prev = newQuestions[index];
+    const list = prev.media_urls ? [...prev.media_urls] : [];
+    list.splice(mediaIndex, 1);
+    newQuestions[index] = { ...prev, media_urls: list.length ? list : undefined };
+    setQuestions(newQuestions);
+  };
+
   // --- Image OCR handlers ---
   const handlePickImageForGeneration = async () => {
     if (!ImagePicker) return;
@@ -333,7 +435,7 @@ export default function TrialCreateScreen() {
     }
   };
 
-  // --- Anki import handlers ---
+  // --- .apkg import handlers ---
   const handlePickAnkiFile = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -366,7 +468,11 @@ export default function TrialCreateScreen() {
           media_urls: q.media_urls?.map(m => ({ ...m, position: m.position as "question" | "answer", type: m.type as "image" | "audio" })) || undefined,
         })));
       } catch (error: any) {
-        Alert.alert(t("Error", "エラー"), error.response?.data?.detail || t("Failed to parse Anki file", "Ankiファイルの解析に失敗しました"));
+        Alert.alert(
+          t("Error", "エラー"),
+          error.response?.data?.detail ||
+            t("Failed to parse .apkg file", ".apkgファイルの解析に失敗しました")
+        );
       } finally {
         setAnkiParsing(false);
       }
@@ -438,7 +544,12 @@ export default function TrialCreateScreen() {
       finalQuestions = imageQuestions;
     } else if (inputMode === "anki") {
       if (!ankiQuestions || ankiQuestions.length === 0) {
-        setErrorMessage(t("Import an Anki deck first", "まずAnkiデッキをインポートしてください"));
+        setErrorMessage(
+          t(
+            "Import a .apkg deck file first",
+            "まず.apkgのデッキファイルをインポートしてください"
+          )
+        );
         return;
       }
       finalQuestions = ankiQuestions;
@@ -486,6 +597,7 @@ export default function TrialCreateScreen() {
           subcategory2: q.subcategory2,
           question_type: questionType,
           options: questionType === "multiple_choice" ? options : undefined,
+          media_urls: q.media_urls && q.media_urls.length > 0 ? q.media_urls : undefined,
         };
       });
     }
@@ -514,9 +626,122 @@ export default function TrialCreateScreen() {
     }
   };
 
+  const renderCsvColumnMeanings = () => {
+    const items = [
+      {
+        key: "question_text",
+        title: "question_text",
+        body: t(
+          "The question sentence shown to the learner",
+          "学習者に表示される問題文"
+        ),
+      },
+      {
+        key: "correct_answer",
+        title: "correct_answer",
+        body: t(
+          "For text_input / true_false: the answer itself. For multiple_choice: the correct option number (1–4).",
+          "記述式・正誤問題では答えそのもの、多肢選択では正しい選択肢番号 1〜4"
+        ),
+      },
+      {
+        key: "question_type",
+        title: "question_type",
+        body: t(
+          "Optional. One of: text_input, multiple_choice, true_false",
+          "任意列。次のいずれかを指定"
+        ),
+        sublines: [
+          t(
+            "text_input — short free-text answer (learner types the answer)",
+            "text_input — 記述式。学習者が文字で解答する形式"
+          ),
+          t(
+            "multiple_choice — four options in option_1–4; correct_answer is 1–4",
+            "multiple_choice — 多肢選択。option_1〜4 に選択肢を並べ、正解は番号 1〜4（correct_answer）"
+          ),
+          t(
+            "true_false — statement is true or false; correct_answer is true or false",
+            "true_false — 正誤問題。正解は true または false（correct_answer）"
+          ),
+        ],
+      },
+      {
+        key: "option_1_4",
+        title: "option_1〜option_4",
+        body: t(
+          "Choices for multiple_choice only (can be empty for other types).",
+          "多肢選択問題の選択肢。記述式・正誤問題では空欄でOK"
+        ),
+      },
+      {
+        key: "explanation",
+        title: "explanation",
+        body: t(
+          "Explanation shown after answering",
+          "解答後に表示する解説"
+        ),
+      },
+      {
+        key: "difficulty",
+        title: "difficulty",
+        body: t(
+          "Number from 0.0 to 1.0; smaller = easier",
+          "0.0〜1.0 の数値。小さいほどやさしい"
+        ),
+      },
+      {
+        key: "category",
+        title: "category",
+        body: t(
+          "Broad group such as math or geography",
+          "数学・地理などの大きな分類"
+        ),
+      },
+      {
+        key: "subcategory1",
+        title: "subcategory1",
+        body: t(
+          "Narrower group inside category",
+          "category の中をもう少し細かく分ける分類"
+        ),
+      },
+      {
+        key: "subcategory2",
+        title: "subcategory2",
+        body: t(
+          "Even more specific tag or subtopic",
+          "さらに細かいタグやテーマ"
+        ),
+      },
+    ];
+
+    return (
+      <View style={styles.csvMeaningList}>
+        {items.map((item) => (
+          <View key={item.key} style={styles.csvMeaningItem}>
+            <Text style={styles.csvMeaningTitle}>
+              ・<Text style={styles.csvMeaningTitleStrong}>{item.title}</Text>
+            </Text>
+            <Text style={styles.csvMeaningBody}>{item.body}</Text>
+            {"sublines" in item && item.sublines?.length ? (
+              <View style={styles.csvMeaningSubList}>
+                {item.sublines.map((line, idx) => (
+                  <Text key={idx} style={styles.csvMeaningSubLine}>
+                    {"  "}・{line}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        ))}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
-      <Header title={t("Create Question Set", "問題セットを作成")} />
+      <Header title={t("Create Question Set", "問題セットを作成")} compact />
       <Modal
         visible={aiTextPreviewModalVisible}
         title={t("Generated questions preview", "生成結果のプレビュー")}
@@ -572,54 +797,57 @@ export default function TrialCreateScreen() {
           "問題集CSV生成プロンプト（Markdown）"
         )}
         onClose={() => setShowCsvPromptModal(false)}
+        footer={
+          <View style={styles.csvPromptActions}>
+            <TouchableOpacity
+              style={styles.csvPromptCopyBtn}
+              onPress={handleCopyCsvPrompt}
+            >
+              <Text style={styles.csvPromptCopyBtnText}>
+                {t("Copy all", "全文をコピー")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.csvPromptCloseBtn}
+              onPress={() => setShowCsvPromptModal(false)}
+            >
+              <Text style={styles.csvPromptCloseBtnText}>
+                {t("Close", "閉じる")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        }
       >
         <Text style={styles.csvPromptBody} selectable>
           {QUESTION_SET_CSV_PROMPT_MARKDOWN}
         </Text>
-        <View style={styles.csvPromptActions}>
-          <TouchableOpacity
-            style={styles.csvPromptCopyBtn}
-            onPress={handleCopyCsvPrompt}
-          >
-            <Text style={styles.csvPromptCopyBtnText}>
-              {t("Copy all", "全文をコピー")}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.csvPromptCloseBtn}
-            onPress={() => setShowCsvPromptModal(false)}
-          >
-            <Text style={styles.csvPromptCloseBtnText}>
-              {t("Close", "閉じる")}
-            </Text>
-          </TouchableOpacity>
-        </View>
+      </Modal>
+
+      <Modal
+        visible={showCsvBeginnerModal}
+        title={t("CSV basics", "CSVの基本（初心者向け）")}
+        onClose={() => setShowCsvBeginnerModal(false)}
+      >
+        <Text style={styles.csvBeginnerBody}>
+          {t(
+            "CSV is a plain-text table format.\n\n• One line = one question\n• Columns are separated by commas (,)\n• The first line is the header (column names)\n\nVery small sample:\nquestion_text,correct_answer\nWhat is 2+2?,4\nJapan's capital is?,Tokyo\n\nTips:\n• Save as UTF-8\n• If your text contains commas, wrap it in double quotes\n• Keep the header exactly as shown in the format box\n\nIf you use Excel/Sheets, export/download as CSV (UTF-8) and then upload it here.",
+            "CSVは「表」をテキストで表す形式です。\n\n・1行 = 1問\n・列はカンマ（,）で区切ります\n・1行目はヘッダー（列名）です\n\n超ミニサンプル:\nquestion_text,correct_answer\nWhat is 2+2?,4\n日本の首都は？,東京\n\nポイント:\n・UTF-8で保存\n・文中にカンマが入る場合は \"...\" で囲む\n・ヘッダーはフォーマット欄の表記どおりに揃える\n\nExcel/スプレッドシートを使う場合は、CSV（UTF-8）として書き出してから、ここでアップロードしてください。"
+          )}
+        </Text>
+        <TouchableOpacity
+          style={styles.csvBeginnerCloseBtn}
+          onPress={() => setShowCsvBeginnerModal(false)}
+        >
+          <Text style={styles.csvBeginnerCloseBtnText}>
+            {t("Close", "閉じる")}
+          </Text>
+        </TouchableOpacity>
       </Modal>
       <ScrollView style={styles.content}>
         <View style={styles.titleRow}>
           <Text style={styles.title}>
             {t("Create Question Set", "問題セットを作成")}
           </Text>
-          <TouchableOpacity
-            style={[
-              styles.createHintsBtn,
-              showCreationHints && styles.createHintsBtnActive,
-            ]}
-            onPress={() => setShowCreationHints((v) => !v)}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.createHintsBtnText,
-                showCreationHints && styles.createHintsBtnTextActive,
-              ]}
-              numberOfLines={2}
-            >
-              {showCreationHints
-                ? t("Hide tips", "ヒントを閉じる")
-                : t("Creation tips", "作り方のヒント")}
-            </Text>
-          </TouchableOpacity>
         </View>
 
         <View style={styles.trialNotice}>
@@ -808,7 +1036,7 @@ export default function TrialCreateScreen() {
             { key: "ai_text" as InputMode, label: t("AI Text", "AIテキスト") },
             { key: "csv" as InputMode, label: "CSV" },
             { key: "image" as InputMode, label: t("Image", "画像") },
-            { key: "anki" as InputMode, label: "Anki" },
+            { key: "anki" as InputMode, label: ".apkg" },
           ] as const).map((tab, index, tabs) => (
             <React.Fragment key={tab.key}>
               <TouchableOpacity
@@ -822,6 +1050,36 @@ export default function TrialCreateScreen() {
               {index < tabs.length - 1 ? <View style={styles.tabDivider} /> : null}
             </React.Fragment>
           ))}
+        </View>
+
+        <View style={styles.underTabsRow}>
+          <View style={styles.underTabsLeft}>
+            {inputMode !== "manual" && inputMode !== "csv" ? (
+              <Text style={styles.trialBadgeTextInline}>
+                {t("Trial version", "お試し版")}
+              </Text>
+            ) : null}
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.createHintsBtn,
+              showCreationHints && styles.createHintsBtnActive,
+            ]}
+            onPress={() => setShowCreationHints((v) => !v)}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.createHintsBtnText,
+                showCreationHints && styles.createHintsBtnTextActive,
+              ]}
+              numberOfLines={2}
+            >
+              {showCreationHints
+                ? t("Hide tips", "ヒントを閉じる")
+                : t("Creation tips", "作り方のヒント")}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* エラー・成功メッセージ */}
@@ -846,6 +1104,14 @@ export default function TrialCreateScreen() {
                   {t("CSV Format", "CSVフォーマット")}
                 </Text>
                 <View style={styles.csvFormatHeaderBtns}>
+                <TouchableOpacity
+                  style={styles.csvBeginnerBtn}
+                  onPress={() => setShowCsvBeginnerModal(true)}
+                >
+                  <Text style={styles.csvBeginnerBtnText} numberOfLines={2}>
+                    {t("CSV basics", "CSVの基本")}
+                  </Text>
+                </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.csvPromptBtn}
                     onPress={() => setShowCsvPromptModal(true)}
@@ -882,12 +1148,7 @@ export default function TrialCreateScreen() {
               <Text style={styles.csvFormatSubtitle}>
                 {t("What each column means", "各列の意味")}
               </Text>
-              <Text style={styles.csvFormatText}>
-                {t(
-                  "question_text: the question sentence shown to the learner\ncorrect_answer: the answer itself for text_input / true_false, or 1-4 for multiple_choice\nquestion_type: optional. One of:\n  text_input — short free-text answer (learner types the answer)\n  multiple_choice — four options in option_1–4; correct_answer is 1–4\n  true_false — statement is true or false; correct_answer is true or false\noption_1-4: choices for multiple_choice only\nexplanation: explanation shown after answering\ndifficulty: number from 0.0 to 1.0; smaller = easier\ncategory: broad group such as math or geography\nsubcategory1: narrower group inside category\nsubcategory2: even more specific tag or subtopic",
-                  "question_text: 学習者に表示される問題文\ncorrect_answer: 記述式・正誤問題では答えそのもの、多肢選択では正しい選択肢番号 1〜4\nquestion_type: 任意列。次のいずれかを指定\n  text_input — 記述式。学習者が文字で解答する形式\n  multiple_choice — 多肢選択。option_1〜4 に選択肢を並べ、正解は番号 1〜4（correct_answer）\n  true_false — 正誤問題。正解は true または false（correct_answer）\noption_1〜4: 多肢選択問題の選択肢。記述式・正誤問題では空欄でOK\nexplanation: 解答後に表示する解説\ndifficulty: 0.0〜1.0 の数値。小さいほどやさしい\ncategory: 数学・地理などの大きな分類\nsubcategory1: category の中をもう少し細かく分ける分類\nsubcategory2: さらに細かいタグやテーマ"
-                )}
-              </Text>
+              {renderCsvColumnMeanings()}
 
               <Text style={styles.csvFormatSubtitle}>
                 {t("Example", "例")}
@@ -1121,6 +1382,60 @@ export default function TrialCreateScreen() {
                   multiline
                 />
 
+                {/* メディア（音声） */}
+                <Text style={styles.manualFieldLabel}>
+                  {t("Audio (optional)", "音声（任意）")}
+                </Text>
+                <Text style={styles.manualHint}>
+                  {t(
+                    "Attach local audio files to the question or answer side.",
+                    "ローカルの音声ファイルを「問題側」「解答側」に添付できます。"
+                  )}
+                </Text>
+
+                {q.media_urls && q.media_urls.length > 0 ? (
+                  <View style={styles.mediaList}>
+                    {q.media_urls.map((m, mi) => (
+                      <View key={`${mi}_${m.url}`} style={styles.mediaItem}>
+                        <View style={styles.audioTag}>
+                          <Text style={styles.audioTagText}>
+                            {m.position === "question"
+                              ? t("Q", "問")
+                              : t("A", "答")}
+                            {" "}
+                            {m.caption || t("Audio", "音声")}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.deleteBtn}
+                          onPress={() => removeDraftMedia(index, mi)}
+                        >
+                          <Text style={styles.deleteBtnText}>x</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                <View style={styles.mediaButtonRow}>
+                  <TouchableOpacity
+                    style={styles.mediaActionBtn}
+                    onPress={() => attachAudioToDraft(index, "question")}
+                  >
+                    <Text style={styles.mediaActionBtnText}>
+                      {t("Add audio to question", "問題側に音声追加")}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.mediaActionBtn}
+                    onPress={() => attachAudioToDraft(index, "answer")}
+                  >
+                    <Text style={styles.mediaActionBtnText}>
+                      {t("Add audio to answer", "解答側に音声追加")}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
                 <View style={styles.categoryHelpBox}>
                   <Text style={styles.categoryHelpText}>
                     {t(
@@ -1220,13 +1535,13 @@ export default function TrialCreateScreen() {
           </View>
         )}
 
-        {/* ----- Anki Import ----- */}
+        {/* ----- .apkg Import ----- */}
         {inputMode === "anki" && (
           <View>
             <Text style={styles.sectionDesc}>
               {t(
-                "Import an Anki .apkg file. All cards including media will be converted to local questions.",
-                "Ankiの.apkgファイルをインポートします。メディアを含む全カードがローカル問題に変換されます。"
+                "Import a .apkg deck file. All cards including media will be converted to local questions.",
+                ".apkgのデッキファイルをインポートします。メディアを含む全カードがローカル問題に変換されます。"
               )}
             </Text>
 
@@ -1239,7 +1554,9 @@ export default function TrialCreateScreen() {
             {ankiParsing && (
               <View style={styles.progressBox}>
                 <ActivityIndicator color="#8E44AD" size="large" />
-                <Text style={styles.progressText}>{t("Parsing Anki deck...", "Ankiデッキを解析中...")}</Text>
+                <Text style={styles.progressText}>
+                  {t("Parsing .apkg deck...", ".apkgデッキを解析中...")}
+                </Text>
               </View>
             )}
 
@@ -1672,6 +1989,51 @@ const styles = StyleSheet.create({
     color: "#666",
     marginTop: -2,
   },
+  mediaList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+  },
+  mediaItem: { position: "relative" },
+  audioTag: {
+    backgroundColor: "#E8F0FE",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    justifyContent: "center",
+    minHeight: 44,
+  },
+  audioTagText: { fontSize: 12, color: "#1a73e8", fontWeight: "600" },
+  deleteBtn: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#FF3B30",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteBtnText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  mediaButtonRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+  mediaActionBtn: {
+    flexGrow: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#34C759",
+    backgroundColor: "#fff",
+    alignItems: "center",
+  },
+  mediaActionBtnText: { fontSize: 12, color: "#2E7D32", fontWeight: "700" },
   categoryHelpBox: {
     backgroundColor: "#F4F7FB",
     borderRadius: 8,
@@ -1758,6 +2120,32 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: "#fff",
   },
+  underTabsRow: {
+    marginTop: 10,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  underTabsLeft: {
+    flex: 1,
+    alignItems: "flex-start",
+    minHeight: 28,
+    justifyContent: "center",
+  },
+  trialBadgeTextInline: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FF9500",
+    backgroundColor: "#FFF4E5",
+    borderColor: "#FF9500",
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    overflow: "hidden",
+  },
   csvFormatBox: {
     backgroundColor: "#F8F9FA",
     borderRadius: 8,
@@ -1818,7 +2206,6 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   csvFormatCode: {
-    fontFamily: "monospace",
     fontSize: 13,
     color: "#555",
     backgroundColor: "#fff",
@@ -1833,6 +2220,36 @@ const styles = StyleSheet.create({
     color: "#555",
     lineHeight: 21,
     marginBottom: 4,
+  },
+  csvMeaningList: {
+    marginBottom: 6,
+  },
+  csvMeaningItem: {
+    marginBottom: 10,
+  },
+  csvMeaningTitle: {
+    fontSize: 14,
+    color: "#555",
+    lineHeight: 20,
+  },
+  csvMeaningTitleStrong: {
+    fontWeight: "700",
+    color: "#333",
+  },
+  csvMeaningBody: {
+    fontSize: 14,
+    color: "#555",
+    lineHeight: 21,
+    marginTop: 3,
+  },
+  csvMeaningSubList: {
+    marginTop: 6,
+    gap: 4,
+  },
+  csvMeaningSubLine: {
+    fontSize: 13,
+    color: "#555",
+    lineHeight: 20,
   },
   csvFormatNote: {
     fontSize: 13,
@@ -1948,6 +2365,37 @@ const styles = StyleSheet.create({
     color: "#333",
     fontSize: 15,
     fontWeight: "600",
+  },
+  csvBeginnerBtn: {
+    backgroundColor: "#2D9CDB",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    maxWidth: 140,
+  },
+  csvBeginnerBtnText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  csvBeginnerBody: {
+    fontSize: 14,
+    color: "#333",
+    lineHeight: 20,
+    marginBottom: 14,
+  },
+  csvBeginnerCloseBtn: {
+    marginTop: 4,
+    backgroundColor: "#E8E8E8",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  csvBeginnerCloseBtnText: {
+    color: "#333",
+    fontSize: 15,
+    fontWeight: "700",
   },
   aiPreviewModalSummary: {
     fontSize: 14,

@@ -179,7 +179,9 @@ def validate_question_csv(
 
 
 def convert_csv_to_ts(csv_path: Path, var_name: str, ts_basename: str) -> None:
-    content = csv_path.read_text(encoding="utf-8")
+    # Excel 等で保存された UTF-8 BOM を吸収し、改行も LF に正規化する。
+    content = csv_path.read_text(encoding="utf-8-sig")
+    content = content.replace("\r\n", "\n").replace("\r", "\n")
     out = OUTPUT_DIR / f"{ts_basename}CSV.ts"
     body = f"export const {var_name} = `\n{content}`;\n"
     out.write_text(body, encoding="utf-8")
@@ -339,6 +341,7 @@ def main() -> None:
                 "file_name": task["file_name"],
                 "title": task["title"],
                 "description": task["description"],
+                "content_language": task["content_language"],
             }
         )
 

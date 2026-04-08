@@ -89,7 +89,11 @@ async def submit_public_contact(request: Request, body: ContactPublicCreate):
             reply_to=body.email,
         )
         if not result:
-            logger.warning("Contact email sending returned False (public form)")
+            logger.error("Contact email sending returned False (public form)")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="送信に失敗しました。しばらくしてから再度お試しください。",
+            )
     except Exception as e:
         logger.error(f"Failed to send contact email: {e}")
         raise HTTPException(

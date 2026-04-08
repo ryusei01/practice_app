@@ -444,6 +444,11 @@ export default function Home() {
                 <Text style={styles.serviceCardLabel}>
                   {t("Premium Plan", "プレミアムプラン")}
                 </Text>
+                <View style={styles.preparingBadge} nativeID="premium-preparing-badge">
+                  <Text style={styles.preparingBadgeText}>
+                    {t("Preparing", "準備中")}
+                  </Text>
+                </View>
                 <Text style={[styles.serviceCardPrice, styles.serviceCardPricePremium]}>
                   <Text style={styles.serviceCardPriceStruck}>
                     {t("350 JPY / month (list)", "月額350円")}
@@ -455,6 +460,12 @@ export default function Home() {
                   <Text>
                     {t(" or 1,800 JPY / year", " / 年額1,800円")}
                   </Text>
+                </Text>
+                <Text style={styles.serviceCardPreparingNote} nativeID="premium-preparing-note">
+                  {t(
+                    "Premium is not available yet. Please wait a little longer.",
+                    "プレミアムプランは現在準備中です。公開までしばらくお待ちください。"
+                  )}
                 </Text>
                 <Text style={styles.serviceCardPriceMeta}>
                   <Text style={styles.serviceCardPriceStruck}>
@@ -482,8 +493,25 @@ export default function Home() {
                 <Text style={styles.serviceCardLabel}>
                   {t("Question Set Marketplace", "問題集マーケットプレイス")}
                 </Text>
+                <View
+                  style={styles.preparingBadge}
+                  nativeID="marketplace-preparing-badge"
+                >
+                  <Text style={styles.preparingBadgeText}>
+                    {t("Preparing", "準備中")}
+                  </Text>
+                </View>
                 <Text style={styles.serviceCardPrice}>
                   {t("Prices set by sellers", "出品者が価格を設定")}
+                </Text>
+                <Text
+                  style={styles.serviceCardPreparingNote}
+                  nativeID="marketplace-preparing-note"
+                >
+                  {t(
+                    "Marketplace is not available yet. Please wait a little longer.",
+                    "問題集マーケットプレイスは現在準備中です。公開までしばらくお待ちください。"
+                  )}
                 </Text>
                 <Text style={styles.serviceCardDesc}>
                   {t(
@@ -680,6 +708,24 @@ export default function Home() {
                   {t(
                     "Without both sign-in and an active Premium plan, your question sets and progress are stored only on this device. They are not backed up to our servers and cannot be synced to other devices.",
                     "ログインかつ有料プラン加入がない場合、作成した問題集や学習の進捗はこの端末内にだけ保存され、サーバーへバックアップされません。他の端末とは同期されません。"
+                  )}
+                </Text>
+              </View>
+            </View>
+
+            <View style={[styles.infoBox, styles.recommendNoLoginBox]}>
+              <Text style={styles.infoBoxIcon}>ℹ️</Text>
+              <View style={styles.infoBoxContent}>
+                <Text style={styles.infoBoxTitle}>
+                  {t(
+                    "Premium is preparing — we recommend using without sign-in for now",
+                    "有料プラン準備中のため、当面はログインなしでの利用を推奨します"
+                  )}
+                </Text>
+                <Text style={styles.infoBoxText}>
+                  {t(
+                    "Since Premium is not available yet, signing in does not enable cloud sync for your own created question sets. Please treat this mode as device-only, and export important sets to CSV if needed.",
+                    "有料プランは現在準備中のため、ログインしてもご自身で作成した問題集のクラウド同期・バックアップは利用できません。端末内だけの保存としてご利用いただき、必要に応じて大切な問題集はCSVでエクスポートして保管してください。"
                   )}
                 </Text>
               </View>
@@ -1191,6 +1237,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E6C200",
   },
+  recommendNoLoginBox: {
+    backgroundColor: "#F0F7FF",
+    borderWidth: 1,
+    borderColor: "rgba(0, 122, 255, 0.25)",
+  },
   trialWarningListTitle: {
     fontSize: 14,
     fontWeight: "700",
@@ -1390,6 +1441,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#7a5c00",
     marginBottom: 6,
+  },
+  preparingBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255, 149, 0, 0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 149, 0, 0.35)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginBottom: 10,
+  },
+  preparingBadgeText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#B8860B",
+  },
+  serviceCardPreparingNote: {
+    fontSize: 12,
+    color: "#7a5c00",
+    lineHeight: 18,
+    marginBottom: 10,
   },
   serviceCardDesc: {
     fontSize: 13,

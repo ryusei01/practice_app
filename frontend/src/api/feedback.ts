@@ -1,6 +1,11 @@
 import apiClient from './client';
 
-export type FeedbackCategory = 'app_review' | 'feature_request' | 'question_set_feedback';
+export type FeedbackCategory =
+  | 'app_review'
+  | 'feature_request'
+  | 'question_set_feedback'
+  | 'bug_report'
+  | 'complaint';
 
 export interface FeedbackRequest {
   category: FeedbackCategory;
@@ -16,7 +21,9 @@ export interface FeedbackResponse {
 
 export const feedbackApi = {
   submit: async (data: FeedbackRequest): Promise<FeedbackResponse> => {
-    const response = await apiClient.post('/feedback/', data);
+    const response = await apiClient.post('/feedback/', data, {
+      skipGlobalErrorModal: true,
+    });
     return response.data;
   },
 };

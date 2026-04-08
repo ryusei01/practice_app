@@ -17,12 +17,15 @@ interface ModalProps {
   title: string;
   message?: string;
   children?: ReactNode;
+  footer?: ReactNode;
   buttons?: Array<{
     text: string;
     onPress?: () => void;
     style?: "default" | "cancel" | "destructive";
   }>;
   onClose?: () => void;
+  /** Webで背面スクロールを許可したい場合にtrue（ネイティブはRN Modal仕様で背面操作不可） */
+  allowBackgroundScroll?: boolean;
 }
 
 export default function Modal({
@@ -30,94 +33,121 @@ export default function Modal({
   title,
   message,
   children,
+  footer,
   buttons,
   onClose,
+  allowBackgroundScroll = false,
 }: ModalProps) {
   const defaultButtons = buttons || [{ text: "OK", onPress: onClose }];
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 600;
 
-  return (
-    <RNModal
-      visible={visible}
-      transparent={true}
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <View style={styles.overlay}>
+  const content = (
+    <View style={styles.overlay} pointerEvents="box-none">
+      {/* 背面スクロールを許可する場合は backdrop を掴まない */}
+      {!(allowBackgroundScroll && Platform.OS === "web") && (
         <Pressable
           style={StyleSheet.absoluteFillObject}
           onPress={onClose}
           accessibilityLabel="Close"
           accessibilityRole="none"
         />
+      )}
+      <View
+        style={[
+          styles.modalContainer,
+          {
+            width: isSmallScreen ? "95%" : "90%",
+            maxWidth: isSmallScreen ? 400 : 500,
+            zIndex: 1,
+          },
+        ]}
+        pointerEvents="auto"
+      >
         <View
           style={[
-            styles.modalContainer,
+            styles.modalContent,
             {
-              width: isSmallScreen ? "95%" : "90%",
-              maxWidth: isSmallScreen ? 400 : 500,
-              zIndex: 1,
+              padding: isSmallScreen ? 20 : 24,
             },
           ]}
         >
-          <View
-            style={[
-              styles.modalContent,
-              {
-                padding: isSmallScreen ? 20 : 24,
-              },
-            ]}
-          >
+          <View style={styles.titleRow}>
             <Text
               style={[styles.modalTitle, { fontSize: isSmallScreen ? 18 : 20 }]}
             >
               {title}
             </Text>
-
-            <ScrollView
-              style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              {message && <Text style={styles.modalMessage}>{message}</Text>}
-              {children}
-            </ScrollView>
-
-            {!children && (
-              <View style={styles.buttonContainer}>
-                {defaultButtons.map((button, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={[
-                      styles.button,
-                      button.style === "cancel" && styles.cancelButton,
-                      button.style === "destructive" &&
-                        styles.destructiveButton,
-                    ]}
-                    onPress={() => {
-                      button.onPress?.();
-                      onClose?.();
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.buttonText,
-                        button.style === "cancel" && styles.cancelButtonText,
-                        button.style === "destructive" &&
-                          styles.destructiveButtonText,
-                      ]}
-                    >
-                      {button.text}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+            {(allowBackgroundScroll && Platform.OS === "web") && (
+              <TouchableOpacity
+                onPress={onClose}
+                style={styles.closeButton}
+                accessibilityLabel="Close"
+              >
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
             )}
           </View>
+
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {message && <Text style={styles.modalMessage}>{message}</Text>}
+            {children}
+          </ScrollView>
+
+          {footer ? <View style={styles.footer}>{footer}</View> : null}
+
+          {!children && (
+            <View style={styles.buttonContainer}>
+              {defaultButtons.map((button, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.button,
+                    button.style === "cancel" && styles.cancelButton,
+                    button.style === "destructive" && styles.destructiveButton,
+                  ]}
+                  onPress={() => {
+                    button.onPress?.();
+                    onClose?.();
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.buttonText,
+                      button.style === "cancel" && styles.cancelButtonText,
+                      button.style === "destructive" &&
+                        styles.destructiveButtonText,
+                    ]}
+                  >
+                    {button.text}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
       </View>
-    </RNModal>
+    </View>
+  );
+
+  return (
+    (allowBackgroundScroll && Platform.OS === "web") ? (
+      // Web: RN Modal を使わず、背面スクロールを許可する
+      visible ? content : null
+    ) : (
+      <RNModal
+        visible={visible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={onClose}
+      >
+        {content}
+      </RNModal>
+    )
   );
 }
 
@@ -168,6 +198,27 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: "center",
   },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  closeButton: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f0f0f0",
+  },
+  closeButtonText: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#333",
+  },
   modalMessage: {
     fontSize: 16,
     color: "#666",
@@ -181,6 +232,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     alignItems: "stretch",
     width: "100%",
+  },
+  footer: {
+    marginTop: 12,
   },
   buttonContainer: {
     flexDirection: "row",

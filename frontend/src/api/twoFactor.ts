@@ -17,7 +17,9 @@ export interface Enable2FAResponse {
  * 2FA有効状態を取得
  */
 export const getTwoFactorStatus = async (): Promise<TwoFactorStatus> => {
-  const response = await apiClient.get<TwoFactorStatus>("/2fa/status");
+  const response = await apiClient.get<TwoFactorStatus>("/2fa/status", {
+    skipGlobalErrorModal: true,
+  });
   return response.data;
 };
 
@@ -25,7 +27,9 @@ export const getTwoFactorStatus = async (): Promise<TwoFactorStatus> => {
  * 2FAを有効化
  */
 export const enableTwoFactor = async (): Promise<Enable2FAResponse> => {
-  const response = await apiClient.post<Enable2FAResponse>("/2fa/enable");
+  const response = await apiClient.post<Enable2FAResponse>("/2fa/enable", undefined, {
+    skipGlobalErrorModal: true,
+  });
   return response.data;
 };
 
@@ -33,7 +37,11 @@ export const enableTwoFactor = async (): Promise<Enable2FAResponse> => {
  * 2FAを無効化
  */
 export const disableTwoFactor = async (password: string): Promise<{ message: string }> => {
-  const response = await apiClient.post("/2fa/disable", { password });
+  const response = await apiClient.post(
+    "/2fa/disable",
+    { password },
+    { skipGlobalErrorModal: true }
+  );
   return response.data;
 };
 
@@ -41,7 +49,9 @@ export const disableTwoFactor = async (password: string): Promise<{ message: str
  * OTPコードを送信
  */
 export const sendOTPCode = async (): Promise<{ message: string }> => {
-  const response = await apiClient.post("/2fa/send-otp");
+  const response = await apiClient.post("/2fa/send-otp", undefined, {
+    skipGlobalErrorModal: true,
+  });
   return response.data;
 };
 
@@ -49,7 +59,11 @@ export const sendOTPCode = async (): Promise<{ message: string }> => {
  * OTPコードを検証
  */
 export const verifyOTPCode = async (code: string): Promise<{ message: string }> => {
-  const response = await apiClient.post("/2fa/verify-otp", { code });
+  const response = await apiClient.post(
+    "/2fa/verify-otp",
+    { code },
+    { skipGlobalErrorModal: true }
+  );
   return response.data;
 };
 
@@ -57,6 +71,10 @@ export const verifyOTPCode = async (code: string): Promise<{ message: string }> 
  * バックアップコードを検証
  */
 export const verifyBackupCode = async (code: string): Promise<{ message: string }> => {
-  const response = await apiClient.post("/2fa/verify-backup-code", { code });
+  const response = await apiClient.post(
+    "/2fa/verify-backup-code",
+    { code },
+    { skipGlobalErrorModal: true }
+  );
   return response.data;
 };

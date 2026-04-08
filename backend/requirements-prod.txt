@@ -39,5 +39,8 @@ pydantic-settings==2.13.1
 httpx==0.28.1
 redis>=5.0.0
 
+# PDF export
+reportlab==4.4.4
+
 # NOTE: sentence-transformers, scikit-learn, lightgbm, pandas, joblib は
 # 開発環境 (requirements.txt) のみ。本番では ENABLE_ML=false で ML機能を無効化。

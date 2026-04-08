@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { tokenStorage } from '../utils/secureStorage';
 
 export type ContentLanguage = 'ja' | 'en';
 
@@ -217,6 +218,55 @@ export const questionSetsApi = {
       responseType: 'text',
     });
     return response.data;
+  },
+
+  getExportPdfRequest: async (
+    id: string,
+    opts?: { includeAnswers?: boolean; questionNumbers?: string }
+  ): Promise<{ url: string; headers: Record<string, string> }> => {
+    const token = await tokenStorage.getAccessToken();
+    const baseURL = (apiClient.defaults.baseURL || '').replace(/\/+$/, '');
+    const params = new URLSearchParams();
+    if (opts?.includeAnswers !== undefined) {
+      params.set("include_answers", opts.includeAnswers ? "true" : "false");
+    }
+    if (opts?.questionNumbers && opts.questionNumbers.trim()) {
+      params.set("question_numbers", opts.questionNumbers.trim());
+    }
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    const url = `${baseURL}/question-sets/${id}/export-pdf${qs}`;
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    return { url, headers };
+  },
+
+  renderPdfFromPayload: async (
+    payload: {
+      title: string;
+      description?: string | null;
+      questions: Array<{
+        question_text: string;
+        question_type: string;
+        options?: string[] | null;
+        correct_answer?: string | null;
+        explanation?: string | null;
+      }>;
+    },
+    opts?: { includeAnswers?: boolean; skipGlobalErrorModal?: boolean }
+  ): Promise<ArrayBuffer> => {
+    const include = opts?.includeAnswers;
+    const qs =
+      include === undefined
+        ? ""
+        : `?include_answers=${include ? "true" : "false"}`;
+    const res = await apiClient.post(`/question-sets/render-pdf${qs}`, payload, {
+      ...(opts?.skipGlobalErrorModal ? { skipGlobalErrorModal: true } : {}),
+      responseType: "arraybuffer",
+      headers: { "Content-Type": "application/json" },
+    });
+    return res.data as ArrayBuffer;
   },
 
   importAnki: async (file: { uri: string; name: string; type: string }): Promise<{ message: string; question_set_id: string; title: string; total_questions: number }> => {

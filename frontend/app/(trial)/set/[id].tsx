@@ -15,6 +15,7 @@ import {
   TextInput,
   ScrollView,
   Alert,
+  Platform,
 } from "react-native";
 import {
   useRouter,
@@ -26,6 +27,8 @@ import {
 import { CommonActions, type NavigationState } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLanguage } from "../../../src/contexts/LanguageContext";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import {
   localStorageService,
   LocalQuestionSet,
@@ -40,6 +43,8 @@ import Header from "../../../src/components/Header";
 import Modal from "../../../src/components/Modal";
 import { commonStyles } from "../../../src/styles/questionSetDetailStyles";
 import { contentLanguagesDisplayLabel } from "../../../src/api/questionSets";
+import { questionSetsApi } from "../../../src/api/questionSets";
+import { bytesToBase64 } from "../../../src/utils/base64";
 import aiService from "../../../src/services/aiService";
 import { srsService, SRSMap } from "../../../src/services/srsService";
 
@@ -197,6 +202,251 @@ export default function TrialSetDetailScreen() {
   const showErrorModal = (title: string, message: string) => {
     setErrorModalConfig({ title, message });
     setErrorModalVisible(true);
+  };
+
+  const isDefaultSet = String(id || "").startsWith("default_");
+
+  const handleDeleteQuestion = (questionId: string) => {
+    Alert.alert(
+      t("Delete Question", "問題を削除"),
+      t(
+        "Are you sure you want to delete this question?",
+        "この問題を削除してよろしいですか？"
+      ),
+      [
+        { text: t("Cancel", "キャンセル"), style: "cancel" },
+        {
+          text: t("Delete", "削除"),
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await localStorageService.deleteQuestionFromTrialSet(
+                String(id),
+                questionId
+              );
+              await loadData();
+            } catch (e) {
+              console.error("Failed to delete question:", e);
+              showErrorModal(
+                t("Error", "エラー"),
+                t("Failed to delete question", "問題の削除に失敗しました")
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // PDF export panel (trial)
+  const [pdfExportModalVisible, setPdfExportModalVisible] = useState(false);
+  const [pdfIncludeAnswers, setPdfIncludeAnswers] = useState(true);
+  const [pdfQuestionNumbers, setPdfQuestionNumbers] = useState("");
+  const [pdfSelectedNumbers, setPdfSelectedNumbers] = useState<number[]>([]);
+
+  const handleExportTrialPDF = async (includeAnswers: boolean) => {
+    if (!questionSet) return;
+    try {
+      const safeTitle =
+        (questionSet.title || "trial_set")
+          .replace(/[^\w\s-]/g, "")
+          .trim() || "trial_set";
+      const suffix = includeAnswers ? "" : "_no_answers";
+      const filename = `${safeTitle}${suffix}.pdf`;
+
+      const payload = {
+        title: questionSet.title || "export",
+        description: questionSet.description || null,
+        questions: (questionSet.questions || []).map((q) => ({
+          question_text: q.question || "",
+          question_type:
+            q.question_type ||
+            (q.options && q.options.length > 0
+              ? "multiple_choice"
+              : q.answer?.trim().toLowerCase() === "true" ||
+                  q.answer?.trim().toLowerCase() === "false"
+                ? "true_false"
+                : "text_input"),
+          options: q.options || null,
+          correct_answer: q.answer || null,
+          explanation: (q as any)?.explanation || null,
+        })),
+      };
+
+      const ab = await questionSetsApi.renderPdfFromPayload(payload, {
+        includeAnswers,
+        skipGlobalErrorModal: true,
+      });
+
+      if (Platform.OS === "web") {
+        const blob = new Blob([ab], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      const bytes = new Uint8Array(ab);
+      const base64 = bytesToBase64(bytes);
+      // expo-file-system の型定義が環境によって揺れるため、実体に寄せて扱う
+      const fsAny = FileSystem as any;
+      const targetUri =
+        (fsAny.documentDirectory || fsAny.cacheDirectory || "") + filename;
+      await fsAny.writeAsStringAsync(targetUri, base64, {
+        encoding: fsAny.EncodingType?.Base64 ?? "base64",
+      });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(targetUri, {
+          mimeType: "application/pdf",
+          dialogTitle: t("Download PDF", "PDFをダウンロード"),
+        });
+      } else {
+        Alert.alert(t("Saved", "保存しました"), targetUri);
+      }
+    } catch (error) {
+      console.error("Failed to export trial PDF:", error);
+      showErrorModal(
+        t("Error", "エラー"),
+        t("Failed to export PDF", "PDFの書き出しに失敗しました")
+      );
+    }
+  };
+
+  const formatNumbersSpec = (nums: number[]): string => {
+    const xs = Array.from(new Set(nums.filter((n) => Number.isFinite(n) && n > 0)))
+      .sort((a, b) => a - b);
+    if (xs.length === 0) return "";
+    const parts: string[] = [];
+    let start = xs[0];
+    let prev = xs[0];
+    for (let i = 1; i < xs.length; i++) {
+      const cur = xs[i];
+      if (cur === prev + 1) {
+        prev = cur;
+        continue;
+      }
+      parts.push(start === prev ? `${start}` : `${start}-${prev}`);
+      start = prev = cur;
+    }
+    parts.push(start === prev ? `${start}` : `${start}-${prev}`);
+    return parts.join(",");
+  };
+
+  const openPdfExportModal = () => {
+    setPdfExportModalVisible((v) => !v);
+    if (!pdfExportModalVisible) {
+      setPdfIncludeAnswers(true);
+      setPdfQuestionNumbers("");
+      setPdfSelectedNumbers([]);
+    }
+  };
+
+  const parseNumbersSpec = (spec: string): number[] => {
+    const out = new Set<number>();
+    const raw = (spec || "").trim();
+    if (!raw) return [];
+    for (const part of raw.split(",")) {
+      const p = part.trim();
+      if (!p) continue;
+      if (p.includes("-")) {
+        const [a, b] = p.split("-", 2).map((x) => x.trim());
+        const s = parseInt(a, 10);
+        const e = parseInt(b, 10);
+        if (!Number.isFinite(s) || !Number.isFinite(e) || s <= 0 || e <= 0) continue;
+        const lo = Math.min(s, e);
+        const hi = Math.max(s, e);
+        for (let i = lo; i <= hi; i++) out.add(i);
+      } else {
+        const n = parseInt(p, 10);
+        if (Number.isFinite(n) && n > 0) out.add(n);
+      }
+    }
+    return Array.from(out).sort((a, b) => a - b);
+  };
+
+  const handleExportTrialPDFWithModal = async () => {
+    if (!questionSet) return;
+    const picked =
+      pdfSelectedNumbers.length ? pdfSelectedNumbers : parseNumbersSpec(pdfQuestionNumbers);
+    const questions = picked.length
+      ? picked
+          .map((n) => questionSet.questions[n - 1])
+          .filter(Boolean)
+      : questionSet.questions;
+    const tmpSet: LocalQuestionSet = { ...questionSet, questions };
+    // reuse existing generator by temporarily calling with includeAnswers value
+    // (function reads from questionSet state, so call internal logic inline)
+    try {
+      const safeTitle =
+        (tmpSet.title || "trial_set").replace(/[^\w\s-]/g, "").trim() || "trial_set";
+      const suffix = pdfIncludeAnswers ? "" : "_no_answers";
+      const filename = `${safeTitle}${suffix}.pdf`;
+
+      const payload = {
+        title: tmpSet.title || "export",
+        description: tmpSet.description || null,
+        questions: (tmpSet.questions || []).map((q) => ({
+          question_text: q.question || "",
+          question_type:
+            q.question_type ||
+            (q.options && q.options.length > 0
+              ? "multiple_choice"
+              : q.answer?.trim().toLowerCase() === "true" ||
+                  q.answer?.trim().toLowerCase() === "false"
+                ? "true_false"
+                : "text_input"),
+          options: q.options || null,
+          correct_answer: q.answer || null,
+          explanation: (q as any)?.explanation || null,
+        })),
+      };
+
+      const ab = await questionSetsApi.renderPdfFromPayload(payload, {
+        includeAnswers: pdfIncludeAnswers,
+        skipGlobalErrorModal: true,
+      });
+
+      if (Platform.OS === "web") {
+        const blob = new Blob([ab], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        setPdfExportModalVisible(false);
+        return;
+      }
+
+      const bytes = new Uint8Array(ab);
+      const base64 = bytesToBase64(bytes);
+      const fsAny = FileSystem as any;
+      const targetUri =
+        (fsAny.documentDirectory || fsAny.cacheDirectory || "") + filename;
+      await fsAny.writeAsStringAsync(targetUri, base64, {
+        encoding: fsAny.EncodingType?.Base64 ?? "base64",
+      });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(targetUri, {
+          mimeType: "application/pdf",
+          dialogTitle: t("Download PDF", "PDFをダウンロード"),
+        });
+      } else {
+        Alert.alert(t("Saved", "保存しました"), targetUri);
+      }
+      setPdfExportModalVisible(false);
+    } catch (error) {
+      console.error("Failed to export trial PDF:", error);
+      showErrorModal(
+        t("Error", "エラー"),
+        t("Failed to export PDF", "PDFの書き出しに失敗しました")
+      );
+    }
   };
 
   const loadAvailableTextbooks = async () => {
@@ -730,6 +980,14 @@ export default function TrialSetDetailScreen() {
           >
             Q{index + 1}
           </Text>
+          {!isDefaultSet && (
+            <TouchableOpacity
+              onPress={() => handleDeleteQuestion(item.id)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.deleteText}>{t("Delete", "削除")}</Text>
+            </TouchableOpacity>
+          )}
           {item.difficulty && (
             <Text
               style={styles.difficulty}
@@ -860,6 +1118,13 @@ export default function TrialSetDetailScreen() {
             )}
           </Text>
           <View style={styles.titleBadges} nativeID="trial-title-badges">
+            <TouchableOpacity
+              style={styles.pdfHeaderButton}
+              onPress={openPdfExportModal}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.pdfHeaderButtonText}>⤓ 🧾 PDF</Text>
+            </TouchableOpacity>
             <View style={styles.langBadge} nativeID="trial-lang-badge">
               <Text style={styles.langBadgeText} nativeID="trial-lang-badge-text">
                 {contentLanguagesDisplayLabel(
@@ -876,6 +1141,140 @@ export default function TrialSetDetailScreen() {
             </View>
           </View>
         </View>
+        {pdfExportModalVisible && (
+          <View style={styles.pdfHeaderInlinePanel}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={styles.pdfHeaderInlinePanelScroll}
+              contentContainerStyle={styles.pdfHeaderInlinePanelContent}
+            >
+              <View style={styles.pdfHeaderInlineRow}>
+                <Text style={styles.pdfHeaderInlineTitle}>
+                  {t("PDF Export", "PDF書き出し")}
+                </Text>
+                <TouchableOpacity
+                  style={styles.pdfHeaderInlineClose}
+                  onPress={() => setPdfExportModalVisible(false)}
+                >
+                  <Text style={styles.pdfHeaderInlineCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.pdfExportLabel}>{t("Answers", "解答")}</Text>
+              <View style={styles.pdfExportToggleRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.pdfExportToggle,
+                    pdfIncludeAnswers && styles.pdfExportToggleActive,
+                  ]}
+                  onPress={() => setPdfIncludeAnswers(true)}
+                >
+                  <Text
+                    style={[
+                      styles.pdfExportToggleText,
+                      pdfIncludeAnswers && styles.pdfExportToggleTextActive,
+                    ]}
+                  >
+                    {t("Include", "あり")}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.pdfExportToggle,
+                    !pdfIncludeAnswers && styles.pdfExportToggleActive,
+                  ]}
+                  onPress={() => setPdfIncludeAnswers(false)}
+                >
+                  <Text
+                    style={[
+                      styles.pdfExportToggleText,
+                      !pdfIncludeAnswers && styles.pdfExportToggleTextActive,
+                    ]}
+                  >
+                    {t("Exclude", "なし")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.pdfInlineLabelRow}>
+                <Text style={styles.pdfExportLabel}>
+                  {t("Question numbers", "問題番号")}
+                </Text>
+                <TouchableOpacity
+                  style={styles.pdfInlineClearButton}
+                  onPress={() => {
+                    setPdfSelectedNumbers([]);
+                    setPdfQuestionNumbers("");
+                  }}
+                >
+                  <Text style={styles.pdfInlineClearButtonText}>
+                    {t("Clear", "クリア")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                style={styles.pdfExportInput}
+                value={
+                  pdfSelectedNumbers.length
+                    ? formatNumbersSpec(pdfSelectedNumbers)
+                    : pdfQuestionNumbers
+                }
+                onChangeText={(v) => {
+                  setPdfQuestionNumbers(v);
+                  const parsed = parseNumbersSpec(v).filter(
+                    (n) => n >= 1 && n <= questionSet.questions.length
+                  );
+                  setPdfSelectedNumbers(parsed);
+                }}
+                placeholder={t('Example: "1-9,12,14"', '例: "1-9,12,14"')}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              <Text style={styles.pdfExportLabel}>{t("Pick questions", "問題を選択")}</Text>
+              <View style={styles.pdfQuestionList}>
+                {questionSet.questions.map((q, idx) => {
+                  const n = idx + 1;
+                  const selected = pdfSelectedNumbers.includes(n);
+                  return (
+                    <TouchableOpacity
+                      key={q.id || String(idx)}
+                      style={styles.pdfQuestionItem}
+                      onPress={() => {
+                        const next = new Set(pdfSelectedNumbers);
+                        if (next.has(n)) next.delete(n);
+                        else next.add(n);
+                        const arr = Array.from(next).sort((a, b) => a - b);
+                        setPdfSelectedNumbers(arr);
+                        setPdfQuestionNumbers(formatNumbersSpec(arr));
+                      }}
+                    >
+                      <Text style={styles.pdfQuestionItemText}>
+                        {selected ? "☑" : "☐"} Q{n}
+                      </Text>
+                      <Text style={styles.pdfQuestionItemSub} numberOfLines={1}>
+                        {q.question}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+            </ScrollView>
+            <View style={styles.pdfHeaderInlineFooter}>
+              <TouchableOpacity
+                style={[styles.pdfExportConfirmButton, styles.pdfHeaderInlineFooterButton]}
+                onPress={handleExportTrialPDFWithModal}
+                disabled={questionSet.questions.length === 0}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.pdfExportConfirmText}>
+                  ⤓ {t("Download PDF", "PDFをダウンロード")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         <View style={styles.descriptionRow} nativeID="description-row">
           {/* カテゴリリンク（問題番号順表示中は非表示） */}
@@ -950,7 +1349,6 @@ export default function TrialSetDetailScreen() {
                 m === "category" ? "questionNumber" : "category"
               )
             }
-            nativeID="list-order-toggle-button"
           >
             <Text
               style={styles.listOrderToggleText}
@@ -1779,6 +2177,8 @@ export default function TrialSetDetailScreen() {
         ]}
         onClose={() => setErrorModalVisible(false)}
       />
+
+      {/* ダウンロードはパネル内の下部に固定 */}
     </View>
   );
 }
@@ -1851,6 +2251,19 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     marginTop: 6,
   },
+  pdfHeaderButton: {
+    borderRadius: 999,
+    backgroundColor: "#FF2D55",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pdfHeaderButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "900",
+  },
   langBadge: {
     backgroundColor: "#5856D6",
     borderRadius: 4,
@@ -1895,6 +2308,11 @@ const styles = StyleSheet.create({
   difficulty: {
     fontSize: 14,
     color: "#666",
+  },
+  deleteText: {
+    fontSize: 14,
+    color: "#FF3B30",
+    fontWeight: "600",
   },
   questionStatsContainer: {
     flexDirection: "row",
@@ -2215,6 +2633,172 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     fontWeight: "600",
+  },
+  pdfExportModalContent: {
+    padding: 4,
+  },
+  pdfExportLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 6,
+    marginTop: 10,
+  },
+  pdfExportToggleRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  pdfExportToggle: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#FF2D55",
+    paddingVertical: 10,
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
+  pdfExportToggleActive: {
+    backgroundColor: "#FF2D55",
+  },
+  pdfExportToggleText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#FF2D55",
+  },
+  pdfExportToggleTextActive: {
+    color: "#fff",
+  },
+  pdfExportInput: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 15,
+    backgroundColor: "#fff",
+  },
+  pdfExportHint: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#666",
+    lineHeight: 18,
+  },
+  pdfExportActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+    marginTop: 18,
+  },
+  pdfExportCancelButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  pdfExportCancelText: {
+    color: "#666",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  pdfExportConfirmButton: {
+    backgroundColor: "#FF2D55",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+    minWidth: 120,
+    alignItems: "center",
+  },
+  pdfExportConfirmText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  pdfHeaderInlinePanel: {
+    marginTop: 10,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    padding: 12,
+  },
+  pdfHeaderInlinePanelScroll: {
+    maxHeight: 360,
+  },
+  pdfHeaderInlinePanelContent: {
+    paddingBottom: 10,
+  },
+  pdfHeaderInlineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  pdfHeaderInlineFooter: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+  },
+  pdfHeaderInlineFooterButton: {
+    width: "100%",
+  },
+  pdfHeaderInlineTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  pdfHeaderInlineClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#f3f4f6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pdfHeaderInlineCloseText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  pdfInlineLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+  },
+  pdfInlineClearButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#f3f4f6",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  pdfInlineClearButtonText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  pdfQuestionList: {
+    marginTop: 6,
+    gap: 8,
+  },
+  pdfQuestionItem: {
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 10,
+    padding: 10,
+    backgroundColor: "#fff",
+  },
+  pdfQuestionItemText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  pdfQuestionItemSub: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#6b7280",
   },
   addQuestionModalContent: {
     padding: 16,

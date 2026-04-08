@@ -45,7 +45,7 @@ export default {
       ],
     ],
     extra: {
-      apiUrl: process.env.EXPO_PUBLIC_API_URL || "http://localhost:8003/api/v1",
+      apiUrl: process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8004/api/v1",
     },
   },
 };

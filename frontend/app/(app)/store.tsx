@@ -21,6 +21,8 @@ import { useLanguage } from "../../src/contexts/LanguageContext";
 import AdBanner from "../../src/components/AdBanner";
 import Header from "../../src/components/Header";
 
+const isDev = process.env.NODE_ENV === "development" || __DEV__;
+
 export default function StoreScreen() {
   const [questionSets, setQuestionSets] = useState<QuestionSet[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -31,6 +33,12 @@ export default function StoreScreen() {
   const { t } = useLanguage();
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 600;
+
+  // 本番ではモックのストア画面自体を出さない（深いリンク等の直アクセスも含む）
+  useEffect(() => {
+    if (isDev) return;
+    router.replace("/(app)/dashboard");
+  }, [router]);
 
   const loadPublishedSets = useCallback(async () => {
     try {
@@ -45,6 +53,7 @@ export default function StoreScreen() {
   }, []);
 
   useEffect(() => {
+    if (!isDev) return;
     loadPublishedSets();
   }, [loadPublishedSets]);
 
@@ -60,6 +69,10 @@ export default function StoreScreen() {
   const filteredSets = selectedCategory
     ? questionSets.filter((qs) => qs.category === selectedCategory)
     : questionSets;
+
+  if (!isDev) {
+    return null;
+  }
 
   if (isLoading) {
     return (

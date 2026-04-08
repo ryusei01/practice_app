@@ -23,16 +23,27 @@ async def lifespan(app: FastAPI):
     """アプリケーションのライフサイクル管理"""
     try:
         import app.api.ai as _ai_api
+        import app.api.question_sets as _qs_api
         _paths = app.openapi().get("paths") or {}
         _gen_ok = "/api/v1/ai/generate-from-text" in _paths
+        _render_pdf_ok = "/api/v1/question-sets/render-pdf" in _paths
         _uvicorn_log.info(
             "AI: app.api.ai=%s | OpenAPI POST /api/v1/ai/generate-from-text=%s",
             getattr(_ai_api, "__file__", "?"),
             _gen_ok,
         )
+        _uvicorn_log.info(
+            "QuestionSets: app.api.question_sets=%s | OpenAPI POST /api/v1/question-sets/render-pdf=%s",
+            getattr(_qs_api, "__file__", "?"),
+            _render_pdf_ok,
+        )
         if not _gen_ok:
             _uvicorn_log.warning(
                 "LLM の /generate-from-text が未登録です。別フォルダの backend を起動していないか確認してください。"
+            )
+        if not _render_pdf_ok:
+            _uvicorn_log.warning(
+                "QuestionSets の /render-pdf が未登録です。別フォルダの backend を起動していないか、またはサーバーが古いコードのままか確認してください。"
             )
     except Exception:
         _logger.exception("Failed to verify AI / LLM routes in OpenAPI")
@@ -131,11 +142,15 @@ async def health():
 # APIルーターを追加
 from .api.contact import router as contact_router
 from .api import ai_router, answers_router, auth_router, feedback_router, question_sets_router, questions_router, payments_router, admin_router, two_factor_router, translate_router, textbooks_router, reports_router, subscriptions_router
+from .api.ai_llm import router as ai_llm_router
+from .api.question_sets_render_pdf import router as question_sets_render_pdf_router
 
 app.include_router(auth_router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
+app.include_router(question_sets_render_pdf_router, prefix=f"{settings.API_V1_STR}/question-sets", tags=["question-sets"])
 app.include_router(question_sets_router, prefix=f"{settings.API_V1_STR}/question-sets", tags=["question-sets"])
 app.include_router(questions_router, prefix=f"{settings.API_V1_STR}/questions", tags=["questions"])
 app.include_router(ai_router, prefix=f"{settings.API_V1_STR}/ai", tags=["ai"])
+app.include_router(ai_llm_router, prefix=f"{settings.API_V1_STR}/ai", tags=["ai"])
 app.include_router(answers_router, prefix=f"{settings.API_V1_STR}/answers", tags=["answers"])
 app.include_router(payments_router, prefix=f"{settings.API_V1_STR}/payments", tags=["payments"])
 app.include_router(admin_router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])

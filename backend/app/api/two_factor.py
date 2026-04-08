@@ -56,14 +56,23 @@ async def enable_two_factor_auth(
     current_user.backup_codes = hashed_codes
     db.commit()
 
-    send_backup_codes_email(
+    email_sent = send_backup_codes_email(
         current_user.email,
         backup_codes,
         current_user.username
     )
 
+    message = "2段階認証が有効化されました。バックアップコードをメールで送信しました。"
+    if not email_sent:
+        # バックアップコードはレスポンスにも含めて返すため、ユーザーが保存できるようにする。
+        # ただし「送れていない」ことは明示して、黙って成功扱いにしない。
+        message = (
+            "2段階認証が有効化されましたが、バックアップコードのメール送信に失敗しました。"
+            "この画面に表示されるバックアップコードを必ず安全な場所に保存してください。"
+        )
+
     return Enable2FAResponse(
-        message="2段階認証が有効化されました。バックアップコードをメールで送信しました。",
+        message=message,
         backup_codes=backup_codes
     )
 

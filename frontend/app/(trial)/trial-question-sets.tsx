@@ -491,7 +491,7 @@ export default function TrialQuestionSetsScreen() {
     const isDefaultSet = item.id.startsWith("default_");
 
     return (
-      <View
+      <TouchableOpacity
         style={[
           styles.card,
           {
@@ -500,12 +500,11 @@ export default function TrialQuestionSetsScreen() {
           },
         ]}
         nativeID={`trial-card-${item.id}`}
+        onPress={() => router.push(`/(trial)/set/${item.id}`)}
+        testID={`trial-card-button-${item.id}`}
+        activeOpacity={0.85}
       >
-        <TouchableOpacity
-          style={styles.cardContent}
-          onPress={() => router.push(`/(trial)/set/${item.id}`)}
-          testID={`trial-card-button-${item.id}`}
-        >
+        <View style={styles.cardContent}>
           <Text
             style={[styles.cardTitle, { fontSize: isSmallScreen ? 16 : 18 }]}
             nativeID={`trial-title-${item.id}`}
@@ -556,7 +555,7 @@ export default function TrialQuestionSetsScreen() {
               </View>
             )}
           </View>
-        </TouchableOpacity>
+        </View>
         <View style={styles.cardActions}>
           {item.questions.length > 0 && (
             <TouchableOpacity
@@ -565,7 +564,7 @@ export default function TrialQuestionSetsScreen() {
               testID={`trial-csv-export-btn-${item.id}`}
             >
               <Text style={styles.csvExportBadgeText}>
-                {t("CSV", "CSV")}
+                ⤓ {t("CSV", "CSV")}
               </Text>
             </TouchableOpacity>
           )}
@@ -584,7 +583,7 @@ export default function TrialQuestionSetsScreen() {
             </TouchableOpacity>
           )}
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -664,6 +663,7 @@ export default function TrialQuestionSetsScreen() {
             : t("Trial Question Sets", "お試し問題セット")
         }
         showLanguageSwitcher
+        compact
       />
       <ScrollView
         ref={scrollViewRef}

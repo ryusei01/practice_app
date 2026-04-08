@@ -17,6 +17,7 @@ from ..core.database import get_db
 from ..core.auth import get_current_active_user
 from ..core.config import settings
 from ..models import User, Question, QuestionSet, Answer
+from ..utils.csv_injection import sanitize_csv_cell
 
 _CSV_ALLOWED_MEDIA = frozenset({"text/csv", "application/csv", "text/plain"})
 
@@ -189,15 +190,15 @@ async def create_question(
     new_question = Question(
         id=str(uuid.uuid4()),
         question_set_id=request.question_set_id,
-        question_text=request.question_text,
-        question_type=request.question_type,
-        options=request.options,
+        question_text=sanitize_csv_cell(request.question_text),
+        question_type=sanitize_csv_cell(request.question_type),
+        options=[sanitize_csv_cell(x) for x in request.options] if request.options else None,
         correct_answer=normalized_correct_answer,
-        explanation=request.explanation,
+        explanation=sanitize_csv_cell(request.explanation),
         difficulty=request.difficulty,
-        category=request.category,
-        subcategory1=request.subcategory1,
-        subcategory2=request.subcategory2,
+        category=sanitize_csv_cell(request.category),
+        subcategory1=sanitize_csv_cell(request.subcategory1),
+        subcategory2=sanitize_csv_cell(request.subcategory2),
         order=request.order
     )
 
@@ -345,11 +346,11 @@ async def update_question(
 
     # 更新処理
     if request.question_text is not None:
-        question.question_text = request.question_text
+        question.question_text = sanitize_csv_cell(request.question_text)
     if request.question_type is not None:
-        question.question_type = request.question_type
+        question.question_type = sanitize_csv_cell(request.question_type)
     if request.options is not None:
-        question.options = request.options
+        question.options = [sanitize_csv_cell(x) for x in request.options] if request.options else None
     next_question_type = request.question_type or question.question_type
     next_options = request.options if request.options is not None else question.options
     if request.correct_answer is not None:
@@ -367,15 +368,15 @@ async def update_question(
         else:
             question.correct_answer = request.correct_answer
     if request.explanation is not None:
-        question.explanation = request.explanation
+        question.explanation = sanitize_csv_cell(request.explanation)
     if request.difficulty is not None:
         question.difficulty = request.difficulty
     if request.category is not None:
-        question.category = request.category
+        question.category = sanitize_csv_cell(request.category)
     if request.subcategory1 is not None:
-        question.subcategory1 = request.subcategory1
+        question.subcategory1 = sanitize_csv_cell(request.subcategory1)
     if request.subcategory2 is not None:
-        question.subcategory2 = request.subcategory2
+        question.subcategory2 = sanitize_csv_cell(request.subcategory2)
     if request.order is not None:
         question.order = request.order
 
@@ -628,15 +629,15 @@ async def bulk_upload_questions(
                 new_question = Question(
                     id=str(uuid.uuid4()),
                     question_set_id=question_set_id,
-                    question_text=row['question_text'].strip(),
+                    question_text=sanitize_csv_cell(row['question_text'].strip()),
                     question_type=question_type,
-                    options=options,
+                    options=[sanitize_csv_cell(x) for x in options] if options else None,
                     correct_answer=normalized_correct_answer,
-                    explanation=row.get('explanation', '').strip() or None,
+                    explanation=sanitize_csv_cell(row.get('explanation', '').strip() or None),
                     difficulty=difficulty,
-                    category=row.get('category', '').strip() or None,
-                    subcategory1=row.get('subcategory1', '').strip() or None,
-                    subcategory2=row.get('subcategory2', '').strip() or None,
+                    category=sanitize_csv_cell(row.get('category', '').strip() or None),
+                    subcategory1=sanitize_csv_cell(row.get('subcategory1', '').strip() or None),
+                    subcategory2=sanitize_csv_cell(row.get('subcategory2', '').strip() or None),
                     order=len(created_questions)
                 )
 

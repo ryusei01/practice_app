@@ -287,7 +287,7 @@ export default function MyPageScreen() {
   if (authLoading || (isLoading && !isRefreshing)) {
     return (
       <View style={styles.wrapper}>
-        <Header title={t("My Profile", "マイページ")} />
+        <Header title={t("My Profile", "マイページ")} compact />
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#007AFF" />
         </View>
@@ -302,7 +302,7 @@ export default function MyPageScreen() {
   if (!userInfo) {
     return (
       <View style={styles.wrapper}>
-        <Header title={t("My Profile", "マイページ")} />
+        <Header title={t("My Profile", "マイページ")} compact />
         <View style={styles.centerContainer}>
           <Text style={styles.emptyText}>
             {t("User not found", "ユーザーが見つかりません")}
@@ -314,7 +314,7 @@ export default function MyPageScreen() {
 
   return (
     <View style={styles.wrapper}>
-      <Header title={t("My Profile", "マイページ")} />
+      <Header title={t("My Profile", "マイページ")} compact />
       <ScrollView
         style={styles.container}
         refreshControl={

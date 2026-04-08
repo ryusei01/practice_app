@@ -11,14 +11,15 @@ from typing import List, Optional
 import uuid
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, model_validator, field_validator
+from pydantic import BaseModel, model_validator, field_validator, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db
 from ..core.auth import get_current_active_user
+from ..core.limiter import limiter
 from ..models import User, QuestionSet, Purchase, Question
 from ..utils.content_languages import (
     normalize_content_language_list,
@@ -29,10 +30,50 @@ from ..models.question import QuestionSetApprovalStatus
 from ..models.user import SellerApplicationStatus
 from ..services.copyright_checker import get_copyright_checker
 from ..services.llm_router import AllLLMProvidersFailed
+from ..services.question_set_pdf import build_question_set_pdf_bytes
+from ..utils.csv_injection import sanitize_csv_cell
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _parse_question_numbers_spec(spec: str) -> list[int]:
+    """
+    Parse "1-9,12,14" like spec into 1-based indices.
+    Returns sorted unique indices (>=1).
+    """
+    out: set[int] = set()
+    raw = (spec or "").strip()
+    if not raw:
+        return []
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    for p in parts:
+        if "-" in p:
+            a, b = [x.strip() for x in p.split("-", 1)]
+            if not a or not b:
+                continue
+            try:
+                start = int(a)
+                end = int(b)
+            except ValueError:
+                continue
+            if start <= 0 or end <= 0:
+                continue
+            lo, hi = (start, end) if start <= end else (end, start)
+            # basic sanity cap to avoid abuse
+            if hi - lo > 5000:
+                hi = lo + 5000
+            for i in range(lo, hi + 1):
+                out.add(i)
+        else:
+            try:
+                n = int(p)
+            except ValueError:
+                continue
+            if n > 0:
+                out.add(n)
+    return sorted(out)
 
 
 def _question_set_row_to_api_dict(qs: QuestionSet) -> dict:
@@ -195,8 +236,8 @@ async def create_question_set(
 
     new_question_set = QuestionSet(
         id=str(uuid.uuid4()),
-        title=request.title,
-        description=request.description,
+        title=sanitize_csv_cell(request.title),
+        description=sanitize_csv_cell(request.description),
         category=request.category,
         tags=request.tags,
         price=request.price,
@@ -204,7 +245,7 @@ async def create_question_set(
         creator_id=current_user.id,
         textbook_path=request.textbook_path,
         textbook_type=request.textbook_type,
-        textbook_content=request.textbook_content,
+        textbook_content=sanitize_csv_cell(request.textbook_content),
         content_languages=normalized,
         content_language=normalized[0],
     )
@@ -442,9 +483,9 @@ async def update_question_set(
 
     # 更新処理
     if request.title is not None:
-        question_set.title = request.title
+        question_set.title = sanitize_csv_cell(request.title)
     if request.description is not None:
-        question_set.description = request.description
+        question_set.description = sanitize_csv_cell(request.description)
     if request.category is not None:
         question_set.category = request.category
     if request.tags is not None:
@@ -458,7 +499,7 @@ async def update_question_set(
     if request.textbook_type is not None:
         question_set.textbook_type = request.textbook_type
     if request.textbook_content is not None:
-        question_set.textbook_content = request.textbook_content
+        question_set.textbook_content = sanitize_csv_cell(request.textbook_content)
     if request.content_languages is not None:
         normalized = normalize_content_language_list(request.content_languages, None)
         question_set.content_languages = normalized
@@ -637,18 +678,18 @@ async def export_question_set_csv(
     for q in questions:
         opts = q.options or []
         writer.writerow({
-            "question_text": q.question_text or "",
-            "question_type": q.question_type or "",
-            "option_1": opts[0] if len(opts) > 0 else "",
-            "option_2": opts[1] if len(opts) > 1 else "",
-            "option_3": opts[2] if len(opts) > 2 else "",
-            "option_4": opts[3] if len(opts) > 3 else "",
-            "correct_answer": q.correct_answer or "",
-            "explanation": q.explanation or "",
+            "question_text": sanitize_csv_cell(q.question_text or ""),
+            "question_type": sanitize_csv_cell(q.question_type or ""),
+            "option_1": sanitize_csv_cell(opts[0]) if len(opts) > 0 else "",
+            "option_2": sanitize_csv_cell(opts[1]) if len(opts) > 1 else "",
+            "option_3": sanitize_csv_cell(opts[2]) if len(opts) > 2 else "",
+            "option_4": sanitize_csv_cell(opts[3]) if len(opts) > 3 else "",
+            "correct_answer": sanitize_csv_cell(q.correct_answer or ""),
+            "explanation": sanitize_csv_cell(q.explanation or ""),
             "difficulty": q.difficulty if q.difficulty is not None else "",
-            "category": q.category or "",
-            "subcategory1": q.subcategory1 or "",
-            "subcategory2": q.subcategory2 or "",
+            "category": sanitize_csv_cell(q.category or ""),
+            "subcategory1": sanitize_csv_cell(q.subcategory1 or ""),
+            "subcategory2": sanitize_csv_cell(q.subcategory2 or ""),
         })
 
     safe_title = "".join(c for c in (question_set.title or "export") if c.isalnum() or c in " _-").strip() or "export"
@@ -658,6 +699,62 @@ async def export_question_set_csv(
     return StreamingResponse(
         iter(["\ufeff" + buf.getvalue()]),
         media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{question_set_id}/export-pdf")
+async def export_question_set_pdf(
+    question_set_id: str,
+    include_answers: bool = Query(True, description="解答・解説をPDFに含めるか"),
+    question_numbers: Optional[str] = Query(
+        None,
+        description='出力する問題番号（例: "1-9,12,14"）。未指定なら全件。',
+    ),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """自分が作成した問題集の全問題をPDFとしてダウンロードする。"""
+    question_set = db.query(QuestionSet).filter(QuestionSet.id == question_set_id).first()
+    if not question_set:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="問題集が見つかりません")
+    if question_set.creator_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="この問題集をPDF化する権限がありません")
+
+    questions = (
+        db.query(Question)
+        .filter(Question.question_set_id == question_set_id)
+        .order_by(Question.order)
+        .all()
+    )
+
+    picked = _parse_question_numbers_spec(question_numbers or "")
+    if picked:
+        # 1-based to index
+        idxs = {i - 1 for i in picked if i - 1 >= 0}
+        questions = [q for i, q in enumerate(questions) if i in idxs]
+
+    pdf_bytes = build_question_set_pdf_bytes(
+        title=question_set.title or "export",
+        description=question_set.description,
+        questions=[
+            {
+                "question_text": q.question_text,
+                "question_type": q.question_type,
+                "options": q.options,
+                "correct_answer": q.correct_answer,
+                "explanation": q.explanation,
+            }
+            for q in questions
+        ],
+        include_answers=include_answers,
+    )
+
+    safe_title = "".join(c for c in (question_set.title or "export") if c.isalnum() or c in " _-").strip() or "export"
+    filename = f"{safe_title}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
@@ -879,7 +976,7 @@ async def import_anki(
 
         new_set = QuestionSet(
             id=question_set_id,
-            title=result["title"],
+            title=sanitize_csv_cell(result["title"]),
             description=f"Imported from Anki ({len(result['questions'])} cards)",
             category="Anki Import",
             creator_id=current_user.id,
@@ -894,9 +991,9 @@ async def import_anki(
             question = Question(
                 id=str(uuid.uuid4()),
                 question_set_id=question_set_id,
-                question_text=q_data["question_text"],
-                question_type=q_data["question_type"],
-                options=q_data.get("options"),
+                question_text=sanitize_csv_cell(q_data["question_text"]),
+                question_type=sanitize_csv_cell(q_data["question_type"]),
+                options=[sanitize_csv_cell(x) for x in (q_data.get("options") or [])] or None,
                 correct_answer=q_data["correct_answer"],
                 media_urls=q_data.get("media_urls"),
                 order=idx,

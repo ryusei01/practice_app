@@ -321,6 +321,8 @@ export default function MyQuestionSetsScreen() {
   } | null>(null);
   const [csvImporting, setCsvImporting] = useState(false);
 
+  // PDF export moved to detail header screen.
+
   const handlePickCSVAndCreate = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -467,7 +469,7 @@ export default function MyQuestionSetsScreen() {
   );
 
   const renderMyQuestionSetItem = ({ item }: { item: QuestionSet }) => (
-    <View
+    <TouchableOpacity
       style={[
         styles.card,
         {
@@ -475,60 +477,60 @@ export default function MyQuestionSetsScreen() {
           marginBottom: isSmallScreen ? 10 : 12,
         },
       ]}
+      onPress={() => navigateToDetail(item.id)}
+      testID={`my-qs-card-${item.id}`}
+      activeOpacity={0.85}
     >
-      <TouchableOpacity
-        onPress={() => navigateToDetail(item.id)}
-        testID={`my-qs-card-${item.id}`}
-      >
-        <View style={styles.cardHeader}>
-          <Text style={[styles.cardTitle, { fontSize: isSmallScreen ? 16 : 18 }]}>
-            {item.title}
-          </Text>
-          {(dueCounts[item.id] || 0) > 0 && (
-            <View style={styles.dueBadge}>
-              <Text style={styles.dueBadgeText}>
-                {t(`${dueCounts[item.id]} due`, `${dueCounts[item.id]}問 要復習`)}
-              </Text>
-            </View>
-          )}
-          {item.is_published && (
-            <View style={styles.publishedBadge}>
-              <Text style={styles.publishedText}>{t("Published", "公開中")}</Text>
-            </View>
-          )}
-        </View>
-        {item.description && (
-          <Text style={styles.cardDescription} numberOfLines={2}>
-            {item.description}
-          </Text>
+      <View style={styles.cardHeader}>
+        <Text style={[styles.cardTitle, { fontSize: isSmallScreen ? 16 : 18 }]}>
+          {item.title}
+        </Text>
+        {(dueCounts[item.id] || 0) > 0 && (
+          <View style={styles.dueBadge}>
+            <Text style={styles.dueBadgeText}>
+              {t(`${dueCounts[item.id]} due`, `${dueCounts[item.id]}問 要復習`)}
+            </Text>
+          </View>
         )}
-        <View style={styles.cardFooter}>
-          <Text style={styles.cardCategory}>{item.category}</Text>
-          <Text style={styles.cardLang}>
-            {contentLanguagesDisplayLabel(
-              item.content_languages,
-              item.content_language,
-              t
-            )}
-          </Text>
-          <Text style={styles.cardQuestions}>
-            {t(`${item.total_questions} questions`, `${item.total_questions} 問`)}
-          </Text>
-          {item.price > 0 && <Text style={styles.cardPrice}>¥{item.price}</Text>}
-        </View>
-      </TouchableOpacity>
-      {item.total_questions > 0 && (
-        <TouchableOpacity
-          style={styles.csvExportBadge}
-          onPress={() => handleExportMyCSV(item)}
-          testID={`csv-export-btn-${item.id}`}
-        >
-          <Text style={styles.csvExportBadgeText}>
-            {t("CSV", "CSV")}
-          </Text>
-        </TouchableOpacity>
+        {item.is_published && (
+          <View style={styles.publishedBadge}>
+            <Text style={styles.publishedText}>{t("Published", "公開中")}</Text>
+          </View>
+        )}
+      </View>
+      {item.description && (
+        <Text style={styles.cardDescription} numberOfLines={2}>
+          {item.description}
+        </Text>
       )}
-    </View>
+      <View style={styles.cardFooter}>
+        <Text style={styles.cardCategory}>{item.category}</Text>
+        <Text style={styles.cardLang}>
+          {contentLanguagesDisplayLabel(
+            item.content_languages,
+            item.content_language,
+            t
+          )}
+        </Text>
+        <Text style={styles.cardQuestions}>
+          {t(`${item.total_questions} questions`, `${item.total_questions} 問`)}
+        </Text>
+        {item.price > 0 && <Text style={styles.cardPrice}>¥{item.price}</Text>}
+      </View>
+      {item.total_questions > 0 && (
+        <View style={styles.cardActionsRow}>
+          <TouchableOpacity
+            style={styles.csvExportBadge}
+            onPress={() => handleExportMyCSV(item)}
+            testID={`csv-export-btn-${item.id}`}
+          >
+            <Text style={styles.csvExportBadgeText}>
+              ⤓ {t("CSV", "CSV")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </TouchableOpacity>
   );
 
   const renderPurchasedItem = ({ item }: { item: QuestionSet }) => (
@@ -575,7 +577,7 @@ export default function MyQuestionSetsScreen() {
         testID={`download-btn-${item.id}`}
       >
         <Text style={styles.downloadButtonText}>
-          {t("Download for Offline", "オフラインでダウンロード")}
+          ⤓ {t("Download for Offline", "オフラインでダウンロード")}
         </Text>
       </TouchableOpacity>
     </View>
@@ -637,7 +639,7 @@ export default function MyQuestionSetsScreen() {
           testID={`csv-export-trial-btn-${item.id}`}
         >
           <Text style={styles.csvExportBadgeText}>
-            {t("CSV", "CSV")}
+            ⤓ {t("CSV", "CSV")}
           </Text>
         </TouchableOpacity>
       )}
@@ -994,6 +996,7 @@ export default function MyQuestionSetsScreen() {
           </View>
         </View>
       </Modal>
+
     </View>
   );
 }
@@ -1310,16 +1313,25 @@ const styles = StyleSheet.create({
   },
   csvExportBadge: {
     alignSelf: "flex-end",
-    backgroundColor: "#30B060",
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    backgroundColor: "#111827",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
   },
   csvExportBadgeText: {
     color: "#fff",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "700",
+  },
+  cardActionsRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: 8,
+    flexWrap: "wrap",
   },
   feedbackBanner: {
     backgroundColor: "#5A67D8",

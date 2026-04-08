@@ -26,6 +26,7 @@ from ..services.stripe_coupon import (
     discounted_amount_jpy,
     lookup_active_promotion_code,
 )
+from ..utils.csv_injection import sanitize_csv_cell
 
 logger = logging.getLogger(__name__)
 
@@ -431,7 +432,7 @@ async def export_seller_revenue(
     for p in purchases:
         writer.writerow([
             p.purchased_at.strftime("%Y-%m-%d %H:%M:%S"),
-            question_set_map.get(p.question_set_id, ""),
+            sanitize_csv_cell(question_set_map.get(p.question_set_id, "") or ""),
             p.amount,
             p.platform_fee,
             p.seller_amount,

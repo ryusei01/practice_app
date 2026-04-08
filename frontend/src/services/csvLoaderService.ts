@@ -26,20 +26,24 @@ export async function loadAllCSVFiles(): Promise<void> {
       { AwsMlSpecialtyQuizEn_CSV },
       { BusinessEnglish_CSV },
       { DeepLearningEngineeringQuestions_CSV },
+      { EnglishVocabQuiz_CSV },
       { EQualificationQuestionSet_CSV },
       { JapaneseWordbook_CSV },
       { PromptEngineeringQuiz_CSV },
       { TensorflowPytorchQuiz_CSV },
+      { Toeic50_CSV },
     ] = await Promise.all([
       import("../data/ai_practiceCSV"),
       import("../data/aws_certified_machine_learning_question_setCSV"),
       import("../data/aws_ml_specialty_quiz_enCSV"),
       import("../data/business_englishCSV"),
       import("../data/deep_learning_engineering_questionsCSV"),
+      import("../data/english_vocab_quizCSV"),
       import("../data/e_qualification_question_setCSV"),
       import("../data/japanese_wordbookCSV"),
       import("../data/prompt_engineering_quizCSV"),
       import("../data/tensorflow_pytorch_quizCSV"),
+      import("../data/toeic_50CSV"),
     ]);
 
     const CSV_FILES: CSVFile[] = [
@@ -59,8 +63,8 @@ export async function loadAllCSVFiles(): Promise<void> {
       },
       {
         fileName: "aws_ml_specialty_quiz_en.csv",
-        title: "AWS ML Specialty Quiz (EN)",
-        description: "AWS ML Specialty Quiz (EN)",
+        title: "AWS ML Specialty Quiz",
+        description: "AWS ML Specialty Quiz",
         csvContent: AwsMlSpecialtyQuizEn_CSV,
         content_language: "en",
       },
@@ -79,6 +83,13 @@ export async function loadAllCSVFiles(): Promise<void> {
         content_language: "en",
       },
       {
+        fileName: "english_vocab_quiz.csv",
+        title: "English Vocab Quiz",
+        description: "English Vocab Quiz",
+        csvContent: EnglishVocabQuiz_CSV,
+        content_language: "ja",
+      },
+      {
         fileName: "E資格_問題集.csv",
         title: "E資格 問題集",
         description: "E資格 問題集",
@@ -94,16 +105,23 @@ export async function loadAllCSVFiles(): Promise<void> {
       },
       {
         fileName: "prompt_engineering_quiz.csv",
-        title: "Prompt Engineering Quiz (EN)",
-        description: "Prompt Engineering Quiz (EN)",
+        title: "Prompt Engineering Quiz",
+        description: "Prompt Engineering Quiz",
         csvContent: PromptEngineeringQuiz_CSV,
         content_language: "en",
       },
       {
         fileName: "tensorflow_pytorch_quiz.csv",
-        title: "TensorFlow / PyTorch クイズ",
-        description: "TensorFlow / PyTorch クイズ",
+        title: "TensorFlow / PyTorch Quiz",
+        description: "TensorFlow / PyTorch Quiz",
         csvContent: TensorflowPytorchQuiz_CSV,
+        content_language: "ja",
+      },
+      {
+        fileName: "toeic_50.csv",
+        title: "TOEIC 50",
+        description: "TOEIC 50",
+        csvContent: Toeic50_CSV,
         content_language: "ja",
       },
     ];

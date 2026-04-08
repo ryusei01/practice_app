@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
@@ -15,6 +14,8 @@ import {
   verifyBackupCode,
 } from "../../src/api/twoFactor";
 import Header from "../../src/components/Header";
+import Modal from "../../src/components/Modal";
+import { getApiErrorMessage } from "../../src/utils/apiError";
 
 export default function VerifyOTPScreen() {
   const router = useRouter();
@@ -23,6 +24,12 @@ export default function VerifyOTPScreen() {
   const [sendingOTP, setSendingOTP] = useState(false);
   const [useBackupCode, setUseBackupCode] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  const [resultModal, setResultModal] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    onOk?: () => void;
+  }>({ visible: false, title: "", message: "" });
 
   useEffect(() => {
     // 自動的にOTPを送信
@@ -42,13 +49,14 @@ export default function VerifyOTPScreen() {
     setSendingOTP(true);
     try {
       const response = await sendOTPCode();
-      Alert.alert("成功", response.message);
+      setResultModal({ visible: true, title: "成功", message: response.message });
       setCountdown(60); // 60秒間再送信不可
     } catch (error: any) {
-      Alert.alert(
-        "エラー",
-        error.response?.data?.detail || "OTPコード送信に失敗しました"
-      );
+      setResultModal({
+        visible: true,
+        title: "エラー",
+        message: getApiErrorMessage(error, "Failed", "OTPコード送信に失敗しました"),
+      });
     } finally {
       setSendingOTP(false);
     }
@@ -56,7 +64,13 @@ export default function VerifyOTPScreen() {
 
   const handleVerifyCode = async () => {
     if (!code || code.length < 6) {
-      Alert.alert("エラー", useBackupCode ? "バックアップコードを入力してください" : "6桁のコードを入力してください");
+      setResultModal({
+        visible: true,
+        title: "エラー",
+        message: useBackupCode
+          ? "バックアップコードを入力してください"
+          : "6桁のコードを入力してください",
+      });
       return;
     }
 
@@ -64,19 +78,27 @@ export default function VerifyOTPScreen() {
     try {
       if (useBackupCode) {
         await verifyBackupCode(code);
-        Alert.alert("成功", "バックアップコードが正しく検証されました");
+        setResultModal({
+          visible: true,
+          title: "成功",
+          message: "バックアップコードが正しく検証されました",
+          onOk: () => router.back(),
+        });
       } else {
         await verifyOTPCode(code);
-        Alert.alert("成功", "OTPコードが正しく検証されました");
+        setResultModal({
+          visible: true,
+          title: "成功",
+          message: "OTPコードが正しく検証されました",
+          onOk: () => router.back(),
+        });
       }
-
-      // 検証成功後、前の画面に戻る
-      router.back();
     } catch (error: any) {
-      Alert.alert(
-        "エラー",
-        error.response?.data?.detail || "コード検証に失敗しました"
-      );
+      setResultModal({
+        visible: true,
+        title: "エラー",
+        message: getApiErrorMessage(error, "Failed", "コード検証に失敗しました"),
+      });
     } finally {
       setLoading(false);
     }
@@ -172,6 +194,17 @@ export default function VerifyOTPScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      <Modal
+        visible={resultModal.visible}
+        title={resultModal.title}
+        message={resultModal.message}
+        onClose={() => {
+          const onOk = resultModal.onOk;
+          setResultModal({ visible: false, title: "", message: "" });
+          onOk?.();
+        }}
+      />
     </View>
   );
 }

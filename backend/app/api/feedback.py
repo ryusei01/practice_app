@@ -4,6 +4,7 @@
 運営者にメールで通知（DBには保存しない）
 """
 import logging
+import html
 from datetime import datetime
 from enum import Enum
 from typing import Optional
@@ -12,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from ..core.auth import get_current_active_user
+from ..core.client_ip import get_client_ip
 from ..core.config import settings
 from ..core.email import send_email
 from ..core.limiter import limiter
@@ -26,12 +28,16 @@ class FeedbackCategory(str, Enum):
     APP_REVIEW = "app_review"
     FEATURE_REQUEST = "feature_request"
     QUESTION_SET_FEEDBACK = "question_set_feedback"
+    BUG_REPORT = "bug_report"
+    COMPLAINT = "complaint"
 
 
 CATEGORY_LABELS = {
     FeedbackCategory.APP_REVIEW: "アプリのレビュー",
     FeedbackCategory.FEATURE_REQUEST: "機能リクエスト",
     FeedbackCategory.QUESTION_SET_FEEDBACK: "問題集フィードバック",
+    FeedbackCategory.BUG_REPORT: "不具合",
+    FeedbackCategory.COMPLAINT: "不満",
 }
 
 
@@ -68,6 +74,13 @@ async def submit_feedback(
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
     username = getattr(current_user, "username", "") or ""
     user_email = getattr(current_user, "email", "") or ""
+    client_ip = get_client_ip(request)
+
+    safe_username = html.escape(username)
+    safe_user_email = html.escape(user_email)
+    safe_category_label = html.escape(category_label)
+    safe_qs_title = html.escape(body.question_set_title) if body.question_set_title else ""
+    safe_message = html.escape(body.message)
 
     subject = f"[{settings.APP_DISPLAY_NAME}] フィードバック: {category_label}"
 
@@ -80,6 +93,7 @@ async def submit_feedback(
         f"ユーザー: {user_email} ({username})\n"
         f"カテゴリ: {category_label}\n"
         f"評価: {_build_rating_stars(body.rating)}\n"
+        f"IP: {client_ip}\n"
         f"{qs_line}"
         f"━━━━━━━━━━━━━━━━━━\n\n"
         f"{body.message}\n\n"
@@ -95,12 +109,13 @@ async def submit_feedback(
   </div>
   <div style="background-color: #f8f8f8; padding: 20px; border-radius: 0 0 8px 8px;">
     <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
-      <tr><td style="padding: 6px 0; color: #666; width: 100px;">ユーザー</td><td style="padding: 6px 0;">{user_email} ({username})</td></tr>
-      <tr><td style="padding: 6px 0; color: #666;">カテゴリ</td><td style="padding: 6px 0; font-weight: bold;">{category_label}</td></tr>
+      <tr><td style="padding: 6px 0; color: #666; width: 100px;">ユーザー</td><td style="padding: 6px 0;">{safe_user_email} ({safe_username})</td></tr>
+      <tr><td style="padding: 6px 0; color: #666;">カテゴリ</td><td style="padding: 6px 0; font-weight: bold;">{safe_category_label}</td></tr>
       <tr><td style="padding: 6px 0; color: #666;">評価</td><td style="padding: 6px 0;">{_build_rating_stars(body.rating)}</td></tr>
-      {"<tr><td style='padding: 6px 0; color: #666;'>問題集</td><td style='padding: 6px 0;'>" + body.question_set_title + "</td></tr>" if body.question_set_title else ""}
+      <tr><td style="padding: 6px 0; color: #666;">IP</td><td style="padding: 6px 0;">{html.escape(client_ip)}</td></tr>
+      {"<tr><td style='padding: 6px 0; color: #666;'>問題集</td><td style='padding: 6px 0;'>" + safe_qs_title + "</td></tr>" if body.question_set_title else ""}
     </table>
-    <div style="background-color: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; white-space: pre-wrap;">{body.message}</div>
+    <div style="background-color: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; white-space: pre-wrap;">{safe_message}</div>
     <p style="color: #999; font-size: 12px; margin-top: 16px; text-align: right;">送信日時: {now}</p>
   </div>
 </body>
@@ -110,7 +125,11 @@ async def submit_feedback(
     try:
         result = await send_email(to_email, subject, text_body, html_body)
         if not result:
-            logger.warning(f"Feedback email sending returned False for user {current_user.id}")
+            logger.error("Feedback email sending returned False for user %s", current_user.id)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="フィードバックの送信に失敗しました。しばらくしてからお試しください。",
+            )
     except Exception as e:
         logger.error(f"Failed to send feedback email: {e}")
         raise HTTPException(

@@ -5,15 +5,15 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   Modal,
   ScrollView,
-  Platform,
   useWindowDimensions,
 } from "react-native";
 import { useLanguage } from "../contexts/LanguageContext";
 import { feedbackApi, FeedbackCategory } from "../api/feedback";
+import AppModal from "./Modal";
+import { getApiErrorMessage } from "../utils/apiError";
 
 interface Props {
   visible: boolean;
@@ -24,16 +24,9 @@ const CATEGORIES: { value: FeedbackCategory; labelEn: string; labelJa: string }[
   { value: "app_review", labelEn: "App Review", labelJa: "アプリのレビュー" },
   { value: "feature_request", labelEn: "Feature Request", labelJa: "機能リクエスト" },
   { value: "question_set_feedback", labelEn: "Question Set Feedback", labelJa: "問題集フィードバック" },
+  { value: "bug_report", labelEn: "Bug Report", labelJa: "不具合" },
+  { value: "complaint", labelEn: "Complaint", labelJa: "不満" },
 ];
-
-const showAlert = (title: string, message: string, onOk?: () => void) => {
-  if (Platform.OS === "web") {
-    window.alert(`${title}\n${message}`);
-    onOk?.();
-  } else {
-    Alert.alert(title, message, [{ text: "OK", onPress: onOk }]);
-  }
-};
 
 export default function FeedbackModal({ visible, onClose }: Props) {
   const { t } = useLanguage();
@@ -45,6 +38,12 @@ export default function FeedbackModal({ visible, onClose }: Props) {
   const [message, setMessage] = useState("");
   const [questionSetTitle, setQuestionSetTitle] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [resultModal, setResultModal] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    onOk?: () => void;
+  }>({ visible: false, title: "", message: "" });
 
   const resetForm = () => {
     setCategory("app_review");
@@ -60,10 +59,11 @@ export default function FeedbackModal({ visible, onClose }: Props) {
 
   const handleSubmit = async () => {
     if (!message.trim()) {
-      showAlert(
-        t("Error", "エラー"),
-        t("Please enter a message", "メッセージを入力してください")
-      );
+      setResultModal({
+        visible: true,
+        title: t("Error", "エラー"),
+        message: t("Please enter a message", "メッセージを入力してください"),
+      });
       return;
     }
 
@@ -75,22 +75,26 @@ export default function FeedbackModal({ visible, onClose }: Props) {
         message: message.trim(),
         question_set_title: questionSetTitle.trim() || undefined,
       });
-      showAlert(
-        t("Thank you!", "ありがとうございます！"),
-        t(
+      setResultModal({
+        visible: true,
+        title: t("Thank you!", "ありがとうございます！"),
+        message: t(
           "Your feedback has been sent. We appreciate your input!",
           "フィードバックを送信しました。ご意見ありがとうございます！"
         ),
-        handleClose
-      );
+        onOk: handleClose,
+      });
     } catch (error: any) {
-      const detail =
-        error?.response?.data?.detail ||
-        t(
-          "Failed to send feedback. Please try again later.",
-          "フィードバックの送信に失敗しました。しばらくしてからお試しください。"
-        );
-      showAlert(t("Error", "エラー"), detail);
+      const detail = getApiErrorMessage(
+        error,
+        "Failed to send feedback. Please try again later.",
+        "フィードバックの送信に失敗しました。しばらくしてからお試しください。"
+      );
+      setResultModal({
+        visible: true,
+        title: t("Error", "エラー"),
+        message: detail,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -114,10 +118,11 @@ export default function FeedbackModal({ visible, onClose }: Props) {
   );
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <View style={styles.overlay}>
-        <View style={[styles.container, { maxWidth: isSmallScreen ? "100%" : 500 }]}>
-          <ScrollView showsVerticalScrollIndicator={false}>
+    <>
+      <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+        <View style={styles.overlay}>
+          <View style={[styles.container, { maxWidth: isSmallScreen ? "100%" : 500 }]}>
+            <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={styles.title}>
               {t("Review & Feedback", "レビュー・ご要望")}
             </Text>
@@ -194,6 +199,16 @@ export default function FeedbackModal({ visible, onClose }: Props) {
                       "Describe the feature you'd like to see",
                       "追加してほしい機能を教えてください"
                     )
+                  : category === "bug_report"
+                  ? t(
+                      "Tell us what happened, how to reproduce, and your device/environment",
+                      "発生したこと・再現手順・端末/環境などを教えてください"
+                    )
+                  : category === "complaint"
+                  ? t(
+                      "Tell us what's frustrating and what you'd like improved",
+                      "不満点と、どう改善してほしいかを教えてください"
+                    )
                   : category === "question_set_feedback"
                   ? t(
                       "Share your feedback about the question set",
@@ -243,10 +258,22 @@ export default function FeedbackModal({ visible, onClose }: Props) {
                 )}
               </TouchableOpacity>
             </View>
-          </ScrollView>
+            </ScrollView>
+          </View>
         </View>
-      </View>
-    </Modal>
+      </Modal>
+
+      <AppModal
+        visible={resultModal.visible}
+        title={resultModal.title}
+        message={resultModal.message}
+        onClose={() => {
+          const onOk = resultModal.onOk;
+          setResultModal({ visible: false, title: "", message: "" });
+          onOk?.();
+        }}
+      />
+    </>
   );
 }
 

@@ -14,5 +14,15 @@
   "tensorflow_pytorch_quiz.csv": {
     "title": "TensorFlow / PyTorch Quiz",
     "description": "TensorFlow / PyTorch Quiz"
+  },
+  "toeic_50.csv": {
+    "title": "TOEIC 50",
+    "description": "TOEIC 50",
+    "content_language": "ja"
+  },
+  "english_vocab_quiz.csv": {
+    "title": "English Vocab Quiz",
+    "description": "English Vocab Quiz",
+    "content_language": "ja"
   }
 }

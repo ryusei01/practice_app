@@ -167,6 +167,26 @@ export const localStorageService = {
     return newQuestion;
   },
 
+  async deleteQuestionFromTrialSet(
+    setId: string,
+    questionId: string
+  ): Promise<void> {
+    const sets = await this.getTrialQuestionSets();
+    const setIdx = sets.findIndex((s) => s.id === setId);
+    if (setIdx === -1) throw new Error("Question set not found");
+
+    const before = sets[setIdx].questions.length;
+    sets[setIdx].questions = sets[setIdx].questions.filter(
+      (q) => q.id !== questionId
+    );
+    const after = sets[setIdx].questions.length;
+    if (before === after) {
+      throw new Error("Question not found");
+    }
+
+    await AsyncStorage.setItem(TRIAL_QUESTION_SETS_KEY, JSON.stringify(sets));
+  },
+
   // クイズ結果を保存
   async saveTrialResult(
     questionSetId: string,

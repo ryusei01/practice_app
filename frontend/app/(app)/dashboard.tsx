@@ -14,6 +14,8 @@ import AdBanner from "../../src/components/AdBanner";
 import LoadingScreen from "../../src/components/LoadingScreen";
 import { useEffect } from "react";
 
+const isDev = process.env.NODE_ENV === "development" || __DEV__;
+
 export default function DashboardScreen() {
   const { user, isLoading, isAuthenticated, logout } = useAuth();
   const { t, language, setLanguage } = useLanguage();
@@ -187,15 +189,17 @@ export default function DashboardScreen() {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.menuButton, styles.storeButton]}
-              onPress={() => router.push("/(app)/store")}
-              nativeID="menu-btn-store"
-            >
-              <Text style={styles.menuButtonText} nativeID="menu-text-store">
-                {t("Question Set Store", "問題集ストア")}
-              </Text>
-            </TouchableOpacity>
+            {isDev && (
+              <TouchableOpacity
+                style={[styles.menuButton, styles.storeButton]}
+                onPress={() => router.push("/(app)/store")}
+                nativeID="menu-btn-store"
+              >
+                <Text style={styles.menuButtonText} nativeID="menu-text-store">
+                  {t("Question Set Store", "問題集ストア")}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={[styles.menuButton, styles.sellerButton]}

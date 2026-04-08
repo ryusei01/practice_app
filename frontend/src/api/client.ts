@@ -9,7 +9,7 @@ import { emitGlobalApiError } from "../utils/globalApiErrorBus";
 const API_URL =
   Constants.expoConfig?.extra?.apiUrl ||
   process.env.EXPO_PUBLIC_API_URL ||
-  "http://127.0.0.1:8003/api/v1";
+  "http://127.0.0.1:8004/api/v1";
 
 const apiClient = axios.create({
   baseURL: API_URL,

@@ -7,6 +7,8 @@ import { AuthProvider } from "../src/contexts/AuthContext";
 import { LanguageProvider } from "../src/contexts/LanguageContext";
 import { GlobalApiErrorModalProvider } from "../src/contexts/GlobalApiErrorModalContext";
 
+const isDev = process.env.NODE_ENV === "development" || __DEV__;
+
 /** レンダリング例外を捕捉し、再試行・ホームへ導線を表示する */
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   const router = useRouter();
@@ -102,12 +104,11 @@ export default function RootLayout() {
               />
               <Stack.Screen name="(app)/quiz/[id]" />
               <Stack.Screen name="(app)/ai-dashboard" />
-              <Stack.Screen name="(app)/store" />
+              {isDev && <Stack.Screen name="(app)/store" />}
               <Stack.Screen name="(app)/seller-dashboard" />
               <Stack.Screen name="(app)/admin/index" />
               <Stack.Screen name="(app)/settings" />
               <Stack.Screen name="(app)/mypage" />
-              <Stack.Screen name="(app)/verify-otp" />
               <Stack.Screen name="(trial)" />
               <Stack.Screen name="(app)/flashcard/[id]" />
               <Stack.Screen name="(public)/privacy-policy" />
