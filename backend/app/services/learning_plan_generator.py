@@ -1,17 +1,14 @@
 """
-AI学習プラン生成（GPT-OSS 等 via Ollama）
+AI学習プラン生成（Gemini → Hugging Face → Groq のフォールバック）。
 
-copyright_checker と同様に Ollama /api/generate を呼び出し、JSON のみでプランを返すよう誘導する。
-パース失敗時は goal / weeks / daily_hours から汎用プランを組み立てる。
+JSON のみでプランを返すよう誘導する。パース失敗時は goal / weeks / daily_hours から汎用プランを組み立てる。
 """
 import json
 import logging
 import re
 from typing import Any, List, Optional
 
-import httpx
-
-from ..core.config import settings
+from .llm_router import AllLLMProvidersFailed, complete_text
 
 logger = logging.getLogger(__name__)
 
@@ -155,9 +152,7 @@ def _normalize_plan(data: Any, goal: str, weeks: int) -> Optional[dict]:
 
 
 class LearningPlanGenerator:
-    def __init__(self, base_url: Optional[str] = None):
-        self.base_url = base_url or settings.OLLAMA_BASE_URL
-        self.model = settings.OLLAMA_LEARNING_PLAN_MODEL
+    def __init__(self) -> None:
         self.timeout = 180.0
 
     async def generate(
@@ -186,33 +181,23 @@ class LearningPlanGenerator:
             f"Daily study hours (approx): {dh}\n"
             f"{weak_line}\n"
         )
-        prompt = f"{SYSTEM_PROMPT}\n\n{user_block}\nJSON:"
+        user = f"{user_block}\nJSON:"
 
-        payload = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": 0.35,
-                "num_predict": 4096,
-            },
-        }
+        logger.info("Calling cloud LLM for learning plan: weeks=%s", w)
 
-        logger.info(
-            "Calling Ollama (%s) for learning plan: weeks=%s",
-            self.model,
-            w,
-        )
-
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                f"{self.base_url}/api/generate",
-                json=payload,
+        try:
+            raw, _provider = await complete_text(
+                system=SYSTEM_PROMPT,
+                user=user,
+                temperature=0.35,
+                max_tokens=4096,
+                timeout=self.timeout,
             )
-            response.raise_for_status()
-            body = response.json()
+        except AllLLMProvidersFailed as e:
+            logger.warning("Learning plan: all LLM providers failed: %s", e)
+            raise
 
-        raw = body.get("response", "") or ""
+        raw = raw or ""
         parsed = _extract_json_object(raw)
         normalized = _normalize_plan(parsed, goal=goal, weeks=w) if parsed else None
         if normalized:

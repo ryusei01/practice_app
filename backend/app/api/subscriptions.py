@@ -4,7 +4,7 @@
 """
 import stripe
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -20,6 +20,7 @@ from ..core.limiter import limiter
 from ..core.rate_limit_keys import payment_user_or_ip_key
 from ..models import User, Purchase, QuestionSet
 from ..models.processed_checkout import ProcessedCheckoutSession
+from ..services.stripe_coupon import lookup_active_promotion_code
 
 logger = logging.getLogger(__name__)
 stripe.api_key = settings.STRIPE_SECRET_KEY
@@ -129,12 +130,17 @@ async def create_premium_checkout(
     success_url: str,
     cancel_url: str,
     plan_type: Literal["monthly", "yearly"] = "yearly",
+    promotion_code: Optional[str] = Query(None),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """
     有料プランの Stripe Checkout セッション（一回払い）を作成する。
     フロントエンドはレスポンスの checkout_url へリダイレクトする。
+
+    promotion_code を省略した場合は allow_promotion_codes で Checkout 画面内にコード入力欄を表示する。
+    指定した場合は事前に Promotion Code を解決して discounts に渡す（Stripe の仕様上、両方は併用不可）。
+    割引後の支払額に関わらず Webhook では従来どおりプランの満額特典（日数・クレジット）を付与する。
     """
     plan_settings = _get_plan_settings(plan_type)
 
@@ -159,24 +165,37 @@ async def create_premium_checkout(
             current_user.stripe_customer_id = customer_id
             db.commit()
 
-        session = stripe.checkout.Session.create(
-            customer=customer_id,
-            payment_method_types=["card"],
-            line_items=[
+        code_trim = (promotion_code or "").strip()
+        session_kw: dict = {
+            "customer": customer_id,
+            "payment_method_types": ["card"],
+            "line_items": [
                 {
                     "price": plan_settings["stripe_price_id"],
                     "quantity": 1,
                 }
             ],
-            mode="payment",
-            success_url=success_url,
-            cancel_url=cancel_url,
-            metadata={
+            "mode": "payment",
+            "success_url": success_url,
+            "cancel_url": cancel_url,
+            "metadata": {
                 "user_id": current_user.id,
                 "type": "premium_plan",
                 "plan_type": plan_type,
             },
-        )
+        }
+        if code_trim:
+            pc = lookup_active_promotion_code(code_trim)
+            if not pc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="クーポンコードが見つからないか、利用できません。",
+                )
+            session_kw["discounts"] = [{"promotion_code": pc.id}]
+        else:
+            session_kw["allow_promotion_codes"] = True
+
+        session = stripe.checkout.Session.create(**session_kw)
 
         return CreateCheckoutResponse(
             checkout_url=session.url,

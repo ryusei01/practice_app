@@ -3,6 +3,8 @@ import apiClient from './client';
 export interface CreatePaymentIntentRequest {
   question_set_id: string;
   return_url?: string;
+  /** マーケット用（Stripe Promotion Code の顧客向け文字列）。バックエンドで Coupon ホワイトリスト検証あり */
+  promotion_code?: string;
 }
 
 export interface CreatePaymentIntentResponse {
@@ -11,6 +13,8 @@ export interface CreatePaymentIntentResponse {
   amount: number;
   seller_amount: number;
   platform_fee: number;
+  /** 割引前の問題集価格（円） */
+  original_amount_jpy: number;
 }
 
 export interface Purchase {

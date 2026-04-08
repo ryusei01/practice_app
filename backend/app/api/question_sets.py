@@ -28,6 +28,7 @@ from ..models.copyright_check import CopyrightCheckRecord, RiskLevel
 from ..models.question import QuestionSetApprovalStatus
 from ..models.user import SellerApplicationStatus
 from ..services.copyright_checker import get_copyright_checker
+from ..services.llm_router import AllLLMProvidersFailed
 
 logger = logging.getLogger(__name__)
 
@@ -735,7 +736,7 @@ async def run_copyright_check(
     db: Session = Depends(get_db),
 ):
     """
-    問題集の著作権リスクをGPT-OSS（Ollama経由）で評価する。
+    問題集の著作権リスクをクラウド LLM（Gemini → Hugging Face → Groq）で評価する。
     販売者が公開前に実行する必須チェック。
 
     Returns:
@@ -746,7 +747,7 @@ async def run_copyright_check(
     Raises:
         403: 作成者以外が呼び出した場合
         404: 問題集が見つからない場合
-        503: Ollama が起動していない場合
+        503: LLM が利用できない場合
     """
     question_set = db.query(QuestionSet).filter(QuestionSet.id == question_set_id).first()
     if not question_set:
@@ -765,7 +766,7 @@ async def run_copyright_check(
     if not await checker.is_available():
         raise HTTPException(
             status_code=503,
-            detail="著作権チェックサービス（Ollama）に接続できません。サーバーでOllamaが起動しているか確認してください。",
+            detail="著作権チェック用の AI API キーが設定されていません（GEMINI_API_KEY / HF_TOKEN / GROQ_API_KEY のいずれか）。",
         )
     try:
         result = await checker.check(
@@ -773,10 +774,10 @@ async def run_copyright_check(
             description=question_set.description,
             question_texts=question_texts,
         )
-    except httpx.ConnectError:
+    except AllLLMProvidersFailed:
         raise HTTPException(
             status_code=503,
-            detail="著作権チェックサービス（Ollama）に接続できません。サーバーでOllamaが起動しているか確認してください。",
+            detail="著作権チェックの AI サービスに接続できませんでした。しばらくしてから再試行するか、別のプロバイダのキーを確認してください。",
         )
     except httpx.TimeoutException:
         raise HTTPException(

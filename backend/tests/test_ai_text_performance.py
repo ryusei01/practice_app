@@ -1,7 +1,7 @@
 """
 AIテキストタブ相当の `POST /api/v1/ai/generate-from-text` の性能テスト。
 
-- Ollama をモックしたときのエンドツーエンド応答時間（サーバ側のオーバーヘッド上限）
+- `complete_text` をモックしたときのエンドツーエンド応答時間（サーバ側のオーバーヘッド上限）
 - `_parse_quiz_csv` の大量行パース時間（LLM 出力想定より大きい負荷でも許容範囲か）
 
 実 LLM 計測は環境依存のため `RUN_AI_TEXT_LIVE_PERF=1` のときのみ任意実行。
@@ -10,7 +10,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -24,18 +24,6 @@ SAMPLE_LLM_CSV = """question_text,question_type,option_1,option_2,option_3,optio
 What is 2+2?,multiple_choice,3,4,5,6,2,Because 2+2=4,0.5,math
 Capital of France?,multiple_choice,London,Berlin,Paris,Madrid,3,Paris is the capital.,0.4,geo
 """
-
-
-def _mock_ollama_client():
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status = MagicMock()
-    mock_resp.json.return_value = {"response": SAMPLE_LLM_CSV}
-
-    mock_client = MagicMock()
-    mock_client.post = AsyncMock(return_value=mock_resp)
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
-    return mock_client
 
 
 class TestParseQuizCsvPerformance:
@@ -64,12 +52,14 @@ class TestParseQuizCsvPerformance:
 class TestGenerateFromTextEndpointPerformance:
     """モック LLM 時の HTTP 経路の応答時間。"""
 
-    def test_endpoint_under_threshold_with_mock_ollama(self):
+    def test_endpoint_under_threshold_with_mock_llm(self):
         from fastapi.testclient import TestClient
         from app.main import app
 
-        mock_client = _mock_ollama_client()
-        with patch("app.api.ai_llm.httpx.AsyncClient", return_value=mock_client):
+        async def fake_complete_text(**kwargs):
+            return SAMPLE_LLM_CSV, "gemini"
+
+        with patch("app.api.ai_llm.complete_text", side_effect=fake_complete_text):
             client = TestClient(app)
             t0 = time.perf_counter()
             r = client.post(
@@ -85,25 +75,22 @@ class TestGenerateFromTextEndpointPerformance:
         assert r.status_code == 200, r.text
         data = r.json()
         assert data["total"] >= 1
-        assert elapsed < 5.0, f"endpoint took {elapsed:.3f}s with mock Ollama (expected < 5s)"
+        assert elapsed < 5.0, f"endpoint took {elapsed:.3f}s with mock LLM (expected < 5s)"
 
 
 @pytest.mark.skipif(
     os.environ.get("RUN_AI_TEXT_LIVE_PERF") != "1",
-    reason="実 Ollama への接続が必要。計測する場合は RUN_AI_TEXT_LIVE_PERF=1",
+    reason="実クラウド LLM が必要。計測する場合は RUN_AI_TEXT_LIVE_PERF=1 と API キー設定",
 )
-def test_live_ollama_latency_if_enabled():
-    """ローカルで Ollama が起動しているときの実レイテンシ（任意）。"""
-    import httpx
+def test_live_llm_latency_if_enabled():
+    """GEMINI / HF / GROQ のいずれかが有効なときの実レイテンシ（任意）。"""
     from fastapi.testclient import TestClient
     from app.main import app
     from app.core.config import settings
+    from app.services.llm_router import llm_cloud_configured
 
-    try:
-        r0 = httpx.get(f"{settings.OLLAMA_BASE_URL}/api/tags", timeout=2.0)
-        r0.raise_for_status()
-    except Exception as e:
-        pytest.skip(f"Ollama not reachable: {e}")
+    if not llm_cloud_configured():
+        pytest.skip("No GEMINI_API_KEY / HF_TOKEN / GROQ_API_KEY configured")
 
     client = TestClient(app)
     t0 = time.perf_counter()
@@ -118,5 +105,5 @@ def test_live_ollama_latency_if_enabled():
     elapsed = time.perf_counter() - t0
 
     assert r.status_code == 200, r.text
-    print(f"\n[live] generate-from-text: {elapsed:.2f}s model={settings.OLLAMA_TEXT_GENERATION_MODEL}")
+    print(f"\n[live] generate-from-text: {elapsed:.2f}s (gemini={bool(settings.GEMINI_API_KEY.strip())} hf={bool(settings.HF_TOKEN.strip())} groq={bool(settings.GROQ_API_KEY.strip())})")
     assert elapsed < 180.0, "120s LLM timeout + margin; 実環境で異常に遅い場合は失敗"

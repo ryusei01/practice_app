@@ -48,12 +48,17 @@ export const subscriptionsApi = {
     planType: PremiumPlanType,
     successUrl: string,
     cancelUrl: string,
+    promotionCode?: string,
   ): Promise<CheckoutSession> => {
     const params = new URLSearchParams({
       plan_type: planType,
       success_url: successUrl,
       cancel_url: cancelUrl,
     });
+    const trimmed = promotionCode?.trim();
+    if (trimmed) {
+      params.set('promotion_code', trimmed);
+    }
     const response = await apiClient.post(
       `/subscriptions/create-checkout?${params.toString()}`,
     );

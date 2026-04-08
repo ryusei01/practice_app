@@ -67,6 +67,7 @@ export default function QuestionSetDetailScreen() {
   // 購入関連
   const [isPurchased, setIsPurchased] = useState(false);
   const [isPurchasing, setIsPurchasing] = useState(false);
+  const [purchaseCouponCode, setPurchaseCouponCode] = useState("");
 
   // 通報モーダル
   const [reportModalVisible, setReportModalVisible] = useState(false);
@@ -288,7 +289,10 @@ export default function QuestionSetDetailScreen() {
     } catch (error: any) {
       const msg =
         error?.response?.data?.detail ||
-        t("Copyright check failed. Make sure the Ollama server is running.", "著作権チェックに失敗しました。Ollamaサーバーが起動しているか確認してください。");
+        t(
+          "Copyright check failed. Check AI API keys (Gemini / Hugging Face / Groq) on the server.",
+          "著作権チェックに失敗しました。サーバーの AI API キー（Gemini / Hugging Face / Groq）を確認してください。",
+        );
       Alert.alert(t("Error", "エラー"), msg);
     } finally {
       setIsCopyrightChecking(false);
@@ -840,6 +844,7 @@ ${t("Important notes", "注意事項")}:
     try {
       const result = await paymentsApi.createPaymentIntent({
         question_set_id: questionSet.id,
+        promotion_code: purchaseCouponCode.trim() || undefined,
       });
 
       if (result.client_secret === "free") {
@@ -856,12 +861,21 @@ ${t("Important notes", "注意事項")}:
         // 有料: confirmPurchase で購入確定
         // 実際のStripe決済はclient_secretを使って行われるが、
         // 現時点ではバックエンドのPaymentIntentが成功扱いになるまで待つ
+        const orig = result.original_amount_jpy ?? result.amount;
+        const paid = result.amount;
+        const priceExplain =
+          orig > paid
+            ? t(
+                `Price ¥${orig.toLocaleString()} → you pay ¥${paid.toLocaleString()}. Platform fee: ¥${result.platform_fee.toLocaleString()}`,
+                `定価 ¥${orig.toLocaleString()} → お支払い ¥${paid.toLocaleString()}。プラットフォーム手数料: ¥${result.platform_fee.toLocaleString()}`
+              )
+            : t(
+                `Payment of ¥${paid.toLocaleString()} is being processed. Platform fee: ¥${result.platform_fee.toLocaleString()}`,
+                `¥${paid.toLocaleString()} の決済を処理中です。プラットフォーム手数料: ¥${result.platform_fee.toLocaleString()}`
+              );
         showModal(
           t("Payment", "決済"),
-          t(
-            `Payment of ¥${result.amount.toLocaleString()} is being processed. Platform fee: ¥${result.platform_fee.toLocaleString()}`,
-            `¥${result.amount.toLocaleString()} の決済を処理中です。プラットフォーム手数料: ¥${result.platform_fee.toLocaleString()}`
-          ),
+          priceExplain,
           [
             {
               text: t("Confirm Purchase", "購入を確定"),
@@ -1104,6 +1118,23 @@ What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter i
       {/* 購入セクション */}
       {canPurchase && (
         <View style={styles.purchaseSection}>
+          {questionSet.price > 0 && (
+            <>
+              <Text style={styles.couponFieldLabel}>
+                {t("Coupon code (optional)", "クーポンコード（任意）")}
+              </Text>
+              <TextInput
+                style={styles.couponFieldInput}
+                value={purchaseCouponCode}
+                onChangeText={setPurchaseCouponCode}
+                placeholder={t("Enter code if you have one", "お持ちの場合は入力")}
+                placeholderTextColor="#999"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!isPurchasing}
+              />
+            </>
+          )}
           <TouchableOpacity
             style={[
               styles.purchaseButton,
@@ -2423,6 +2454,23 @@ const styles = StyleSheet.create({
   purchaseSection: {
     marginHorizontal: 16,
     marginBottom: 12,
+  },
+  couponFieldLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 6,
+  },
+  couponFieldInput: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: "#333",
+    marginBottom: 10,
   },
   purchaseButton: {
     backgroundColor: "#FF9500",

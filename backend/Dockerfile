@@ -15,6 +15,10 @@ RUN pip install --no-cache-dir -r requirements-prod.txt
 # アプリケーションコードをコピー
 COPY app/ ./app/
 
+# DB マイグレーション（Alembic）
+COPY alembic.ini .
+COPY alembic/ ./alembic/
+
 # 教科書ファイルをコピー（CI で docs/textbook が backend/ 内に配置済み）
 COPY docs/textbook/ ./docs/textbook/
 
@@ -27,4 +31,4 @@ RUN adduser --disabled-password --gecos "" appuser \
     && chown appuser:appuser /app/uploads
 USER appuser
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1"]
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1"]

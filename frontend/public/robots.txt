@@ -1,6 +1,7 @@
 User-agent: *
 Allow: /
 Allow: /question-sets
+Allow: /trial-question-sets
 
 # 認証が必要なページや個人情報を含むページはインデックスしない
 Disallow: /login

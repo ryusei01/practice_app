@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     PREMIUM_MONTHLY_STRIKETHROUGH_PRICE_JPY: Optional[int] = 350
     PREMIUM_MONTHLY_STRIKETHROUGH_CREDIT_JPY: Optional[int] = 100
 
+    # マーケット（問題集）購入で利用可能な Stripe Coupon ID（カンマ区切り）。
+    # Stripe ダッシュボードで作成した Coupon の ID（coupon_xxx）を列挙する。
+    # 空のときはマーケット向けクーポン入力を拒否する（プレミアム用コードの流用防止）。
+    STRIPE_MARKETPLACE_COUPON_IDS: str = ""
+
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_IOS_CLIENT_ID: str = ""
@@ -77,14 +82,25 @@ class Settings(BaseSettings):
     # ML機能フラグ（現在は独自テキスト類似度のみ使用。外部MLライブラリ不要）
     ENABLE_ML: bool = False
 
-    # Ollama (Local LLM)
+    # Ollama（ローカル翻訳など。学習プラン・著作権・問題生成はクラウド LLM ルーター）
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_TRANSLATION_MODEL: str = "llama3.2:1b"  # 軽量モデル推奨
     USE_LOCAL_TRANSLATION: bool = False  # デフォルトはGoogleTranslatorを使用
-    OLLAMA_COPYRIGHT_CHECK_MODEL: str = "gpt-oss-20b"  # 著作権チェック用モデル（GPT-OSS 20B）
-    OLLAMA_LEARNING_PLAN_MODEL: str = "gpt-oss-20b"  # AI学習プラン生成用（Ollama）
-    OLLAMA_VISION_MODEL: str = "llava"  # 画像認識+問題生成用（Ollama vision model）
-    OLLAMA_TEXT_GENERATION_MODEL: str = "gpt-oss-20b"  # テキスト→問題生成用（Ollama）
+
+    # クラウド LLM（優先順: Gemini → Hugging Face router → Groq）。キー未設定はスキップ。
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_VISION_MODEL: str = "gemini-2.0-flash"
+
+    HF_TOKEN: str = ""
+    HF_CHAT_BASE_URL: str = "https://router.huggingface.co/v1"
+    HF_CHAT_MODEL: str = "meta-llama/Llama-3.2-3B-Instruct:fastest"
+    HF_VISION_MODEL: str = "llava-hf/llava-1.5-7b-hf:fastest"
+
+    GROQ_API_KEY: str = ""
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+    GROQ_MODEL: str = "llama-3.1-8b-instant"
+    GROQ_VISION_MODEL: str = "llama-3.2-11b-vision-preview"
 
     class Config:
         env_file = ".env"

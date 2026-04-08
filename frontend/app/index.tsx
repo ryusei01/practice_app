@@ -19,7 +19,15 @@ import Modal from "../src/components/Modal";
 import { Platform } from "react-native";
 import { submitPublicContact } from "../src/api/contact";
 import { getApiErrorMessage } from "../src/utils/apiError";
-import { APP_TITLE, APP_TAGLINE, SEO_SITE_NAME } from "../src/constants/branding";
+import {
+  APP_TITLE,
+  APP_TAGLINE,
+  SEO_SITE_NAME,
+  SEO_SITE_URL,
+  SEO_OG_IMAGE_URL,
+  SEO_OG_IMAGE_WIDTH,
+  SEO_OG_IMAGE_HEIGHT,
+} from "../src/constants/branding";
 
 const BETA_NOTICE_SEEN_KEY = "@beta_notice_seen";
 
@@ -111,37 +119,37 @@ export default function Home() {
 
       if (!isAuthenticated) {
         // 未ログイン時: SEO最適化
-        const baseUrl = "https://ai-practice-book.com";
+        const baseUrl = SEO_SITE_URL;
         const currentLang = language === "ja" ? "ja" : "en";
 
         // タイトル設定（言語に応じて）
         const pageTitle =
           currentLang === "ja"
-            ? `${APP_TITLE}（${APP_TAGLINE}）- AIと一緒に間違えた問題を忘却曲線に沿って出題するAI単語帳・問題集学習プラットフォーム`
+            ? `${APP_TITLE}（${APP_TAGLINE}）- AI単語帳・AI英単語・問題集｜忘却曲線で間違いを克服する学習プラットフォーム`
             : `${APP_TITLE} - ${APP_TAGLINE} | AI-Powered Flashcard & Quiz App with Spaced Repetition`;
         document.title = pageTitle;
 
         // Description（160文字以内、言語に応じて）
         const description =
           currentLang === "ja"
-            ? "間違えた問題を分析・記録し集中的に苦手をつぶし、忘却曲線に沿って最適なタイミングで復習を提案。苦手克服に特化した、次世代のAI単語帳・問題集アプリ。登録不要でお試し可能。"
+            ? "間違えた問題を分析・記録し苦手をつぶし、忘却曲線に沿って復習。AI単語帳・AI英単語・各種問題集に対応。登録不要でお試し可能。"
             : "Analyze and track your wrong answers, then review them at the perfect moment using the forgetting curve. A next-gen flashcard & quiz app built to eliminate weak spots. Try free without registration.";
 
         // メタタグ設定
         setMetaTag("description", description);
         setMetaTag(
           "keywords",
-          "AI,learning,quiz,flashcard,spaced repetition,forgetting curve,weak areas,score improvement,personalized study,AI,学習,クイズ,単語帳,問題集,忘却曲線,苦手克服,復習,適応型学習,苦手分野,スコアアップ,個別学習"
+          "AI,learning,quiz,flashcard,spaced repetition,forgetting curve,weak areas,score improvement,personalized study,AI,学習,クイズ,単語帳,AI単語帳,AI英単語,英単語,英語学習,問題集,忘却曲線,苦手克服,復習,適応型学習,苦手分野,スコアアップ,個別学習"
         );
 
         // Open Graph
         const ogTitle =
           currentLang === "ja"
-            ? `${APP_TITLE}（${APP_TAGLINE}）- 忘却曲線と誤り集計で苦手を克服するAI単語帳・問題集`
+            ? `${APP_TITLE}（${APP_TAGLINE}）- AI単語帳・AI英単語｜忘却曲線で苦手を克服`
             : `${APP_TITLE} - ${APP_TAGLINE} | Master Your Weak Spots with Spaced Repetition`;
         const ogDescription =
           currentLang === "ja"
-            ? "間違えた問題を分析・記録し、忘却曲線に沿った最適なタイミングで復習を提案。苦手克服に特化した次世代の単語帳・問題集アプリ。"
+            ? "間違えた問題を分析・記録し、忘却曲線に沿って復習。AI単語帳・AI英単語・問題集に対応した次世代の学習アプリ。"
             : "Track your mistakes, review at the right time with the forgetting curve, and turn weak spots into strengths. Your next-gen flashcard & quiz app.";
 
         setMetaTag("og:title", ogTitle, true);
@@ -157,10 +165,28 @@ export default function Home() {
           setMetaTag("og:locale:alternate", "ja_JP", true);
         }
 
-        // Twitter Card
+        // Twitter / X Card（summary_large_image 用に画像・寸法を明示）
         setMetaTag("twitter:card", "summary_large_image");
         setMetaTag("twitter:title", ogTitle);
         setMetaTag("twitter:description", ogDescription);
+        setMetaTag("twitter:image", SEO_OG_IMAGE_URL);
+        setMetaTag(
+          "twitter:image:alt",
+          currentLang === "ja"
+            ? `${APP_TITLE}（${APP_TAGLINE}）のサービス紹介画像`
+            : `${APP_TITLE} (${APP_TAGLINE}) social preview`
+        );
+
+        setMetaTag("og:image", SEO_OG_IMAGE_URL, true);
+        setMetaTag("og:image:width", String(SEO_OG_IMAGE_WIDTH), true);
+        setMetaTag("og:image:height", String(SEO_OG_IMAGE_HEIGHT), true);
+        setMetaTag(
+          "og:image:alt",
+          currentLang === "ja"
+            ? `${APP_TITLE}（${APP_TAGLINE}）のサービス紹介画像`
+            : `${APP_TITLE} (${APP_TAGLINE}) social preview`,
+          true
+        );
 
         // その他のSEOタグ
         setMetaTag("robots", "index, follow");
@@ -170,8 +196,8 @@ export default function Home() {
         // Canonical URL
         setLinkTag("canonical", baseUrl);
 
-        // Alternate language links
-        setLinkTag("alternate", `${baseUrl}?lang=ja`, "x-default");
+        // Alternate language links（x-default は sitemap と同じくルート）
+        setLinkTag("alternate", baseUrl, "x-default");
         setLinkTag("alternate", `${baseUrl}?lang=ja`, "ja");
         setLinkTag("alternate", `${baseUrl}?lang=en`, "en");
 
@@ -366,7 +392,10 @@ export default function Home() {
                   {t("Flashcard Mode", "単語帳モード")}
                 </Text>
                 <Text style={styles.featureDesc} nativeID="feature-desc-3">
-                  {t("Study with voice support", "音声読み上げで効率学習")}
+                  {t(
+                    "Study with voice support",
+                    "AI単語帳・AI英単語の暗記に。音声読み上げで効率学習"
+                  )}
                 </Text>
               </View>
 

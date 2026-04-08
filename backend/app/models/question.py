@@ -5,6 +5,10 @@ import enum
 from ..core.database import Base
 
 
+def _default_content_languages():
+    return ["ja"]
+
+
 class QuestionSetApprovalStatus(str, enum.Enum):
     """問題集の管理者審査ステータス"""
     NOT_REQUIRED = "not_required"   # 既存 is_seller ユーザーや審査不要ケース
@@ -38,7 +42,7 @@ class QuestionSet(Base):
     textbook_content = Column(Text, nullable=True)
 
     # 問題文・解説などの言語（ja / en を複数可）。JSON 配列 e.g. ["ja"], ["en"], ["ja","en"]
-    content_languages = Column(JSON, nullable=True)
+    content_languages = Column(JSON, nullable=False, default=_default_content_languages)
     # 後方互換・一覧フィルタ用の代表値（content_languages の先頭と同期）
     content_language = Column(String, nullable=False, default="ja", server_default="ja")
 

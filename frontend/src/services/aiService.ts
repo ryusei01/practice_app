@@ -106,7 +106,7 @@ class AIService {
   }
 
   /**
-   * Ollama 経由で学習プランを生成（タイムアウト長め）
+   * クラウド LLM（Gemini → Hugging Face → Groq）で学習プランを生成（タイムアウト長め）
    */
   async generateLearningPlan(body: GenerateLearningPlanBody): Promise<LearningPlanResponse> {
     const response = await apiClient.post<LearningPlanResponse>('/ai/generate-learning-plan', body, {

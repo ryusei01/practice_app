@@ -185,6 +185,23 @@ export default function EditQuestionSetScreen() {
       );
       return;
     }
+    if (next && !isPublished) {
+      Alert.alert(
+        t("Copyright Agreement Required", "著作権に関する確認"),
+        t(
+          "Please confirm that your content does not infringe on any copyrights (no copies from textbooks, past exams, or paid materials).",
+          "公開するコンテンツに著作権侵害がないことを確認してください。市販の問題集・過去問・有料教材のコピーは禁止されています。"
+        ),
+        [
+          { text: t("Cancel", "キャンセル"), style: "cancel" },
+          {
+            text: t("I Understand", "確認しました"),
+            onPress: () => setIsPublished(true),
+          },
+        ]
+      );
+      return;
+    }
     setIsPublished(next);
   };
 

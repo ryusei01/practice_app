@@ -21,6 +21,11 @@ from ..core.limiter import limiter
 from ..core.rate_limit_keys import payment_user_or_ip_key
 from ..models import User, QuestionSet, Purchase
 from ..services.stripe_service import stripe_service
+from ..services.stripe_coupon import (
+    assert_marketplace_coupon_whitelisted,
+    discounted_amount_jpy,
+    lookup_active_promotion_code,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +35,7 @@ router = APIRouter()
 class CreatePaymentIntentRequest(BaseModel):
     question_set_id: str
     return_url: Optional[str] = None
+    promotion_code: Optional[str] = None
 
 
 class CreatePaymentIntentResponse(BaseModel):
@@ -38,6 +44,7 @@ class CreatePaymentIntentResponse(BaseModel):
     amount: int
     seller_amount: int
     platform_fee: int
+    original_amount_jpy: int
 
 
 class StripeAccountLinkRequest(BaseModel):
@@ -153,7 +160,8 @@ async def create_payment_intent(
             payment_intent_id="free",
             amount=0,
             seller_amount=0,
-            platform_fee=0
+            platform_fee=0,
+            original_amount_jpy=0,
         )
 
     creator = db.query(User).filter(User.id == question_set.creator_id).first()
@@ -163,14 +171,62 @@ async def create_payment_intent(
             detail="販売者のStripeアカウントが未設定です"
         )
 
+    original_jpy = question_set.price
+    final_jpy = original_jpy
+    pi_metadata: dict = {
+        "question_set_id": payload.question_set_id,
+        "buyer_id": current_user.id,
+        "original_amount_jpy": str(original_jpy),
+    }
+
+    code_trim = (payload.promotion_code or "").strip()
+    if code_trim:
+        pc = lookup_active_promotion_code(code_trim)
+        if not pc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="クーポンコードが見つからないか、利用できません。",
+            )
+        coupon = pc.coupon
+        if isinstance(coupon, str):
+            coupon = stripe.Coupon.retrieve(coupon)
+        try:
+            assert_marketplace_coupon_whitelisted(coupon.id)
+        except ValueError as e:
+            reason = str(e)
+            if reason == "marketplace_coupons_disabled":
+                detail = (
+                    "マーケット向けクーポンは現在利用できません。"
+                    "管理者が STRIPE_MARKETPLACE_COUPON_IDS を設定するまでお待ちください。"
+                )
+            elif reason == "coupon_not_in_whitelist":
+                detail = "このクーポンは問題集購入では利用できません。"
+            else:
+                detail = "このクーポンは利用できません。"
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=detail,
+            ) from e
+        try:
+            final_jpy = discounted_amount_jpy(original_jpy, coupon)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="このクーポンは現在の通貨（JPY）に対応していません。",
+            )
+        if final_jpy < 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="このクーポンでは決済額が0円以下になるため、問題集購入には使えません。",
+            )
+        pi_metadata["promotion_code_id"] = pc.id
+        pi_metadata["coupon_id"] = coupon.id
+
     try:
         result = stripe_service.create_payment_intent(
-            amount=question_set.price,
+            amount=final_jpy,
             seller_account_id=creator.stripe_account_id,
-            metadata={
-                "question_set_id": payload.question_set_id,
-                "buyer_id": current_user.id,
-            }
+            metadata=pi_metadata,
         )
     except Exception as e:
         logger.error(f"PaymentIntent作成エラー: {e}")
@@ -185,6 +241,7 @@ async def create_payment_intent(
         amount=result["amount"],
         seller_amount=result["seller_amount"],
         platform_fee=result["platform_fee"],
+        original_amount_jpy=original_jpy,
     )
 
 

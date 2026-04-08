@@ -20,7 +20,6 @@ import Header from "../../../src/components/Header";
 
 export default function CreateQuestionSetScreen() {
   const [isLoading, setIsLoading] = useState(false);
-  const [agreedToCopyright, setAgreedToCopyright] = useState(false);
   const router = useRouter();
   const { user } = useAuth();
   const { t, language } = useLanguage();
@@ -32,26 +31,6 @@ export default function CreateQuestionSetScreen() {
   const handleCreate = async () => {
     console.log("handleCreate called");
     console.log("User:", user);
-
-    if (!agreedToCopyright) {
-      Alert.alert(
-        t("Copyright Agreement Required", "著作権に関する確認"),
-        t(
-          "Please confirm that your content does not infringe on any copyrights (no copies from textbooks, past exams, or paid materials).",
-          "作成するコンテンツに著作権侵害がないことを確認してください。市販の問題集・過去問・有料教材のコピーは禁止されています。"
-        ),
-        [
-          { text: t("Cancel", "キャンセル"), style: "cancel" },
-          {
-            text: t("I Understand", "確認しました"),
-            onPress: () => {
-              setAgreedToCopyright(true);
-            },
-          },
-        ]
-      );
-      return;
-    }
 
     setIsLoading(true);
     try {
@@ -177,33 +156,6 @@ export default function CreateQuestionSetScreen() {
           </Text>
         </View>
 
-        {/* 著作権ガイドライン確認 */}
-        <TouchableOpacity
-          style={[
-            styles.copyrightCheckBox,
-            agreedToCopyright && styles.copyrightCheckBoxChecked,
-          ]}
-          onPress={() => setAgreedToCopyright(!agreedToCopyright)}
-          activeOpacity={0.7}
-        >
-          <View
-            style={[
-              styles.checkbox,
-              agreedToCopyright && styles.checkboxChecked,
-            ]}
-          >
-            {agreedToCopyright && (
-              <Text style={styles.checkmark}>✓</Text>
-            )}
-          </View>
-          <Text style={styles.copyrightCheckText}>
-            {t(
-              "I confirm this content does not infringe any copyrights (no copies from textbooks, past exams, or paid materials). AI copyright check is required before publishing.",
-              "このコンテンツが著作権を侵害していないことを確認しました。市販の問題集・過去問・有料教材のコピーは禁止です。公開前にAI著作権チェックが必要です。"
-            )}
-          </Text>
-        </TouchableOpacity>
-
         <TouchableOpacity
           style={[styles.button, isLoading && styles.buttonDisabled]}
           onPress={handleCreate}
@@ -328,47 +280,5 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     color: "#007AFF",
-  },
-  copyrightCheckBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    padding: 12,
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  copyrightCheckBoxChecked: {
-    borderColor: "#34C759",
-    backgroundColor: "#f0fff4",
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: "#ccc",
-    marginRight: 10,
-    marginTop: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  checkboxChecked: {
-    borderColor: "#34C759",
-    backgroundColor: "#34C759",
-  },
-  checkmark: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  copyrightCheckText: {
-    flex: 1,
-    fontSize: 13,
-    color: "#444",
-    lineHeight: 19,
   },
 });

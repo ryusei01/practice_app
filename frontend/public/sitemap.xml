@@ -4,7 +4,7 @@
   <!-- ホームページ -->
   <url>
     <loc>https://ai-practice-book.com/</loc>
-    <lastmod>2024-12-20</lastmod>
+    <lastmod>2026-04-08</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <xhtml:link rel="alternate" hreflang="ja" href="https://ai-practice-book.com/?lang=ja" />
@@ -15,7 +15,7 @@
   <!-- お試し版問題セット一覧 -->
   <url>
     <loc>https://ai-practice-book.com/question-sets</loc>
-    <lastmod>2024-12-20</lastmod>
+    <lastmod>2026-04-08</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="ja" href="https://ai-practice-book.com/question-sets?lang=ja" />

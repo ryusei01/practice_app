@@ -11,9 +11,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from contextlib import asynccontextmanager
 from .core.config import settings
-from .core.database import engine
 from .core.limiter import limiter
-from .core.startup_migrations import run_startup_migrations
 
 _logger = logging.getLogger(__name__)
 # uvicorn のコンソールは third-party の INFO を落としがちなので、起動時の本人確認はこちらへ出す
@@ -23,7 +21,6 @@ _uvicorn_log = logging.getLogger("uvicorn.error")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """アプリケーションのライフサイクル管理"""
-    run_startup_migrations(engine)
     try:
         import app.api.ai as _ai_api
         _paths = app.openapi().get("paths") or {}

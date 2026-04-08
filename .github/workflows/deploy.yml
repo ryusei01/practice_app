@@ -75,3 +75,83 @@ jobs:
               GOOGLE_IOS_CLIENT_ID=${{ secrets.GOOGLE_IOS_CLIENT_ID }},\
               GOOGLE_ANDROID_CLIENT_ID=${{ secrets.GOOGLE_ANDROID_CLIENT_ID }},\
               CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}"
+
+      - name: Apply optional Ollama env vars to Cloud Run
+        env:
+          OLLAMA_BASE_URL: ${{ secrets.OLLAMA_BASE_URL }}
+          OLLAMA_LEARNING_PLAN_MODEL: ${{ secrets.OLLAMA_LEARNING_PLAN_MODEL }}
+          OLLAMA_COPYRIGHT_CHECK_MODEL: ${{ secrets.OLLAMA_COPYRIGHT_CHECK_MODEL }}
+          OLLAMA_VISION_MODEL: ${{ secrets.OLLAMA_VISION_MODEL }}
+          OLLAMA_TEXT_GENERATION_MODEL: ${{ secrets.OLLAMA_TEXT_GENERATION_MODEL }}
+        run: |
+          set -e
+          OLLAMA_VARS=""
+          add_var() {
+            key="$1"
+            val="$2"
+            [ -z "$val" ] && return 0
+            if [ -n "$OLLAMA_VARS" ]; then
+              OLLAMA_VARS="${OLLAMA_VARS},${key}=${val}"
+            else
+              OLLAMA_VARS="${key}=${val}"
+            fi
+          }
+          add_var OLLAMA_BASE_URL "$OLLAMA_BASE_URL"
+          add_var OLLAMA_LEARNING_PLAN_MODEL "$OLLAMA_LEARNING_PLAN_MODEL"
+          add_var OLLAMA_COPYRIGHT_CHECK_MODEL "$OLLAMA_COPYRIGHT_CHECK_MODEL"
+          add_var OLLAMA_VISION_MODEL "$OLLAMA_VISION_MODEL"
+          add_var OLLAMA_TEXT_GENERATION_MODEL "$OLLAMA_TEXT_GENERATION_MODEL"
+          if [ -z "$OLLAMA_VARS" ]; then
+            echo "No OLLAMA_* secrets set; skipping Cloud Run env update."
+            exit 0
+          fi
+          gcloud run services update quiz-marketplace-api \
+            --region asia-northeast1 \
+            --platform managed \
+            --update-env-vars "$OLLAMA_VARS"
+
+      - name: Apply optional cloud LLM env vars (Gemini / HF / Groq)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
+          GEMINI_VISION_MODEL: ${{ secrets.GEMINI_VISION_MODEL }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_CHAT_BASE_URL: ${{ secrets.HF_CHAT_BASE_URL }}
+          HF_CHAT_MODEL: ${{ secrets.HF_CHAT_MODEL }}
+          HF_VISION_MODEL: ${{ secrets.HF_VISION_MODEL }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_BASE_URL: ${{ secrets.GROQ_BASE_URL }}
+          GROQ_MODEL: ${{ secrets.GROQ_MODEL }}
+          GROQ_VISION_MODEL: ${{ secrets.GROQ_VISION_MODEL }}
+        run: |
+          set -e
+          LLM_VARS=""
+          add_var() {
+            key="$1"
+            val="$2"
+            [ -z "$val" ] && return 0
+            if [ -n "$LLM_VARS" ]; then
+              LLM_VARS="${LLM_VARS},${key}=${val}"
+            else
+              LLM_VARS="${key}=${val}"
+            fi
+          }
+          add_var GEMINI_API_KEY "$GEMINI_API_KEY"
+          add_var GEMINI_MODEL "$GEMINI_MODEL"
+          add_var GEMINI_VISION_MODEL "$GEMINI_VISION_MODEL"
+          add_var HF_TOKEN "$HF_TOKEN"
+          add_var HF_CHAT_BASE_URL "$HF_CHAT_BASE_URL"
+          add_var HF_CHAT_MODEL "$HF_CHAT_MODEL"
+          add_var HF_VISION_MODEL "$HF_VISION_MODEL"
+          add_var GROQ_API_KEY "$GROQ_API_KEY"
+          add_var GROQ_BASE_URL "$GROQ_BASE_URL"
+          add_var GROQ_MODEL "$GROQ_MODEL"
+          add_var GROQ_VISION_MODEL "$GROQ_VISION_MODEL"
+          if [ -z "$LLM_VARS" ]; then
+            echo "No cloud LLM secrets set; skipping Cloud Run env update."
+            exit 0
+          fi
+          gcloud run services update quiz-marketplace-api \
+            --region asia-northeast1 \
+            --platform managed \
+            --update-env-vars "$LLM_VARS"

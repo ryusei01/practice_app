@@ -1,22 +1,15 @@
 """
-著作権チェックサービス（GPT-OSS via Ollama）
+著作権チェックサービス（Gemini → Hugging Face → Groq）。
 
 販売者が問題集を公開する前に、コンテンツが著作権を侵害していないかを
-GPT-OSS モデル（Ollama 経由・無料・ローカル実行）で自動評価する。
-
-使用モデル: gpt-oss-20b（設定: OLLAMA_COPYRIGHT_CHECK_MODEL）
-  - 16GB VRAM 以内で動作
-  - Apache 2.0 ライセンス・商用無料
-  - ollama pull gpt-oss-20b で事前ダウンロード要
+クラウド LLM で自動評価する。モデルは環境変数（GEMINI_* / HF_* / GROQ_*）で指定。
 """
 import json
 import logging
 import re
 from typing import Optional
 
-import httpx
-
-from ..core.config import settings
+from .llm_router import complete_text, llm_cloud_configured
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +42,9 @@ LOW risk indicators (respond with "low"):
 
 
 class CopyrightChecker:
-    """GPT-OSS（Ollama経由）を使った著作権リスク評価"""
+    """クラウド LLM を使った著作権リスク評価"""
 
-    def __init__(self, base_url: Optional[str] = None):
-        self.base_url = base_url or settings.OLLAMA_BASE_URL
-        self.model = settings.OLLAMA_COPYRIGHT_CHECK_MODEL
+    def __init__(self) -> None:
         self.timeout = 120.0  # LLM 推論は時間がかかるため長めに設定
 
     def _build_content_text(
@@ -74,7 +65,7 @@ class CopyrightChecker:
 
     def _parse_response(self, raw: str) -> dict:
         """
-        Ollama の生レスポンスから JSON を抽出してパースする。
+        モデル生テキストから JSON を抽出してパースする。
         モデルが余分なテキストを出力した場合にも対応。
         """
         # JSON ブロックを探す
@@ -128,37 +119,23 @@ class CopyrightChecker:
             }
 
         Raises:
-            httpx.ConnectError: Ollama が起動していない場合
-            httpx.TimeoutException: タイムアウトした場合
+            AllLLMProvidersFailed: 全プロバイダが失敗した場合（呼び出し元で HTTP に変換）
         """
         content = self._build_content_text(title, description, question_texts)
-        prompt = (
-            f"{SYSTEM_PROMPT}\n\n"
+        user = (
             f"Analyze the following educational content:\n\n{content}\n\n"
             "JSON response:"
         )
 
-        payload = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": 0.1,  # 一貫した判定のため低温に設定
-                "num_predict": 512,
-            },
-        }
+        logger.info("Calling cloud LLM for copyright check on: %s", title)
 
-        logger.info("Calling GPT-OSS (%s) for copyright check on: %s", self.model, title)
-
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                f"{self.base_url}/api/generate",
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
-
-        raw_response = data.get("response", "")
+        raw_response, _prov = await complete_text(
+            system=SYSTEM_PROMPT,
+            user=user,
+            temperature=0.1,
+            max_tokens=512,
+            timeout=self.timeout,
+        )
         result = self._parse_response(raw_response)
         result["raw_response"] = raw_response
 
@@ -170,13 +147,8 @@ class CopyrightChecker:
         return result
 
     async def is_available(self) -> bool:
-        """Ollama が応答するか（著作権チェック前の接続確認用）"""
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(f"{self.base_url}/api/tags")
-                return response.status_code == 200
-        except Exception:
-            return False
+        """クラウド LLM の API キーが 1 つでも設定されているか。"""
+        return llm_cloud_configured()
 
 
 # シングルトンインスタンス（アプリ起動時に1回だけ生成）

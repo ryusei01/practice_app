@@ -211,12 +211,6 @@ export default function LearningPlanScreen() {
       </TouchableOpacity>
 
       <Text style={styles.title}>{t("AI Learning Plan", "AI学習プラン")}</Text>
-      <Text style={styles.hint}>
-        {t(
-          "Generates a plan using your local Ollama (GPT-OSS, etc.). Start Ollama on your machine.",
-          "ローカルの Ollama（GPT-OSS 等）でプランを生成します。PC で Ollama を起動してください。"
-        )}
-      </Text>
 
       <View style={styles.card}>
         <Text style={styles.label}>{t("Goal", "目標")}</Text>
@@ -367,13 +361,7 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: "700",
     color: "#333",
-    marginBottom: 8,
-  },
-  hint: {
-    fontSize: 13,
-    color: "#666",
     marginBottom: 16,
-    lineHeight: 18,
   },
   card: {
     backgroundColor: "#fff",

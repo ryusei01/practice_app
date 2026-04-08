@@ -15,13 +15,13 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from ..core.config import settings
 from ..utils.content_languages import (
     ai_language_hint,
     normalize_content_language_list,
     parse_query_content_languages,
 )
 from ..services.learning_plan_generator import get_learning_plan_generator
+from ..services.llm_router import AllLLMProvidersFailed, complete_text, complete_vision
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -37,8 +37,7 @@ class GenerateLearningPlanRequest(BaseModel):
 @router.post("/generate-learning-plan")
 async def generate_learning_plan(request: GenerateLearningPlanRequest):
     """
-    Ollama（GPT-OSS 等）で学習プランを生成する。
-    接続失敗時は 503、それ以外のサーバエラーは 500。
+    クラウド LLM（Gemini → Hugging Face → Groq）で学習プランを生成する。
     """
     gen = get_learning_plan_generator()
     try:
@@ -49,23 +48,17 @@ async def generate_learning_plan(request: GenerateLearningPlanRequest):
             weak_categories=[c.strip() for c in request.weak_categories if c and str(c).strip()],
         )
         return result
-    except httpx.ConnectError as e:
-        logger.warning("Ollama connect error (learning plan): %s", e)
+    except AllLLMProvidersFailed as e:
+        logger.warning("Learning plan: all LLM providers failed: %s", e)
         raise HTTPException(
             status_code=503,
-            detail="ローカルLLM（Ollama）に接続できません。Ollama を起動し、モデルを取得してから再度お試しください。",
+            detail="AIサービスに接続できませんでした。GEMINI_API_KEY / HF_TOKEN / GROQ_API_KEY のいずれかを設定し、しばらくしてから再度お試しください。",
         )
     except httpx.TimeoutException as e:
-        logger.warning("Ollama timeout (learning plan): %s", e)
+        logger.warning("LLM timeout (learning plan): %s", e)
         raise HTTPException(
             status_code=504,
             detail="学習プランの生成がタイムアウトしました。しばらくしてから再度お試しください。",
-        )
-    except httpx.HTTPStatusError as e:
-        logger.warning("Ollama HTTP error (learning plan): %s", e)
-        raise HTTPException(
-            status_code=502,
-            detail="ローカルLLMからエラー応答がありました。Ollama のログを確認してください。",
         )
     except Exception as e:
         logger.exception("Learning plan generation failed: %s", e)
@@ -225,30 +218,27 @@ async def generate_from_image(
     if parsed:
         lang_hint = ai_language_hint(normalize_content_language_list(parsed, None))
 
-    vision_prompt = (
-        f"{_VISION_SYSTEM_PROMPT}{lang_hint}\n\n"
-        f"Generate approximately {count} questions from this image."
-    )
+    mime = (file.content_type or "image/jpeg").split(";")[0].strip() or "image/jpeg"
 
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(
-                f"{settings.OLLAMA_BASE_URL}/api/generate",
-                json={
-                    "model": settings.OLLAMA_VISION_MODEL,
-                    "prompt": vision_prompt,
-                    "images": [b64_image],
-                    "stream": False,
-                    "options": {"temperature": 0.3},
-                },
-            )
-            response.raise_for_status()
-            result = response.json()
-            raw_text = result.get("response", "")
-
+        raw_text, _prov = await complete_vision(
+            system=_VISION_SYSTEM_PROMPT + lang_hint,
+            user_text=f"Generate approximately {count} questions from this image.",
+            mime_type=mime,
+            image_b64=b64_image,
+            temperature=0.3,
+            max_tokens=8192,
+            timeout=120.0,
+        )
+    except AllLLMProvidersFailed as e:
+        logger.error("Vision LLM all providers failed: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail="画像からの問題生成サービスに接続できませんでした。APIキー（Gemini / Hugging Face / Groq）と画像モデル設定を確認してください。",
+        )
     except httpx.HTTPError as e:
         logger.error("Vision LLM call failed: %s", e)
-        raise HTTPException(status_code=502, detail="Vision model unavailable. Ensure Ollama is running with a vision model.")
+        raise HTTPException(status_code=502, detail="画像認識モデルからエラー応答がありました。")
 
     questions = _parse_quiz_csv(raw_text)
 
@@ -306,44 +296,30 @@ async def generate_from_text(request: GenerateFromTextRequest):
             "Generate questions from the following text:"
         )
 
-    prompt = (
-        f"{_TEXT_SYSTEM_PROMPT}{lang_hint}\n\n"
+    user = (
         f"{count_instruction}\n\n"
         f"---\n{request.text}\n---"
     )
 
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(
-                f"{settings.OLLAMA_BASE_URL}/api/generate",
-                json={
-                    "model": settings.OLLAMA_TEXT_GENERATION_MODEL,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {"temperature": 0.3},
-                },
-            )
-            response.raise_for_status()
-            result = response.json()
-            raw_text = result.get("response", "")
-
-    except httpx.ConnectError as e:
-        logger.warning("Ollama connect error (text generation): %s", e)
+        raw_text, _prov = await complete_text(
+            system=_TEXT_SYSTEM_PROMPT + lang_hint,
+            user=user,
+            temperature=0.3,
+            max_tokens=8192,
+            timeout=120.0,
+        )
+    except AllLLMProvidersFailed as e:
+        logger.warning("Text generation: all LLM providers failed: %s", e)
         raise HTTPException(
             status_code=503,
-            detail="ローカルLLM（Ollama）に接続できません。Ollama を起動してから再度お試しください。",
+            detail="AIサービスに接続できませんでした。APIキー（Gemini / Hugging Face / Groq）を確認してください。",
         )
     except httpx.TimeoutException as e:
-        logger.warning("Ollama timeout (text generation): %s", e)
+        logger.warning("LLM timeout (text generation): %s", e)
         raise HTTPException(
             status_code=504,
             detail="問題生成がタイムアウトしました。テキストを短くするか、しばらくしてから再度お試しください。",
-        )
-    except httpx.HTTPStatusError as e:
-        logger.error("Ollama HTTP error (text generation): %s", e)
-        raise HTTPException(
-            status_code=502,
-            detail="ローカルLLMからエラー応答がありました。Ollama のログを確認してください。",
         )
 
     questions = _parse_quiz_csv(raw_text)

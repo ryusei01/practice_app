@@ -36,7 +36,18 @@ import { useAuth } from "../../src/contexts/AuthContext";
 import Header from "../../src/components/Header";
 import Modal from "../../src/components/Modal";
 import { srsService } from "../../src/services/srsService";
-import { APP_TITLE, APP_TAGLINE, SEO_SITE_NAME } from "../../src/constants/branding";
+import {
+  APP_TITLE,
+  APP_TAGLINE,
+  SEO_SITE_NAME,
+  SEO_SITE_URL,
+  SEO_OG_IMAGE_URL,
+  SEO_OG_IMAGE_WIDTH,
+  SEO_OG_IMAGE_HEIGHT,
+} from "../../src/constants/branding";
+
+const languageMaskForUiLanguage = (lang: "en" | "ja") =>
+  lang === "ja" ? { ja: true, en: false } : { ja: false, en: true };
 
 export default function TrialQuestionSetsScreen() {
   const [questionSets, setQuestionSets] = useState<LocalQuestionSet[]>([]);
@@ -45,16 +56,25 @@ export default function TrialQuestionSetsScreen() {
   const isLoadingRef = useRef(false); // 重複読み込み防止用
   const [showDefaultSets, setShowDefaultSets] = useState(true);
   const [showTextbooks, setShowTextbooks] = useState(true);
-  /** 日本語・English をトグルで絞り込み（初期は両方オン＝従来の「すべて」相当） */
-  const [languageMask, setLanguageMask] = useState<{
-    ja: boolean;
-    en: boolean;
-  }>({ ja: true, en: true });
-  const [dueCounts, setDueCounts] = useState<Record<string, number>>({});
   const { user } = useAuth();
   const { t, language } = useLanguage();
+  /** 日本語・English 絞り込み（初期・言語変更時は UI 言語に合わせる） */
+  const [languageMask, setLanguageMask] = useState(() =>
+    languageMaskForUiLanguage(language)
+  );
   const router = useRouter();
   const pathname = usePathname();
+
+  const prevLanguageForMaskRef = useRef<"en" | "ja" | null>(null);
+  useEffect(() => {
+    if (prevLanguageForMaskRef.current === null) {
+      prevLanguageForMaskRef.current = language;
+      return;
+    }
+    if (prevLanguageForMaskRef.current === language) return;
+    prevLanguageForMaskRef.current = language;
+    setLanguageMask(languageMaskForUiLanguage(language));
+  }, [language]);
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 600;
   const scrollViewRef = useRef<ScrollView>(null);
@@ -171,56 +191,83 @@ export default function TrialQuestionSetsScreen() {
         meta.content = content;
       };
 
+      const setLinkTag = (rel: string, href: string, hreflang?: string) => {
+        const selector = hreflang
+          ? `link[rel="${rel}"][hreflang="${hreflang}"]`
+          : `link[rel="${rel}"]`;
+        let link = document.querySelector(selector) as HTMLLinkElement;
+        if (!link) {
+          link = document.createElement("link");
+          link.setAttribute("rel", rel);
+          if (hreflang) {
+            link.setAttribute("hreflang", hreflang);
+          }
+          document.head.appendChild(link);
+        }
+        link.href = href;
+      };
+
       const isJa = language === "ja";
+      /** sitemap と同じ正規 URL（/trial-question-sets からのアクセスもここに集約） */
+      const canonicalTrialPath = `${SEO_SITE_URL}/question-sets`;
 
       document.title = isJa
-        ? `${APP_TITLE}（${APP_TAGLINE}）- 無料お試し | 登録不要で問題セットを練習`
+        ? `${APP_TITLE}（${APP_TAGLINE}）- 無料お試し | AI単語帳・AI英単語・登録不要で練習`
         : `${APP_TITLE} - ${APP_TAGLINE} | Free Trial · Practice Without Sign Up`;
 
       setMetaTag(
         "description",
         isJa
-          ? "登録不要でカスタム問題セットを作成・練習。AI搭載の単語帳モードとクイズシステムを無料で試せます。"
+          ? "登録不要でカスタム問題セットを作成・練習。AI単語帳・AI英単語向けの単語帳モードとクイズを無料で試せます。"
           : "Create and practice with custom question sets without signing up. Try our AI-powered flashcard mode and quiz system for free."
       );
       setMetaTag(
         "keywords",
         isJa
-          ? "無料,登録不要,お試し,単語帳,クイズ,練習,AI学習,問題セット"
+          ? "無料,登録不要,お試し,単語帳,AI単語帳,AI英単語,英単語,英語学習,クイズ,練習,AI学習,問題セット"
           : "trial,free,no signup,flashcard,quiz,practice,demo,AI learning,question sets"
       );
-      setMetaTag(
-        "og:title",
-        isJa
-          ? `${APP_TITLE}（${APP_TAGLINE}）無料お試し - 登録不要で体験`
-          : `Try ${APP_TITLE} (${APP_TAGLINE}) Free - No Sign Up Required`,
-        "property"
-      );
-      setMetaTag(
-        "og:description",
-        isJa
-          ? "AI学習を無料で体験。アカウント作成不要でクイズと単語帳を試せます。"
-          : "Experience AI-powered learning for free. Create quizzes and practice with flashcards without creating an account.",
-        "property"
-      );
+      const ogTitleTrial = isJa
+        ? `${APP_TITLE}（${APP_TAGLINE}）無料お試し - AI単語帳・AI英単語・登録不要`
+        : `Try ${APP_TITLE} (${APP_TAGLINE}) Free - No Sign Up Required`;
+      const ogDescTrial = isJa
+        ? "AI単語帳・AI英単語の練習を無料で体験。アカウント不要でクイズと単語帳モードを試せます。"
+        : "Experience AI-powered learning for free. Create quizzes and practice with flashcards without creating an account.";
+
+      setMetaTag("og:title", ogTitleTrial, "property");
+      setMetaTag("og:description", ogDescTrial, "property");
+      setMetaTag("og:type", "website", "property");
+      setMetaTag("og:url", canonicalTrialPath, "property");
       setMetaTag("og:site_name", SEO_SITE_NAME, "property");
       setMetaTag("application-name", SEO_SITE_NAME);
       setMetaTag("author", SEO_SITE_NAME);
-      setMetaTag("twitter:card", "summary_large_image");
+      setMetaTag("og:image", SEO_OG_IMAGE_URL, "property");
+      setMetaTag("og:image:width", String(SEO_OG_IMAGE_WIDTH), "property");
+      setMetaTag("og:image:height", String(SEO_OG_IMAGE_HEIGHT), "property");
       setMetaTag(
-        "twitter:title",
+        "og:image:alt",
         isJa
-          ? `${APP_TITLE}（${APP_TAGLINE}）無料お試し - 登録不要で体験`
-          : `Try ${APP_TITLE} (${APP_TAGLINE}) Free - No Sign Up Required`
+          ? `${APP_TITLE}（${APP_TAGLINE}）無料お試しのシェア用画像`
+          : `${APP_TITLE} (${APP_TAGLINE}) free trial social preview`,
+        "property"
       );
+      setMetaTag("twitter:card", "summary_large_image");
+      setMetaTag("twitter:title", ogTitleTrial);
+      setMetaTag("twitter:description", ogDescTrial);
+      setMetaTag("twitter:image", SEO_OG_IMAGE_URL);
       setMetaTag(
-        "twitter:description",
+        "twitter:image:alt",
         isJa
-          ? "AI学習を無料で体験。アカウント作成不要でクイズと単語帳を試せます。"
-          : "Experience AI-powered learning for free. Create quizzes and practice with flashcards without creating an account."
+          ? `${APP_TITLE}（${APP_TAGLINE}）無料お試しのシェア用画像`
+          : `${APP_TITLE} (${APP_TAGLINE}) free trial social preview`
       );
       setMetaTag("og:locale", isJa ? "ja_JP" : "en_US", "property");
       setMetaTag("robots", "index, follow");
+
+      setLinkTag("canonical", canonicalTrialPath);
+      setLinkTag("alternate", `${SEO_SITE_URL}/question-sets`, "x-default");
+      setLinkTag("alternate", `${SEO_SITE_URL}/question-sets?lang=ja`, "ja");
+      setLinkTag("alternate", `${SEO_SITE_URL}/question-sets?lang=en`, "en");
     }
   }, [language]);
 

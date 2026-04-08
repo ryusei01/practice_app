@@ -12,4 +12,4 @@ cmds = ["python3 -m ensurepip --upgrade", "python3 -m pip install --upgrade pip"
 dependsOn = ["install"]
 
 [start]
-cmd = "python3 -m uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+cmd = "python3 -m alembic upgrade head && python3 -m uvicorn app.main:app --host 0.0.0.0 --port $PORT"

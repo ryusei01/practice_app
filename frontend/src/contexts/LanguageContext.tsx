@@ -32,8 +32,21 @@ const getSystemLanguage = (): Language => {
   }
 };
 
+/** マウント直後の UI 言語（URL / 端末ロケール）。AsyncStorage は loadLanguage で上書き */
+const getInitialLanguage = (): Language => {
+  try {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const urlLang = new URLSearchParams(window.location.search).get('lang');
+      if (urlLang === 'en' || urlLang === 'ja') return urlLang;
+    }
+    return getSystemLanguage();
+  } catch {
+    return 'en';
+  }
+};
+
 export const LanguageProvider = ({ children }: { children: ReactNode }) => {
-  const [language, setLanguageState] = useState<Language>('en');
+  const [language, setLanguageState] = useState<Language>(getInitialLanguage);
 
   useEffect(() => {
     loadLanguage();

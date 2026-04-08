@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  TextInput,
 } from 'react-native';
 import { Redirect, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
@@ -50,6 +51,7 @@ export default function PremiumUpgradeScreen() {
   const [planDisplay, setPlanDisplay] = useState(FALLBACK_PLAN_DISPLAY);
   const [selectedPlanType, setSelectedPlanType] = useState<PremiumPlanType>('yearly');
   const [planLoading, setPlanLoading] = useState(true);
+  const [premiumCouponCode, setPremiumCouponCode] = useState('');
   const { user } = useAuth();
   const router = useRouter();
 
@@ -102,6 +104,7 @@ export default function PremiumUpgradeScreen() {
         planType,
         successUrl,
         cancelUrl,
+        premiumCouponCode.trim() || undefined,
       );
 
       if (Platform.OS === 'web') {
@@ -329,6 +332,21 @@ export default function PremiumUpgradeScreen() {
         </View>
 
         {!user?.is_premium ? (
+          <>
+          <Text style={styles.couponLabel}>クーポンコード（任意）</Text>
+          <TextInput
+            style={styles.couponInput}
+            value={premiumCouponCode}
+            onChangeText={setPremiumCouponCode}
+            placeholder="コードをお持ちの場合は入力"
+            placeholderTextColor="#999"
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!isCheckingOut && !planLoading}
+          />
+          <Text style={styles.couponHint}>
+            未入力の場合は、決済画面（Stripe）でもコードを入力できます。
+          </Text>
           <TouchableOpacity
             style={[
               styles.upgradeButton,
@@ -347,6 +365,7 @@ export default function PremiumUpgradeScreen() {
               </Text>
             )}
           </TouchableOpacity>
+          </>
         ) : (
           <View>
             <View style={styles.premiumBadge}>
@@ -510,12 +529,36 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
     color: '#888',
   },
+  couponLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  couponInput: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 8,
+  },
+  couponHint: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 4,
+    lineHeight: 18,
+  },
   upgradeButton: {
     backgroundColor: '#007AFF',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
-    marginTop: 24,
+    marginTop: 8,
     marginBottom: 16,
   },
   upgradeButtonText: {
