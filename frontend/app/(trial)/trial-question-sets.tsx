@@ -51,6 +51,7 @@ const languageMaskForUiLanguage = (lang: "en" | "ja") =>
 
 export default function TrialQuestionSetsScreen() {
   const [questionSets, setQuestionSets] = useState<LocalQuestionSet[]>([]);
+  const [dueCounts, setDueCounts] = useState<Record<string, number>>({});
   const [availableTextbooks, setAvailableTextbooks] = useState<Textbook[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const isLoadingRef = useRef(false); // 重複読み込み防止用

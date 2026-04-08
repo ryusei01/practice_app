@@ -31,4 +31,4 @@ RUN adduser --disabled-password --gecos "" appuser \
     && chown appuser:appuser /app/uploads
 USER appuser
 
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1"]
+CMD ["sh", "-c", "if [ \"${RUN_MIGRATIONS:-}\" = \"1\" ]; then alembic upgrade head; fi; exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1"]

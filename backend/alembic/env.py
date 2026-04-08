@@ -24,7 +24,9 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# NOTE: Alembic's ConfigParser interpolation treats '%' specially.
+# Supabase pooler URLs (and others) may contain percent-encoded values like '%40'.
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 target_metadata = Base.metadata
 
