@@ -1,18 +1,27 @@
 name: Deploy Frontend to Cloudflare Pages
 
+# dev ブランチの自動デプロイを止める: リポジトリ Settings → Variables → Actions で
+# DEV_DEPLOY_PAUSED を true にする。手動実行では「force_deploy」をオンにすると実行できる。
 on:
   push:
     branches:
       - main
       - master
+      - dev
     paths:
       - 'frontend/**'
       - '.github/workflows/deploy-frontend.yml'
   workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: "DEV_DEPLOY_PAUSED 中でも dev からデプロイする"
+        type: boolean
+        default: false
 
 jobs:
   deploy-frontend:
     name: Deploy Frontend to Cloudflare Pages
+    if: github.ref_name != 'dev' || vars.DEV_DEPLOY_PAUSED != 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_deploy == 'true')
     runs-on: ubuntu-latest
     # gitHubToken で Cloudflare → GitHub Deployments を連携する場合に必須（無いと npx wrangler が exit 1 になりがち）
     permissions:

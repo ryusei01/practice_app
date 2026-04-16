@@ -564,7 +564,7 @@ export default function TrialQuestionSetsScreen() {
               testID={`trial-csv-export-btn-${item.id}`}
             >
               <Text style={styles.csvExportBadgeText}>
-                ⤓ {t("CSV", "CSV")}
+                ⬇️ 📊 {t("CSV", "CSV")}
               </Text>
             </TouchableOpacity>
           )}

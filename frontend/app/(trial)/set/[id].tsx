@@ -1123,7 +1123,7 @@ export default function TrialSetDetailScreen() {
               onPress={openPdfExportModal}
               activeOpacity={0.8}
             >
-              <Text style={styles.pdfHeaderButtonText}>⤓ 🧾 PDF</Text>
+              <Text style={styles.pdfHeaderButtonText}>⬇️ 📄 PDF</Text>
             </TouchableOpacity>
             <View style={styles.langBadge} nativeID="trial-lang-badge">
               <Text style={styles.langBadgeText} nativeID="trial-lang-badge-text">
@@ -1269,7 +1269,7 @@ export default function TrialSetDetailScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={styles.pdfExportConfirmText}>
-                  ⤓ {t("Download PDF", "PDFをダウンロード")}
+                  ⬇️ {t("Download PDF", "PDFをダウンロード")}
                 </Text>
               </TouchableOpacity>
             </View>

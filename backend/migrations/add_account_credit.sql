@@ -9,3 +9,5 @@ CREATE TABLE IF NOT EXISTS processed_checkout_sessions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_processed_checkout_sessions_user_id ON processed_checkout_sessions(user_id);
+
+ALTER TABLE public.processed_checkout_sessions ENABLE ROW LEVEL SECURITY;

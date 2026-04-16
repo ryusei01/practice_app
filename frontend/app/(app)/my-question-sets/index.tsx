@@ -525,7 +525,7 @@ export default function MyQuestionSetsScreen() {
             testID={`csv-export-btn-${item.id}`}
           >
             <Text style={styles.csvExportBadgeText}>
-              ⤓ {t("CSV", "CSV")}
+              ⬇️ 📊 {t("CSV", "CSV")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -577,7 +577,7 @@ export default function MyQuestionSetsScreen() {
         testID={`download-btn-${item.id}`}
       >
         <Text style={styles.downloadButtonText}>
-          ⤓ {t("Download for Offline", "オフラインでダウンロード")}
+          ⬇️ {t("Download for Offline", "オフラインでダウンロード")}
         </Text>
       </TouchableOpacity>
     </View>
@@ -639,7 +639,7 @@ export default function MyQuestionSetsScreen() {
           testID={`csv-export-trial-btn-${item.id}`}
         >
           <Text style={styles.csvExportBadgeText}>
-            ⤓ {t("CSV", "CSV")}
+            ⬇️ 📊 {t("CSV", "CSV")}
           </Text>
         </TouchableOpacity>
       )}

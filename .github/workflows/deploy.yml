@@ -1,15 +1,24 @@
 name: Deploy to Cloud Run
 
+# dev ブランチの自動デプロイを止める: リポジトリ Settings → Variables → Actions で
+# DEV_DEPLOY_PAUSED を true にする。手動実行では「force_deploy」をオンにすると実行できる。
 on:
   workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: "DEV_DEPLOY_PAUSED 中でも dev からデプロイする"
+        type: boolean
+        default: false
   push:
     branches:
       - main
       - master
+      - dev
 
 jobs:
   deploy-backend:
     name: Deploy Backend to Cloud Run
+    if: github.ref_name != 'dev' || vars.DEV_DEPLOY_PAUSED != 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_deploy == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: read

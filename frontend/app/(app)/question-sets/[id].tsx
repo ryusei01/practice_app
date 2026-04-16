@@ -1195,7 +1195,7 @@ What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter i
               onPress={openPdfExportModal}
               activeOpacity={0.8}
             >
-              <Text style={styles.pdfHeaderButtonText}>⤓ 🧾 PDF</Text>
+              <Text style={styles.pdfHeaderButtonText}>⬇️ 📄 PDF</Text>
             </TouchableOpacity>
           )}
           <Text style={styles.langMeta}>
@@ -1340,7 +1340,7 @@ What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter i
                 activeOpacity={0.8}
               >
                 <Text style={styles.pdfExportConfirmText}>
-                  ⤓ {t("Download PDF", "PDFをダウンロード")}
+                  ⬇️ {t("Download PDF", "PDFをダウンロード")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1638,7 +1638,7 @@ What is the largest planet in our solar system?,text_input,,,,,Jupiter,Jupiter i
                 activeOpacity={0.7}
               >
                 <Text style={styles.csvSampleButtonText}>
-                  📄 {t("CSV Sample", "CSVサンプル")}
+                  📊 {t("CSV Sample", "CSVサンプル")}
                 </Text>
               </TouchableOpacity>
             </View>
