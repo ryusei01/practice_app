@@ -3,6 +3,7 @@
 JWT トークン生成、パスワードハッシュなど
 """
 import hashlib
+import hmac
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
@@ -44,18 +45,29 @@ def _digest_sha256_hex(secret: str) -> str:
 
 def hash_refresh_token(token: str) -> str:
     """リフレッシュトークンを保存用にハッシュ（平文JWTは長いため先にSHA-256）"""
-    return _refresh_token_context.hash(_digest_sha256_hex(token))
+    digest = _digest_sha256_hex(token)
+    try:
+        return _refresh_token_context.hash(digest)
+    except Exception:
+        # passlib と bcrypt 4.1+ の非互換などで hash が落ちてもログイン自体は通す
+        logger.exception("bcrypt refresh-token hash failed; storing sha256 digest")
+        return digest
 
 
 def verify_refresh_token(token: str, hashed: str) -> bool:
     """
     保存済みハッシュとリフレッシュトークンを照合。
-    新形式（SHA-256前置・bcrypt）→ 旧bcrypt（短文のみ）→ 旧argon2（pwd_context）
+    新形式（SHA-256前置・bcrypt）→ SHA-256 平文フォールバック → 旧bcrypt（短文のみ）→ 旧argon2
     """
     if not hashed:
         return False
     digest = _digest_sha256_hex(token)
-    if _refresh_token_context.verify(digest, hashed):
+    try:
+        if _refresh_token_context.verify(digest, hashed):
+            return True
+    except (ValueError, TypeError):
+        pass
+    if len(hashed) == 64 and hmac.compare_digest(hashed, digest):
         return True
     try:
         if _refresh_token_context.verify(token, hashed):

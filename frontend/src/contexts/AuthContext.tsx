@@ -117,7 +117,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const loginWithGoogle = async (accessToken: string) => {
-    const response: AuthResponse = await authApi.googleLogin(accessToken);
+    const response: AuthResponse = await authApi.googleLogin(accessToken, {
+      skipGlobalErrorModal: true,
+    });
     setUser(response.user);
     router.replace('/(app)/dashboard');
   };

@@ -46,7 +46,11 @@ const getInitialLanguage = (): Language => {
 };
 
 export const LanguageProvider = ({ children }: { children: ReactNode }) => {
-  const [language, setLanguageState] = useState<Language>(getInitialLanguage);
+  // Web は静的 HTML（SSG）と初回ハイドレーションを一致させる。
+  // getLocales() を初期 state に使うと CI の en とブラウザの ja で React #418 になる。
+  const [language, setLanguageState] = useState<Language>(() =>
+    Platform.OS === "web" ? "en" : getInitialLanguage()
+  );
 
   useEffect(() => {
     loadLanguage();

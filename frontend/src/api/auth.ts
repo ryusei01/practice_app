@@ -24,8 +24,15 @@ export interface AuthResponse {
 }
 
 export const authApi = {
-  googleLogin: async (accessToken: string): Promise<AuthResponse> => {
-    const response = await apiClient.post('/auth/google', { access_token: accessToken });
+  googleLogin: async (
+    accessToken: string,
+    extra?: { skipGlobalErrorModal?: boolean }
+  ): Promise<AuthResponse> => {
+    const response = await apiClient.post(
+      '/auth/google',
+      { access_token: accessToken },
+      extra?.skipGlobalErrorModal ? { skipGlobalErrorModal: true } : undefined
+    );
     if (response.data.access_token) {
       await tokenStorage.setAccessToken(response.data.access_token);
     }

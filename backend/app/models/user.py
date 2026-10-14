@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Integer, Enum
+from sqlalchemy import Column, String, Boolean, DateTime, Integer
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -29,7 +29,8 @@ class User(Base):
     hashed_password = Column(String, nullable=True)
     google_id = Column(String, unique=True, index=True, nullable=True)
     is_active = Column(Boolean, default=True)
-    role = Column(Enum(UserRole, name="user_role", create_constraint=False, native_enum=False, values_callable=lambda x: [e.value for e in x]), default=UserRole.USER.value, nullable=False)
+    # VARCHAR で保持する（SQLAlchemy Enum だと旧値 role='seller' の読み込みが LookupError → ログイン 500 になる）
+    role = Column(String, default=UserRole.USER.value, nullable=False)
     is_seller = Column(Boolean, default=False)  # 販売機能フラグ（role とは独立）
     seller_application_status = Column(String, default=SellerApplicationStatus.NONE.value, nullable=False)
     seller_application_submitted_at = Column(DateTime, nullable=True)

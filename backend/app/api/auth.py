@@ -3,13 +3,12 @@
 """
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError, OperationalError
-from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
+from pydantic import BaseModel, ValidationError
 from datetime import timedelta, datetime
 from typing import Optional
 import uuid
 import httpx
-import re
 import traceback
 import logging
 
@@ -35,7 +34,7 @@ from ..core.auth import (
 )
 from ..core.config import settings
 from ..models import User
-from ..models.user import SellerApplicationStatus
+from ..models.user import SellerApplicationStatus, UserRole
 
 router = APIRouter()
 
@@ -63,23 +62,25 @@ class UserResponse(BaseModel):
 
     @classmethod
     def from_orm(cls, obj):
-        role_val = getattr(obj, "role", None)
-        if role_val is not None and hasattr(role_val, "value"):
-            role_val = role_val.value
-        role_str = role_val if isinstance(role_val, str) and role_val else "user"
+        role_str = _normalize_role(getattr(obj, "role", None))
+        status_val = getattr(obj, "seller_application_status", None)
+        if status_val is not None and hasattr(status_val, "value"):
+            status_val = status_val.value
+        status_str = status_val if isinstance(status_val, str) and status_val else "none"
+        credit = getattr(obj, "account_credit_jpy", None)
         return cls(
-            id=obj.id,
-            email=obj.email,
-            full_name=obj.username,
-            is_active=bool(obj.is_active) if obj.is_active is not None else True,
-            is_seller=bool(obj.is_seller) if obj.is_seller is not None else False,
-            is_premium=bool(obj.is_premium) if obj.is_premium is not None else False,
-            premium_expires_at=obj.premium_expires_at,
-            account_credit_jpy=obj.account_credit_jpy or 0,
+            id=str(getattr(obj, "id", "") or ""),
+            email=getattr(obj, "email", None) or "",
+            full_name=getattr(obj, "username", None) or "",
+            is_active=bool(obj.is_active) if getattr(obj, "is_active", None) is not None else True,
+            is_seller=bool(obj.is_seller) if getattr(obj, "is_seller", None) is not None else False,
+            is_premium=bool(obj.is_premium) if getattr(obj, "is_premium", None) is not None else False,
+            premium_expires_at=getattr(obj, "premium_expires_at", None),
+            account_credit_jpy=int(credit or 0),
             role=role_str,
-            seller_application_status=obj.seller_application_status if obj.seller_application_status else "none",
-            seller_application_admin_note=obj.seller_application_admin_note,
-            created_at=obj.created_at,
+            seller_application_status=status_str,
+            seller_application_admin_note=getattr(obj, "seller_application_admin_note", None),
+            created_at=getattr(obj, "created_at", None),
         )
 
 
@@ -90,10 +91,22 @@ class TokenResponse(BaseModel):
     user: UserResponse
 
 
+def _normalize_role(role_val) -> str:
+    if role_val is not None and hasattr(role_val, "value"):
+        role_val = role_val.value
+    role_str = role_val if isinstance(role_val, str) and role_val else UserRole.USER.value
+    if role_str == "seller":
+        return UserRole.USER.value
+    return role_str
+
+
 def _username_base_from_google(name: str, email: str) -> str:
     base = (name or "").strip()
+    # PostgreSQL は NUL を拒否し、制御文字は表示名として不適切
+    base = "".join(ch for ch in base if ch >= " " and ch != "\x7f")
     if not base:
         base = (email.split("@")[0] if email else "user").strip() or "user"
+        base = "".join(ch for ch in base if ch >= " " and ch != "\x7f") or "user"
     if len(base) > 100:
         base = base[:100]
     return base
@@ -101,12 +114,36 @@ def _username_base_from_google(name: str, email: str) -> str:
 
 def _make_unique_username(db: Session, base_name: str) -> str:
     """ユーザー名の重複を避けるため、必要に応じてサフィックスを付与"""
-    username = base_name
+    username = base_name[:100]
     counter = 1
     while db.query(User).filter(User.username == username).first():
-        username = f"{base_name}{counter}"
+        suffix = str(counter)
+        username = f"{base_name[: max(1, 100 - len(suffix))]}{suffix}"
         counter += 1
+        if counter > 10000:
+            return f"user{uuid.uuid4().hex[:12]}"
     return username
+
+
+def _tokeninfo_client_ids(tokeninfo: dict) -> set[str]:
+    """tokeninfo の aud / azp をクライアント ID 集合にする（aud が list の場合も含む）"""
+    ids: set[str] = set()
+    for key in ("aud", "azp"):
+        raw = tokeninfo.get(key)
+        if isinstance(raw, list):
+            ids.update(str(x) for x in raw if x)
+        elif raw:
+            ids.add(str(raw))
+    return ids
+
+
+def _migrate_legacy_seller_role(user: User) -> None:
+    """旧 role='seller' を is_seller + role=user に寄せる"""
+    raw = getattr(user, "role", None)
+    raw_str = raw.value if raw is not None and hasattr(raw, "value") else raw
+    if raw_str == "seller":
+        user.role = UserRole.USER.value
+        user.is_seller = True
 
 
 @router.post("/google", response_model=TokenResponse)
@@ -188,7 +225,13 @@ async def _google_login_impl(body: GoogleAuthRequest, db: Session):
             detail="無効なGoogleトークンです",
         )
 
-    # 設定済みの Google Client ID いずれかと aud が一致するか照合
+    # 設定済みの Google Client ID いずれかと aud / azp が一致するか照合
+    if not isinstance(tokeninfo, dict):
+        logger.error("Google tokeninfo JSON was not an object: %r", type(tokeninfo).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="無効なGoogleトークンです",
+        )
     allowed_client_ids = {
         cid
         for cid in [
@@ -199,8 +242,8 @@ async def _google_login_impl(body: GoogleAuthRequest, db: Session):
         if cid
     }
     if allowed_client_ids:
-        aud = tokeninfo.get("aud", "")
-        if aud not in allowed_client_ids:
+        presented = _tokeninfo_client_ids(tokeninfo)
+        if presented.isdisjoint(allowed_client_ids):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="無効なGoogleトークンです"
@@ -238,6 +281,12 @@ async def _google_login_impl(body: GoogleAuthRequest, db: Session):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="無効なGoogleトークンです",
         )
+    if not isinstance(google_data, dict):
+        logger.error("Google userinfo JSON was not an object: %r", type(google_data).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="無効なGoogleトークンです",
+        )
     email = google_data.get("email")
     google_id = google_data.get("sub")
     name_base = _username_base_from_google(
@@ -251,11 +300,11 @@ async def _google_login_impl(body: GoogleAuthRequest, db: Session):
             detail="Googleアカウントの情報を取得できませんでした"
         )
 
-    user = db.query(User).filter(User.google_id == google_id).first()
-    if not user:
-        user = db.query(User).filter(User.email == email).first()
-
     try:
+        user = db.query(User).filter(User.google_id == google_id).first()
+        if not user:
+            user = db.query(User).filter(User.email == email).first()
+
         if not user:
             username = _make_unique_username(db, name_base)
             user = User(
@@ -265,6 +314,9 @@ async def _google_login_impl(body: GoogleAuthRequest, db: Session):
                 google_id=google_id,
                 is_active=True,
                 is_seller=False,
+                role=UserRole.USER.value,
+                seller_application_status=SellerApplicationStatus.NONE.value,
+                account_credit_jpy=0,
             )
             db.add(user)
             db.commit()
@@ -284,6 +336,7 @@ async def _google_login_impl(body: GoogleAuthRequest, db: Session):
                 user.google_id = google_id
             if not user.is_active:
                 user.is_active = True
+            _migrate_legacy_seller_role(user)
             db.commit()
             db.refresh(user)
 
@@ -297,6 +350,9 @@ async def _google_login_impl(body: GoogleAuthRequest, db: Session):
         user.refresh_token = hash_refresh_token(refresh_token)
         db.commit()
         db.refresh(user)
+    except HTTPException:
+        db.rollback()
+        raise
     except OperationalError as exc:
         db.rollback()
         logger.exception("Google login DB operational error email=%s", email)
@@ -311,12 +367,26 @@ async def _google_login_impl(body: GoogleAuthRequest, db: Session):
             status_code=status.HTTP_409_CONFLICT,
             detail="ユーザー登録情報が競合しました。しばらくしてから再試行するか、サポートへお問い合わせください。",
         )
+    except (SQLAlchemyError, LookupError) as exc:
+        db.rollback()
+        logger.exception("Google login DB error email=%s (%s)", email, type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="データベースの処理に失敗しました。しばらくしてから再試行してください。",
+        ) from exc
 
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        user=UserResponse.from_orm(user)
-    )
+    try:
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            user=UserResponse.from_orm(user)
+        )
+    except ValidationError:
+        logger.exception("Google login response validation failed email=%s", email)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="サーバーエラーが発生しました。しばらくしてから再試行してください。",
+        )
 
 
 @router.post("/refresh", response_model=TokenResponse)

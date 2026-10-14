@@ -15,6 +15,7 @@ import { makeRedirectUri } from "expo-auth-session";
 import { router } from "expo-router";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useLanguage } from "../../src/contexts/LanguageContext";
+import { getApiErrorMessage } from "../../src/utils/apiError";
 
 /** Web 同一タブ OAuth 用。リロード後も state を照合する */
 const GOOGLE_OAUTH_STATE_KEY = "quizmarketplace_google_oauth_state";
@@ -71,9 +72,11 @@ export default function LoginScreen() {
       } catch (error: any) {
         console.error("[Login] Google login error:", error);
         setErrorMessage(
-          error.response?.data?.detail ||
-            error.message ||
-            t("Sign-in failed", "サインインに失敗しました")
+          getApiErrorMessage(
+            error,
+            "Sign-in failed",
+            "サインインに失敗しました"
+          )
         );
       } finally {
         setIsLoading(false);
