@@ -660,7 +660,7 @@ export default function Home() {
             </View>
             <Text style={styles.footerCopy}>
               {"\u00A9"} {new Date().getFullYear()}{" "}
-              {t("Ryusei Ishida", "石田 琉聖")} — {APP_TITLE}
+              {t("AuroraSauceSoftware", "AuroraSauceSoftware")} — {APP_TITLE}
             </Text>
           </View>
         </ScrollView>
