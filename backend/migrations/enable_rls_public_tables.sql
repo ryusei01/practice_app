@@ -4,27 +4,36 @@
 -- ポリシー未作成 = anon / authenticated ロールは API 経由で行を参照・更新できない
 --
 -- 適用: Supabase Dashboard → SQL Editor で実行、または psql で本番 DB に適用
+-- テーブルが未作成の環境でもエラーにしない（存在するものだけ RLS を有効化）
 
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.question_sets ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.questions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.answers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_question_stats ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_category_stats ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.purchases ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.processed_checkout_sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.content_reports ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.copyright_check_records ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.otp_codes ENABLE ROW LEVEL SECURITY;
-
--- Alembic 利用時のみ（テーブルが無い環境では何もしない）
 DO $$
+DECLARE
+  tbl text;
+  tables text[] := ARRAY[
+    'users',
+    'question_sets',
+    'questions',
+    'answers',
+    'user_question_stats',
+    'user_category_stats',
+    'purchases',
+    'reviews',
+    'processed_checkout_sessions',
+    'content_reports',
+    'copyright_check_records',
+    'otp_codes',
+    'alembic_version'
+  ];
 BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.tables
-    WHERE table_schema = 'public' AND table_name = 'alembic_version'
-  ) THEN
-    EXECUTE 'ALTER TABLE public.alembic_version ENABLE ROW LEVEL SECURITY';
-  END IF;
+  FOREACH tbl IN ARRAY tables
+  LOOP
+    IF EXISTS (
+      SELECT 1
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = tbl
+    ) THEN
+      EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', tbl);
+    END IF;
+  END LOOP;
 END $$;
